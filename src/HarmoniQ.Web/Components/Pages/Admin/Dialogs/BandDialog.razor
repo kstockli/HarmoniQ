@@ -1,0 +1,29 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_model.Name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mb-3" />
+        <MudTextField @bind-Value="_model.Land" Label="Land" Variant="Variant.Outlined" Class="mb-3" />
+        <MudTextField @bind-Value="_model.Webseite" Label="Webseite / Kanal-URL" Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern" Disabled="@string.IsNullOrWhiteSpace(_model.Name)">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Band? Vorhanden { get; set; }
+
+    private Band _model = new();
+
+    protected override void OnInitialized()
+    {
+        if (Vorhanden != null)
+            _model = new Band { Id = Vorhanden.Id, Name = Vorhanden.Name, Land = Vorhanden.Land, Webseite = Vorhanden.Webseite };
+    }
+
+    private void Speichern() => MudDialog.Close(DialogResult.Ok(_model));
+}

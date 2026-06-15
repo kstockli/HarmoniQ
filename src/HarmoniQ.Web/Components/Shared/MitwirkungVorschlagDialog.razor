@@ -1,0 +1,81 @@
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+            Schlage vor, wer in <b>@VideoTitel</b> mitwirkt. Ein Admin prüft den Vorschlag, bevor er sichtbar wird.
+        </MudText>
+
+        <MudAutocomplete T="string" @bind-Value="_personName" Label="Person" Variant="Variant.Outlined"
+                         SearchFunc="SuchePerson" CoerceValue="true" ResetValueOnEmptyText="false"
+                         Required="true" Class="mb-3" />
+
+        <MudSelect T="MitwirkungRolle" @bind-Value="_rolle" Label="Rolle" Variant="Variant.Outlined" Class="mb-3">
+            <MudSelectItem Value="MitwirkungRolle.Musikant">Musikant:in</MudSelectItem>
+            <MudSelectItem Value="MitwirkungRolle.Dirigent">Dirigent:in</MudSelectItem>
+        </MudSelect>
+
+        @if (_rolle == MitwirkungRolle.Musikant)
+        {
+            <MudAutocomplete T="string" @bind-Value="_instrumentName" @bind-Value:after="@(() => _stimme = null)"
+                             Label="Instrument (optional)" Variant="Variant.Outlined"
+                             SearchFunc="SucheInstrument" CoerceValue="true" ResetValueOnEmptyText="false" Class="mb-3" />
+            <MudAutocomplete T="string" @bind-Value="_stimme" Label="Stimme (optional)" Variant="Variant.Outlined"
+                             SearchFunc="SucheStimme" CoerceValue="true" ResetValueOnEmptyText="false" Class="mb-3" />
+        }
+
+        <MudTextField @bind-Value="_anmerkung" Label="Anmerkung (optional)" Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Senden" Disabled="@string.IsNullOrWhiteSpace(_personName)">Vorschlag senden</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string VideoTitel { get; set; } = "";
+
+    private List<string> _personNamen = [];
+    private List<Instrument> _instrumente = [];
+    private List<Stimme> _stimmen = [];
+
+    private string? _personName;
+    private MitwirkungRolle _rolle = MitwirkungRolle.Musikant;
+    private string? _instrumentName;
+    private string? _stimme;
+    private string? _anmerkung;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _personNamen = await db.Personen.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+        _instrumente = await db.Instrumente.OrderBy(i => i.Name).ToListAsync();
+        _stimmen = await db.Stimmen.Include(s => s.Instrument).ToListAsync();
+    }
+
+    private Task<IEnumerable<string>> SuchePerson(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_personNamen, v));
+    private Task<IEnumerable<string>> SucheInstrument(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_instrumente.Select(i => i.Name), v));
+    private Task<IEnumerable<string>> SucheStimme(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_stimmen
+            .Where(s => string.Equals(s.Instrument.Name, _instrumentName, StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.Bezeichnung), v));
+
+    private static IEnumerable<string> Filter(IEnumerable<string> quelle, string? v) =>
+        string.IsNullOrWhiteSpace(v) ? quelle.Take(15)
+            : quelle.Where(x => x.Contains(v, StringComparison.OrdinalIgnoreCase)).Take(15);
+
+    private void Senden()
+    {
+        var sicht = _rolle == MitwirkungRolle.Dirigent ? Sichtbarkeit.Oeffentlich : Sichtbarkeit.NurInitialen;
+        MudDialog.Close(DialogResult.Ok(new MitwirkungService.Eingabe(
+            _personName!.Trim(), _rolle, sicht, _instrumentName, _stimme, _anmerkung)));
+    }
+}

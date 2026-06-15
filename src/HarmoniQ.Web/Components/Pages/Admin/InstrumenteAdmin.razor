@@ -1,0 +1,131 @@
+@page "/admin/instrumente"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Instrumente & Stimmen – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Instrumente & Stimmen</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudTextField @bind-Value="_neuesInstrument" Label="Neues Instrument" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Style="flex:1;" />
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="InstrumentAnlegen"
+                   Disabled="@string.IsNullOrWhiteSpace(_neuesInstrument)">Anlegen</MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (_instrumente.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Noch keine Instrumente. Sie entstehen auch automatisch beim Erfassen einer Besetzung.</MudAlert>
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true">
+        @foreach (var i in _instrumente)
+        {
+            <MudExpansionPanel Style="background:#1a0030; border:1px solid #3a1060;">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.MusicNote" Style="color:#D4AF37;" />
+                        <MudText Style="color:#F0E6FF;">@i.Name</MudText>
+                        <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@i.Stimmen.Count Stimmen</MudChip>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => InstrumentLoeschen(i.Id))" />
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    @foreach (var s in i.Stimmen.OrderBy(x => x.Bezeichnung))
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowRight" Size="Size.Small" Style="color:#6f5a86;" />
+                            <MudText Typo="Typo.body2" Style="color:#C4B0D8; flex:1;">@s.Bezeichnung</MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => StimmeLoeschen(s.Id))" />
+                        </MudStack>
+                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                        <MudTextField @bind-Value="_neueStimme[i.Id]" Label="Neue Stimme" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" Style="flex:1;" Placeholder="z. B. 1. Klarinette" />
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#9B59B6; border-color:#9B59B6;"
+                                   OnClick="@(() => StimmeAnlegen(i.Id))">Stimme +</MudButton>
+                    </MudStack>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    private List<Instrument> _instrumente = [];
+    private string _neuesInstrument = "";
+    private readonly Dictionary<Guid, string> _neueStimme = new();
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _instrumente = await db.Instrumente.Include(i => i.Stimmen).OrderBy(i => i.Name).ToListAsync();
+        foreach (var i in _instrumente)
+            _neueStimme.TryAdd(i.Id, "");
+    }
+
+    private async Task InstrumentAnlegen()
+    {
+        var name = _neuesInstrument.Trim();
+        if (name == "") return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Instrumente.AnyAsync(i => i.Name == name))
+        {
+            Snackbar.Add("Instrument existiert bereits.", Severity.Warning);
+            return;
+        }
+        db.Instrumente.Add(new Instrument { Name = name });
+        await db.SaveChangesAsync();
+        _neuesInstrument = "";
+        await Laden();
+    }
+
+    private async Task InstrumentLoeschen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var i = await db.Instrumente.FindAsync(id);
+        if (i != null) { db.Instrumente.Remove(i); await db.SaveChangesAsync(); Snackbar.Add("Instrument gelöscht.", Severity.Success); }
+        await Laden();
+    }
+
+    private async Task StimmeAnlegen(Guid instrumentId)
+    {
+        var bez = (_neueStimme.GetValueOrDefault(instrumentId) ?? "").Trim();
+        if (bez == "") return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Stimmen.AnyAsync(s => s.InstrumentId == instrumentId && s.Bezeichnung == bez))
+        {
+            Snackbar.Add("Stimme existiert bereits.", Severity.Warning);
+            return;
+        }
+        db.Stimmen.Add(new Stimme { InstrumentId = instrumentId, Bezeichnung = bez });
+        await db.SaveChangesAsync();
+        _neueStimme[instrumentId] = "";
+        await Laden();
+    }
+
+    private async Task StimmeLoeschen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var s = await db.Stimmen.FindAsync(id);
+        if (s != null) { db.Stimmen.Remove(s); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+}

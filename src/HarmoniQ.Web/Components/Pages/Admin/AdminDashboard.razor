@@ -1,0 +1,71 @@
+@page "/admin"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Admin – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Admin-Dashboard</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:#A78FC0;">Daten verwalten und Vorschläge prüfen.</MudText>
+
+<MudGrid>
+    @AdminCard("Personen", _personen, Icons.Material.Filled.Person, "/admin/personen")
+    @AdminCard("Stücke", _stuecke, Icons.Material.Filled.MusicNote, "/admin/stuecke")
+    @AdminCard("Bands", _bands, Icons.Material.Filled.Groups, "/admin/bands")
+    @AdminCard("Videos", _videos, Icons.Material.Filled.VideoLibrary, "/admin/videos")
+</MudGrid>
+
+<MudDivider Class="my-6" Style="border-color:#3a1060;" />
+
+<MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060; max-width:520px;">
+    <MudCardContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudBadge Content="_ausstehend" Color="Color.Error" Overlap="true" Visible="_ausstehend > 0">
+                <MudIcon Icon="@Icons.Material.Filled.RateReview" Style="color:#D4AF37;font-size:2.5rem;" />
+            </MudBadge>
+            <div>
+                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Video-Vorschläge</MudText>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                    @_ausstehend ausstehende@(_ausstehend == 1 ? "r" : "") Vorschlag@(_ausstehend == 1 ? "" : "läge")
+                </MudText>
+            </div>
+        </MudStack>
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Href="/admin/vorschlaege">
+            Zur Review-Queue
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    private int _personen, _stuecke, _bands, _videos, _ausstehend;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _personen = await db.Personen.CountAsync();
+        _stuecke = await db.Stuecke.CountAsync();
+        _bands = await db.Bands.CountAsync();
+        _videos = await db.Videos.CountAsync();
+        _ausstehend = await db.Videos.CountAsync(v => v.Status == VideoStatus.Ausstehend);
+    }
+
+    private RenderFragment AdminCard(string titel, int anzahl, string icon, string href) => __builder =>
+    {
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudCardContent Class="d-flex flex-column align-center">
+                    <MudIcon Icon="@icon" Style="color:#D4AF37;font-size:2.5rem;" />
+                    <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@anzahl</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">@titel</MudText>
+                </MudCardContent>
+                <MudCardActions Class="justify-center">
+                    <MudButton Variant="Variant.Text" Style="color:#D4AF37;" Href="@href">Verwalten</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    };
+}

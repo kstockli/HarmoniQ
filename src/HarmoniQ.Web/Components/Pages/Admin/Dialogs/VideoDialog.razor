@@ -1,0 +1,94 @@
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_model.Titel" Label="Titel der Aufnahme (optional)" Variant="Variant.Outlined"
+                      HelperText="Leer lassen → wird automatisch aus dem YouTube-Video übernommen" Class="mb-3" />
+
+        <MudAutocomplete T="Stueck" Label="Stück" Variant="Variant.Outlined" Required="true" Class="mb-3"
+                         Value="_stueck" ValueChanged="OnStueckChanged"
+                         SearchFunc="SucheStueck" ToStringFunc="@(s => s?.Titel ?? "")"
+                         MaxItems="20" ResetValueOnEmptyText="false" CoerceText="true" />
+
+        <MudSelect T="Guid?" @bind-Value="_model.BandId" Label="Band (optional)" Variant="Variant.Outlined"
+                   Clearable="true" Class="mb-3">
+            @foreach (var b in Bands)
+            {
+                <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudTextField @bind-Value="_youTubeEingabe" @bind-Value:after="ExtrahiereId"
+                      Label="YouTube-Link oder Video-ID" Variant="Variant.Outlined" Class="mb-1"
+                      Placeholder="https://youtu.be/… oder 11-stellige ID" />
+        @if (!string.IsNullOrWhiteSpace(_model.YouTubeVideoId))
+        {
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkannte Video-ID: <b>@_model.YouTubeVideoId</b></MudText>
+        }
+
+        <MudSelect T="VideoStatus" @bind-Value="_model.Status" Label="Status" Variant="Variant.Outlined" Class="mt-3">
+            <MudSelectItem Value="VideoStatus.Genehmigt">Genehmigt (öffentlich sichtbar)</MudSelectItem>
+            <MudSelectItem Value="VideoStatus.Ausstehend">Ausstehend</MudSelectItem>
+            <MudSelectItem Value="VideoStatus.Abgelehnt">Abgelehnt</MudSelectItem>
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern" Disabled="@(!IstGueltig)">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Video? Vorhanden { get; set; }
+    [Parameter] public List<Stueck> Stuecke { get; set; } = [];
+    [Parameter] public List<Band> Bands { get; set; } = [];
+
+    private Video _model = new() { Status = VideoStatus.Genehmigt };
+    private Stueck? _stueck;
+    private string _youTubeEingabe = "";
+
+    private bool IstGueltig =>
+        _model.StueckId != Guid.Empty &&
+        !string.IsNullOrWhiteSpace(_model.YouTubeVideoId);
+
+    protected override void OnInitialized()
+    {
+        if (Vorhanden != null)
+        {
+            _model = new Video
+            {
+                Id = Vorhanden.Id,
+                StueckId = Vorhanden.StueckId,
+                BandId = Vorhanden.BandId,
+                YouTubeVideoId = Vorhanden.YouTubeVideoId,
+                Titel = Vorhanden.Titel,
+                AufnahmeDatum = Vorhanden.AufnahmeDatum,
+                Status = Vorhanden.Status,
+                VorgeschlagenVonId = Vorhanden.VorgeschlagenVonId
+            };
+            _stueck = Stuecke.FirstOrDefault(s => s.Id == Vorhanden.StueckId);
+            _youTubeEingabe = Vorhanden.YouTubeVideoId;
+        }
+    }
+
+    private Task<IEnumerable<Stueck>> SucheStueck(string? value, CancellationToken ct)
+    {
+        IEnumerable<Stueck> result = string.IsNullOrWhiteSpace(value)
+            ? Stuecke
+            : Stuecke.Where(s => s.Titel.Contains(value, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(result.OrderBy(s => s.Titel).Take(20));
+    }
+
+    private void OnStueckChanged(Stueck? s)
+    {
+        _stueck = s;
+        _model.StueckId = s?.Id ?? Guid.Empty;
+    }
+
+    private void ExtrahiereId() => _model.YouTubeVideoId = YouTubeId.Extrahiere(_youTubeEingabe);
+
+    private void Speichern() => MudDialog.Close(DialogResult.Ok(_model));
+}

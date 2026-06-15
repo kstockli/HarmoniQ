@@ -1,0 +1,108 @@
+@page "/"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>HarmoniQ – Startseite</PageTitle>
+
+<img src="img/harmoniq-logo.svg" alt="HarmoniQ" style="height:88px;max-width:100%;margin-bottom:8px;" />
+<MudText Typo="Typo.subtitle1" Class="mb-8" Style="color:#A78FC0;">
+    Entdecke, vergleiche und bewerte Aufnahmen deiner Lieblingskomponisten auf YouTube.
+</MudText>
+
+<MudGrid Class="mb-8">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center cursor-pointer"
+                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
+                  @onclick='() => Nav.NavigateTo("/komponisten")'>
+            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Style="color:#D4AF37;" />
+            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_komponistenCount</MudText>
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Komponisten</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center cursor-pointer"
+                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
+                  @onclick='() => Nav.NavigateTo("/stuecke")'>
+            <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Style="color:#9B59B6;" />
+            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_stueckeCount</MudText>
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Stücke</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center cursor-pointer"
+                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
+                  @onclick='() => Nav.NavigateTo("/videos")'>
+            <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Size="Size.Large" Style="color:#E67E22;" />
+            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_videosCount</MudText>
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Videos</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center"
+                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+            <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Large" Style="color:#F1C40F;" />
+            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_bewertungenCount</MudText>
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Bewertungen</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Komponisten</MudText>
+<MudGrid>
+    @foreach (var k in _komponisten)
+    {
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        <MudAvatar Style="background:#3a1060; color:#D4AF37;" Size="Size.Large">
+                            @if (k.BildUrl != null)
+                            {
+                                <img src="@k.BildUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@k.Name" />
+                            }
+                            else { @(k.Name.Length > 0 ? k.Name[0].ToString() : "?") }
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.h6" Style="color:#F0E6FF;">@k.Name</MudText>
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">@k.AnzahlWerke Werke</MudText>
+                        </div>
+                    </MudStack>
+                    @if (k.Biografie != null)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-3" Style="color:#C4B0D8;">
+                            @(k.Biografie.Length > 140 ? k.Biografie[..140] + "…" : k.Biografie)
+                        </MudText>
+                    }
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                               Href="@($"/personen/{k.Id}")">Werke ansehen</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private int _komponistenCount, _stueckeCount, _videosCount, _bewertungenCount;
+    private List<Zeile> _komponisten = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _komponistenCount = await db.Personen.CountAsync(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist));
+        _stueckeCount = await db.Stuecke.CountAsync();
+        _videosCount = await db.Videos.CountAsync(v => v.Status == VideoStatus.Genehmigt);
+        _bewertungenCount = await db.Bewertungen.CountAsync();
+        _komponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name)
+            .Select(p => new Zeile(p.Id, p.Name, p.BildUrl, p.Biografie, p.StueckBeitraege.Count))
+            .ToListAsync();
+    }
+
+    private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
+}

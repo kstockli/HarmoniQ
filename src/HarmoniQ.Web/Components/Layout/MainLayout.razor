@@ -1,0 +1,86 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="2" Style="background: linear-gradient(90deg, #1a0a2e 0%, #2d1657 100%);">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="@ToggleDrawer" />
+        <MudLink Href="/" Class="ml-2 d-flex align-center">
+            <img src="img/harmoniq-logo.svg" alt="HarmoniQ" style="height:40px;display:block;" />
+        </MudLink>
+        <MudSpacer />
+        <AuthorizeView Context="auth">
+            <Authorized>
+                <MudButton Color="Color.Inherit" Href="/account/profil"
+                           StartIcon="@Icons.Material.Filled.AccountCircle">
+                    @auth.User.Identity?.Name
+                </MudButton>
+                <form action="Account/Logout" method="post" style="display:inline; margin-left:.5rem;">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="/" />
+                    <button type="submit" class="appbar-logout" title="Abmelden">
+                        Abmelden
+                    </button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Color="Color.Inherit" Href="Account/Login" StartIcon="@Icons.Material.Filled.Login">
+                    Anmelden
+                </MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always"
+               Style="background: #12001f;">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Style="background: #0e0018; min-height: 100vh;">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-6 pb-10">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#D4AF37",       // Gold
+            Secondary = "#9B59B6",     // Violett
+            Background = "#0e0018",
+            Surface = "#1a0030",
+            AppbarBackground = "#1a0a2e",
+            DrawerBackground = "#12001f",
+            TextPrimary = "#F0E6FF",
+            TextSecondary = "#A78FC0",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#D4AF37",
+            Secondary = "#9B59B6",
+            Background = "#0e0018",
+            Surface = "#1a0030",
+            AppbarBackground = "#1a0a2e",
+            DrawerBackground = "#12001f",
+            TextPrimary = "#F0E6FF",
+            TextSecondary = "#A78FC0",
+            ActionDefault = "#D4AF37",
+        },
+        Typography = new Typography
+        {
+            H4 = new DefaultTypography { FontFamily = ["Playfair Display", "serif"], FontWeight = "700" },
+            H5 = new DefaultTypography { FontFamily = ["Playfair Display", "serif"], FontWeight = "600" },
+        }
+    };
+}

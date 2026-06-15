@@ -1,0 +1,51 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#A78FC0;">@VideoTitel</MudText>
+
+        @if (Bewertungen.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Noch keine Bewertungen vorhanden.</MudText>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                @foreach (var b in Bewertungen)
+                {
+                    <MudPaper Class="pa-3" Elevation="1" Style="background:#0e0018; border:1px solid #3a1060;">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudRating ReadOnly="true" SelectedValue="b.GesamtEindruck" MaxValue="5" Size="Size.Small" />
+                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">Gesamt</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.caption" Style="color:#6f5a86;">@b.ErstelltAm.ToString("dd.MM.yyyy")</MudText>
+                        </MudStack>
+
+                        <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" Class="mb-1">
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Präzision: <b>@b.Praezision</b></MudText>
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Musikalität: <b>@b.Musikalitaet</b></MudText>
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Akustik: <b>@b.AkustischeQualitaet</b></MudText>
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Videobild: <b>@b.VideoQualitaet</b></MudText>
+                        </MudStack>
+
+                        @if (!string.IsNullOrWhiteSpace(b.Kommentar))
+                        {
+                            <MudText Typo="Typo.body2" Style="color:#C4B0D8; font-style:italic;">„@b.Kommentar"</MudText>
+                        }
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string VideoTitel { get; set; } = "";
+    [Parameter] public List<Eintrag> Bewertungen { get; set; } = [];
+
+    public record Eintrag(int GesamtEindruck, int Praezision, int Musikalitaet,
+        int AkustischeQualitaet, int VideoQualitaet, string? Kommentar, DateTime ErstelltAm);
+}

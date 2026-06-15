@@ -1,0 +1,73 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_m.Titel" Label="Titel" Variant="Variant.Outlined" Required="true" Class="mb-3" />
+        <MudSelect T="Guid" @bind-Value="_m.KomponistId" Label="Komponist:in" Variant="Variant.Outlined" Required="true" Class="mb-3">
+            @foreach (var k in Komponisten)
+            {
+                <MudSelectItem T="Guid" Value="@k.Id">@k.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudNumericField T="int?" @bind-Value="_m.Jahr" Label="Jahr" Variant="Variant.Outlined"
+                         Min="1800" Max="2100" Class="mb-3" />
+        <MudSelect T="Schwierigkeitsgrad" @bind-Value="_m.Schwierigkeitsgrad" Label="Schwierigkeit"
+                   Variant="Variant.Outlined" Class="mb-3">
+            <MudSelectItem Value="Schwierigkeitsgrad.Unbekannt">Unbekannt</MudSelectItem>
+            <MudSelectItem Value="Schwierigkeitsgrad.Leicht">Leicht</MudSelectItem>
+            <MudSelectItem Value="Schwierigkeitsgrad.Mittel">Mittel</MudSelectItem>
+            <MudSelectItem Value="Schwierigkeitsgrad.Schwer">Schwer</MudSelectItem>
+            <MudSelectItem Value="Schwierigkeitsgrad.SehrSchwer">Sehr schwer</MudSelectItem>
+        </MudSelect>
+        <MudTextField @bind-Value="_m.Besetzung" Label="Besetzung" Variant="Variant.Outlined" Class="mb-3" />
+        <MudTextField @bind-Value="_m.Beschreibung" Label="Beschreibung" Variant="Variant.Outlined" Lines="3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern"
+                   Disabled="@(string.IsNullOrWhiteSpace(_m.Titel) || _m.KomponistId == Guid.Empty)">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public StueckModell? Vorhanden { get; set; }
+    [Parameter] public List<(Guid Id, string Name)> Komponisten { get; set; } = [];
+
+    private StueckModell _m = new();
+
+    protected override void OnInitialized()
+    {
+        if (Vorhanden != null)
+        {
+            _m = new StueckModell
+            {
+                Id = Vorhanden.Id,
+                KomponistId = Vorhanden.KomponistId,
+                Titel = Vorhanden.Titel,
+                Jahr = Vorhanden.Jahr,
+                Schwierigkeitsgrad = Vorhanden.Schwierigkeitsgrad,
+                Besetzung = Vorhanden.Besetzung,
+                Beschreibung = Vorhanden.Beschreibung
+            };
+        }
+        else if (Komponisten.Count == 1)
+        {
+            _m.KomponistId = Komponisten[0].Id;
+        }
+    }
+
+    private void Speichern() => MudDialog.Close(DialogResult.Ok(_m));
+
+    public class StueckModell
+    {
+        public Guid Id { get; set; }
+        public string Titel { get; set; } = "";
+        public Guid KomponistId { get; set; }
+        public int? Jahr { get; set; }
+        public Schwierigkeitsgrad Schwierigkeitsgrad { get; set; } = Schwierigkeitsgrad.Unbekannt;
+        public string? Besetzung { get; set; }
+        public string? Beschreibung { get; set; }
+    }
+}

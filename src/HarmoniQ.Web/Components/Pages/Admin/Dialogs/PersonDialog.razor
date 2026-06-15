@@ -1,0 +1,98 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_m.Name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mb-3" />
+
+        <MudGrid Spacing="2" Class="mb-1">
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Sichtbarkeit" @bind-Value="_m.Sichtbarkeit" Label="Sichtbarkeit" Variant="Variant.Outlined">
+                    <MudSelectItem Value="Sichtbarkeit.Oeffentlich">Öffentlich</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NurInitialen">Nur Initialen</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NichtBekannt">Nicht bekannt (?)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="int?" @bind-Value="_m.Geburtsjahr" Label="Geburtsjahr" Variant="Variant.Outlined"
+                                 Min="1800" Max="2100" />
+            </MudItem>
+        </MudGrid>
+
+        <MudSelect T="PersonRolleTyp" MultiSelection="true" @bind-SelectedValues="_rollen" Label="Rollen"
+                   Variant="Variant.Outlined" Class="mb-3"
+                   MultiSelectionTextFunc="@(x => string.Join(", ", x))">
+            <MudSelectItem Value="PersonRolleTyp.Komponist">Komponist:in</MudSelectItem>
+            <MudSelectItem Value="PersonRolleTyp.Dirigent">Dirigent:in</MudSelectItem>
+            <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
+        </MudSelect>
+
+        <MudTextField @bind-Value="_m.Biografie" Label="Biografie" Variant="Variant.Outlined" Lines="3" Class="mb-3" />
+        <MudTextField @bind-Value="_m.BildUrl" Label="Bild-URL" Variant="Variant.Outlined" Class="mb-3" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color:#A78FC0;">Links</MudText>
+        <MudTextField @bind-Value="_m.Webseite" Label="Webseite" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
+        <MudTextField @bind-Value="_m.Instagram" Label="Instagram" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
+        <MudTextField @bind-Value="_m.X" Label="X" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
+        <MudTextField @bind-Value="_m.Facebook" Label="Facebook" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
+        <MudTextField @bind-Value="_m.YouTube" Label="YouTube" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern" Disabled="@string.IsNullOrWhiteSpace(_m.Name)">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public PersonModell? Vorhanden { get; set; }
+
+    private PersonModell _m = new();
+    private IReadOnlyCollection<PersonRolleTyp> _rollen = new HashSet<PersonRolleTyp>();
+
+    protected override void OnInitialized()
+    {
+        if (Vorhanden != null)
+        {
+            _m = new PersonModell
+            {
+                Id = Vorhanden.Id,
+                Name = Vorhanden.Name,
+                Sichtbarkeit = Vorhanden.Sichtbarkeit,
+                Geburtsjahr = Vorhanden.Geburtsjahr,
+                Biografie = Vorhanden.Biografie,
+                BildUrl = Vorhanden.BildUrl,
+                Webseite = Vorhanden.Webseite,
+                Instagram = Vorhanden.Instagram,
+                X = Vorhanden.X,
+                Facebook = Vorhanden.Facebook,
+                YouTube = Vorhanden.YouTube,
+                Rollen = new HashSet<PersonRolleTyp>(Vorhanden.Rollen)
+            };
+            _rollen = new HashSet<PersonRolleTyp>(Vorhanden.Rollen);
+        }
+    }
+
+    private void Speichern()
+    {
+        _m.Rollen = new HashSet<PersonRolleTyp>(_rollen);
+        MudDialog.Close(DialogResult.Ok(_m));
+    }
+
+    /// <summary>Transport-Objekt (kein EF-Entity) für den Dialog.</summary>
+    public class PersonModell
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public Sichtbarkeit Sichtbarkeit { get; set; } = Sichtbarkeit.Oeffentlich;
+        public int? Geburtsjahr { get; set; }
+        public string? Biografie { get; set; }
+        public string? BildUrl { get; set; }
+        public string? Webseite { get; set; }
+        public string? Instagram { get; set; }
+        public string? X { get; set; }
+        public string? Facebook { get; set; }
+        public string? YouTube { get; set; }
+        public HashSet<PersonRolleTyp> Rollen { get; set; } = [];
+    }
+}

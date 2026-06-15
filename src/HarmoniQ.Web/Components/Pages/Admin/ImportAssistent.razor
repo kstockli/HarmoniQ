@@ -1,0 +1,469 @@
+@page "/admin/import"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Shared
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject WebseitenScraper Scraper
+@inject YouTubeSearchService YouTubeSearch
+@inject YouTubeMetadataService YouTubeMeta
+@inject ISnackbar Snackbar
+
+<PageTitle>Import-Assistent – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Import-Assistent</MudText>
+</MudStack>
+
+@* Fortschritts-Anzeige *@
+<MudStack Row="true" Spacing="2" Class="mb-6" AlignItems="AlignItems.Center">
+    @for (int i = 1; i <= 3; i++)
+    {
+        var aktiv = _step == i;
+        var erledigt = _step > i;
+        <MudChip T="string" Variant="@(aktiv ? Variant.Filled : Variant.Outlined)"
+                 Color="@(aktiv || erledigt ? Color.Primary : Color.Default)"
+                 Icon="@(erledigt ? Icons.Material.Filled.Check : null)">
+            @i. @(i == 1 ? "Stücke sammeln" : i == 2 ? "Videos finden" : "Prüfen & Speichern")
+        </MudChip>
+        @if (i < 3) { <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Style="color:#6f5a86;" /> }
+    }
+</MudStack>
+
+@* ───────────────── Schritt 1: Stücke sammeln ───────────────── *@
+@if (_step == 1)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Komponist</MudText>
+        <MudAutocomplete T="string" @bind-Value="_komponistName" Label="Komponist (bestehend oder neu)"
+                         Variant="Variant.Outlined" CoerceValue="true" SearchFunc="SucheKomponist"
+                         HelperText="Bereits vorhanden? wird wiederverwendet. Neu? wird beim Speichern angelegt." />
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Stücke beziehen</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+            Webseite scannen <b>oder</b> Titel direkt einfügen (eine Zeile pro Stück). Jede Webseite ist
+            anders aufgebaut – darum bitte die gefundenen Kandidaten unten kontrollieren und auswählen.
+        </MudText>
+
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudTextField @bind-Value="_url" Label="URL der Komponisten-Webseite" Variant="Variant.Outlined"
+                          Placeholder="https://www.johnmackey.com/music" />
+            <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                       OnClick="Scannen" Disabled="_laeuft">
+                @if (_laeuft) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                Scannen
+            </MudButton>
+        </MudStack>
+
+        <MudTextField @bind-Value="_paste" Label="…oder Titel einfügen (eine pro Zeile)" Variant="Variant.Outlined"
+                      Lines="4" Class="mb-2" />
+        <MudButton Variant="Variant.Outlined" Style="color:#9B59B6; border-color:#9B59B6;"
+                   OnClick="PasteUebernehmen">Eingefügte Titel übernehmen</MudButton>
+    </MudPaper>
+
+    @if (_kandidaten.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Kandidaten (@_kandidaten.Count)</MudText>
+                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@AnzahlGewaehlt ausgewählt</MudText>
+                <MudSpacer />
+                <MudButton Size="Size.Small" OnClick="@(() => AlleSetzen(true))">Alle</MudButton>
+                <MudButton Size="Size.Small" OnClick="@(() => AlleSetzen(false))">Keine</MudButton>
+            </MudStack>
+            <div style="max-height:380px; overflow-y:auto;">
+                @foreach (var k in _kandidaten)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
+                        <MudCheckBox @bind-Value="k.Ausgewaehlt" Dense="true" Color="Color.Primary" />
+                        <MudTextField @bind-Value="k.Titel" Variant="Variant.Text" Margin="Margin.Dense"
+                                      Style="flex:1;" />
+                    </MudStack>
+                }
+            </div>
+        </MudPaper>
+    }
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ZuSchritt2"
+               EndIcon="@Icons.Material.Filled.ChevronRight"
+               Disabled="@(string.IsNullOrWhiteSpace(_komponistName) || AnzahlGewaehlt == 0)">
+        Weiter (@AnzahlGewaehlt Stücke)
+    </MudButton>
+}
+
+@* ───────────────── Schritt 2: Videos finden ───────────────── *@
+@if (_step == 2)
+{
+    @if (!YouTubeSearch.Verfuegbar)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            Keine YouTube-Data-API konfiguriert → automatische Suche deaktiviert. Du kannst pro Stück
+            einen YouTube-Link manuell einfügen (Titel & Band werden automatisch ermittelt).
+            <br />Für die Auto-Suche: API-Key unter <code>YouTube:ApiKey</code> via user-secrets hinterlegen.
+        </MudAlert>
+    }
+
+    @foreach (var p in _pieces)
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+            @* Felder vor der Suche bearbeitbar – Titel, Jahr, Schwierigkeit. *@
+            <MudGrid Spacing="2" Class="mb-2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="p.Titel" Label="Titel (für die Suche)" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int?" @bind-Value="p.Jahr" Label="Jahr" Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" Min="1800" Max="2100" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudSelect T="Schwierigkeitsgrad" @bind-Value="p.Grad" Label="Schwierigkeit"
+                               Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem Value="Schwierigkeitsgrad.Unbekannt">Unbekannt</MudSelectItem>
+                        <MudSelectItem Value="Schwierigkeitsgrad.Leicht">Leicht</MudSelectItem>
+                        <MudSelectItem Value="Schwierigkeitsgrad.Mittel">Mittel</MudSelectItem>
+                        <MudSelectItem Value="Schwierigkeitsgrad.Schwer">Schwer</MudSelectItem>
+                        <MudSelectItem Value="Schwierigkeitsgrad.SehrSchwer">Sehr schwer</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+            @if (YouTubeSearch.Verfuegbar)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#9B59B6; border-color:#9B59B6;"
+                           OnClick="@(() => Suchen(p))" Disabled="p.Laeuft" Class="mb-2"
+                           StartIcon="@Icons.Material.Filled.Search">
+                    @(p.Gesucht ? "Erneut suchen" : "Videos suchen")
+                </MudButton>
+            }
+
+            @if (p.Treffer.Count > 0)
+            {
+                <MudGrid>
+                    @foreach (var t in p.Treffer)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Outlined="true" Style="@("background:#0e0018; border-color:" + (p.Gewaehlt.Contains(t.VideoId) ? "#D4AF37" : "#3a1060"))">
+                                <div style="position:relative;">
+                                    <img src="@t.ThumbnailUrl" style="width:100%;display:block;cursor:pointer;" alt=""
+                                         @onclick="@(() => Umschalten(p, t.VideoId))" />
+                                </div>
+                                <MudCardContent Class="pa-2">
+                                    <MudCheckBox T="bool" Value="p.Gewaehlt.Contains(t.VideoId)"
+                                                 ValueChanged="@((bool _) => Umschalten(p, t.VideoId))"
+                                                 Color="Color.Primary" Dense="true" Size="Size.Small"
+                                                 Label="@(p.Gewaehlt.Contains(t.VideoId) ? "Ausgewählt" : "Auswählen")" />
+                                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#F0E6FF;">@t.Titel</MudText>
+                                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@t.Kanal</MudText>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+                @if (!string.IsNullOrEmpty(p.NextPageToken))
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;" Class="mt-2"
+                               OnClick="@(() => Suchen(p, mehr: true))" Disabled="p.Laeuft"
+                               StartIcon="@Icons.Material.Filled.ExpandMore">Weitere Treffer anzeigen</MudButton>
+                }
+            }
+            else if (p.Gesucht)
+            {
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Treffer – Titel anpassen und erneut suchen.</MudText>
+            }
+
+            <MudTextField @bind-Value="p.ManuellerLink" Label="YouTube-Link manuell (optional)"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                          Placeholder="https://youtu.be/…" />
+        </MudPaper>
+    }
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Outlined" OnClick="@(() => _step = 1)"
+                   StartIcon="@Icons.Material.Filled.ChevronLeft">Zurück</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ZuSchritt3"
+                   EndIcon="@Icons.Material.Filled.ChevronRight">Weiter</MudButton>
+    </MudStack>
+}
+
+@* ───────────────── Schritt 3: Prüfen & Speichern ───────────────── *@
+@if (_step == 3)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Zusammenfassung</MudText>
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">Komponist: <b>@_komponistName</b></MudText>
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">@_pieces.Count Stücke, @AnzahlVideos Videos werden gespeichert.</MudText>
+        <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:#6f5a86;">
+            Duplikate (gleicher Komponist/Titel bzw. gleiche YouTube-ID) werden automatisch übersprungen.
+        </MudText>
+    </MudPaper>
+
+    @if (_log.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#0e0018; border:1px solid #3a1060;">
+            @foreach (var z in _log)
+            {
+                <MudText Typo="Typo.body2" Style="color:#C4B0D8;">@z</MudText>
+            }
+        </MudPaper>
+    }
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Outlined" OnClick="@(() => _step = 2)" Disabled="_laeuft"
+                   StartIcon="@Icons.Material.Filled.ChevronLeft">Zurück</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern" Disabled="@(_laeuft || _gespeichert)"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @if (_laeuft) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Importieren
+        </MudButton>
+        @if (_gespeichert)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/stuecke">Zu den Stücken</MudButton>
+        }
+    </MudStack>
+}
+
+@code {
+    private int _step = 1;
+    private bool _laeuft;
+    private bool _gespeichert;
+
+    private string? _komponistName;
+    private string _url = "";
+    private string _paste = "";
+    private List<string> _alleKomponisten = [];
+
+    private List<Kandidat> _kandidaten = [];
+    private List<PieceModell> _pieces = [];
+    private List<string> _log = [];
+
+    private int AnzahlGewaehlt => _kandidaten.Count(k => k.Ausgewaehlt);
+    private int AnzahlVideos => _pieces.Sum(p => p.Gewaehlt.Count + (string.IsNullOrWhiteSpace(p.ManuellerLink) ? 0 : 1));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _alleKomponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+    }
+
+    private Task<IEnumerable<string>> SucheKomponist(string? value, CancellationToken ct)
+        => Task.FromResult(string.IsNullOrWhiteSpace(value)
+            ? _alleKomponisten.AsEnumerable()
+            : _alleKomponisten.Where(n => n.Contains(value, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task Scannen()
+    {
+        if (string.IsNullOrWhiteSpace(_url)) return;
+        _laeuft = true;
+        try
+        {
+            var gefunden = await Scraper.HoleKandidatenAsync(_url);
+            var vorhanden = _kandidaten.Select(k => k.Titel).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var t in gefunden)
+                if (vorhanden.Add(t)) _kandidaten.Add(new Kandidat { Titel = t, Ausgewaehlt = false });
+
+            Snackbar.Add($"{gefunden.Count} Kandidaten gefunden – bitte auswählen.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Scannen fehlgeschlagen: {ex.Message}", Severity.Error);
+        }
+        finally { _laeuft = false; }
+    }
+
+    private void PasteUebernehmen()
+    {
+        var zeilen = _paste.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var vorhanden = _kandidaten.Select(k => k.Titel).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var z in zeilen)
+            if (vorhanden.Add(z)) _kandidaten.Add(new Kandidat { Titel = z, Ausgewaehlt = true });
+        _paste = "";
+    }
+
+    private void AlleSetzen(bool wert) => _kandidaten.ForEach(k => k.Ausgewaehlt = wert);
+
+    private void ZuSchritt2()
+    {
+        _pieces = _kandidaten.Where(k => k.Ausgewaehlt && !string.IsNullOrWhiteSpace(k.Titel))
+            .Select(k =>
+            {
+                var p = StueckParser.Parse(k.Titel);   // Jahr + Schwierigkeit interpretieren
+                return new PieceModell { Titel = p.Titel, Jahr = p.Jahr, Grad = p.Grad };
+            })
+            .ToList();
+        _step = 2;
+    }
+
+    private async Task Suchen(PieceModell p, bool mehr = false)
+    {
+        p.Laeuft = true;
+        try
+        {
+            // Suchbegriff: nur Komponist + Titel (kein Jahr/Schwierigkeit/Besetzung).
+            var ergebnis = await YouTubeSearch.SucheAsync($"{_komponistName} {p.Titel}", 6,
+                mehr ? p.NextPageToken : null);
+
+            if (!mehr) p.Treffer = [];
+            // Duplikate vermeiden, falls dieselbe Video-ID erneut käme.
+            var vorhanden = p.Treffer.Select(t => t.VideoId).ToHashSet();
+            p.Treffer.AddRange(ergebnis.Treffer.Where(t => vorhanden.Add(t.VideoId)));
+            p.NextPageToken = ergebnis.NextPageToken;
+            p.Gesucht = true;
+
+            if (p.Treffer.Count == 0) Snackbar.Add("Keine Treffer.", Severity.Info);
+        }
+        finally { p.Laeuft = false; }
+    }
+
+    private void Umschalten(PieceModell p, string videoId)
+    {
+        if (!p.Gewaehlt.Add(videoId)) p.Gewaehlt.Remove(videoId);
+    }
+
+    private void ZuSchritt3()
+    {
+        _log.Clear();
+        _gespeichert = false;
+        _step = 3;
+    }
+
+    private async Task Speichern()
+    {
+        _laeuft = true;
+        _log.Clear();
+        int neueStuecke = 0, neueVideos = 0, uebersprungen = 0;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            // Komponist:in als Person (Rolle Komponist): bestehend (per Name) oder neu.
+            var name = _komponistName!.Trim();
+            var komponist = await db.Personen.Include(p => p.Rollen).FirstOrDefaultAsync(p => p.Name == name);
+            if (komponist == null)
+            {
+                komponist = new Person { Name = name, Sichtbarkeit = Sichtbarkeit.Oeffentlich };
+                komponist.Rollen.Add(new PersonRolle { Rolle = PersonRolleTyp.Komponist });
+                db.Personen.Add(komponist);
+                _log.Add($"➕ Komponist \"{komponist.Name}\" neu angelegt.");
+            }
+            else
+            {
+                if (komponist.Rollen.All(r => r.Rolle != PersonRolleTyp.Komponist))
+                    komponist.Rollen.Add(new PersonRolle { Rolle = PersonRolleTyp.Komponist });
+                _log.Add($"✓ Komponist \"{komponist.Name}\" vorhanden – wird verwendet.");
+            }
+
+            foreach (var p in _pieces)
+            {
+                // Stück: per Titel + Komponist:in deduplizieren (über StückBeitrag).
+                var stueck = await db.Stuecke
+                    .Include(s => s.Beitraege)
+                    .FirstOrDefaultAsync(s => s.Titel == p.Titel
+                        && s.Beitraege.Any(b => b.PersonId == komponist.Id && b.Rolle == StueckRolle.Komponist));
+                if (stueck == null)
+                {
+                    stueck = new Stueck
+                    {
+                        Titel = p.Titel,
+                        Jahr = p.Jahr,
+                        Schwierigkeitsgrad = p.Grad,
+                        OriginalUrl = string.IsNullOrWhiteSpace(_url) ? null : _url,
+                        Beitraege = [ new StueckBeitrag { Person = komponist, Rolle = StueckRolle.Komponist } ]
+                    };
+                    db.Stuecke.Add(stueck);
+                    neueStuecke++;
+                    var zusatz = (p.Jahr.HasValue ? $" ({p.Jahr})" : "")
+                               + (p.Grad != Schwierigkeitsgrad.Unbekannt ? $" – {Darstellung.GradText(p.Grad)}" : "");
+                    _log.Add($"➕ Stück \"{p.Titel}\"{zusatz}.");
+                }
+                else
+                {
+                    uebersprungen++;
+                    _log.Add($"⏭ Stück \"{p.Titel}\" existiert bereits.");
+                }
+
+                // Videos: gewählte Such-Treffer + manueller Link.
+                var videoIds = new List<string>(p.Gewaehlt);
+                var manuId = YouTubeId.Extrahiere(p.ManuellerLink);
+                if (!string.IsNullOrWhiteSpace(manuId)) videoIds.Add(manuId);
+
+                foreach (var vid in videoIds.Distinct())
+                {
+                    var existiert = await db.Videos.AnyAsync(v => v.YouTubeVideoId == vid && v.Stueck.Titel == p.Titel)
+                                    || stueck.Videos.Any(v => v.YouTubeVideoId == vid);
+                    if (existiert) { _log.Add($"   ⏭ Video {vid} bereits vorhanden."); continue; }
+
+                    var meta = await YouTubeMeta.HoleAsync(vid);
+                    var band = await FindeOderErstelleBandAsync(db, meta);
+                    stueck.Videos.Add(new Video
+                    {
+                        YouTubeVideoId = vid,
+                        Titel = meta?.Titel ?? "(ohne Titel)",
+                        Band = band,
+                        Status = VideoStatus.Genehmigt
+                    });
+                    neueVideos++;
+                    _log.Add($"   ➕ Video {vid} ({meta?.Titel ?? "?"}).");
+                }
+            }
+
+            await db.SaveChangesAsync();
+            _log.Add("");
+            _log.Add($"✅ Fertig: {neueStuecke} Stücke neu, {neueVideos} Videos neu, {uebersprungen} übersprungen.");
+            _gespeichert = true;
+            Snackbar.Add("Import abgeschlossen.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _log.Add($"❌ Fehler: {ex.Message}");
+            Snackbar.Add("Import fehlgeschlagen.", Severity.Error);
+        }
+        finally { _laeuft = false; }
+    }
+
+    private async Task<Band?> FindeOderErstelleBandAsync(ApplicationDbContext db, YouTubeMetadataService.Metadaten? meta)
+    {
+        if (meta == null) return null;
+        if (!string.IsNullOrWhiteSpace(meta.KanalUrl))
+        {
+            var perUrl = await db.Bands.FirstOrDefaultAsync(b => b.Webseite == meta.KanalUrl);
+            if (perUrl != null) return perUrl;
+        }
+        if (!string.IsNullOrWhiteSpace(meta.KanalName))
+        {
+            var perName = await db.Bands.FirstOrDefaultAsync(b => b.Name == meta.KanalName);
+            if (perName != null) return perName;
+            var neu = new Band { Name = meta.KanalName!, Webseite = meta.KanalUrl };
+            db.Bands.Add(neu);
+            return neu;
+        }
+        return null;
+    }
+
+    private class Kandidat
+    {
+        public string Titel { get; set; } = "";
+        public bool Ausgewaehlt { get; set; }
+    }
+
+    private class PieceModell
+    {
+        public string Titel { get; set; } = "";
+        public int? Jahr { get; set; }
+        public Schwierigkeitsgrad Grad { get; set; } = Schwierigkeitsgrad.Unbekannt;
+        public bool Laeuft { get; set; }
+        public List<YouTubeSearchService.Treffer> Treffer { get; set; } = [];
+        public HashSet<string> Gewaehlt { get; set; } = [];
+        public string ManuellerLink { get; set; } = "";
+        public string? NextPageToken { get; set; }
+        public bool Gesucht { get; set; }
+    }
+}

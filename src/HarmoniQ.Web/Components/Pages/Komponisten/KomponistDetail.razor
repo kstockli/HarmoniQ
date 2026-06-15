@@ -1,0 +1,9 @@
+@page "/komponisten/{Id:guid}"
+@inject NavigationManager Nav
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    // Komponisten sind jetzt Personen – auf die Personen-Detailseite umleiten.
+    protected override void OnInitialized() => Nav.NavigateTo($"/personen/{Id}", replace: true);
+}

@@ -1,0 +1,67 @@
+@page "/komponisten"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Komponisten – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Komponisten</MudText>
+
+@if (_komponisten == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        @foreach (var k in _komponisten)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudAvatar Style="background:#3a1060; color:#D4AF37;" Size="Size.Large">
+                                @if (k.BildUrl != null)
+                                {
+                                    <img src="@k.BildUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@k.Name" />
+                                }
+                                else { @(k.Name.Length > 0 ? k.Name[0].ToString() : "?") }
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">@k.Name</MudText>
+                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@k.AnzahlWerke Werke</MudText>
+                            </div>
+                        </MudStack>
+                        @if (k.Biografie != null)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-3" Style="color:#C4B0D8;">
+                                @(k.Biografie.Length > 140 ? k.Biografie[..140] + "…" : k.Biografie)
+                            </MudText>
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                                   Href="@($"/personen/{k.Id}")">Werke ansehen</MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<Zeile>? _komponisten;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _komponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name)
+            .Select(p => new Zeile(p.Id, p.Name, p.BildUrl, p.Biografie, p.StueckBeitraege.Count))
+            .ToListAsync();
+    }
+
+    private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
+}

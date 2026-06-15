@@ -1,0 +1,53 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthProvider
+
+@if (_angemeldet)
+{
+    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#9B59B6;"
+               StartIcon="@Icons.Material.Filled.ReportProblem" OnClick="Melden">
+        Fehler melden / Richtigstellung
+    </MudButton>
+}
+
+@code {
+    [Parameter] public RichtigstellungTyp Typ { get; set; }
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _angemeldet;
+    private string? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _angemeldet = _userId != null;
+    }
+
+    private async Task Melden()
+    {
+        var dialog = await DialogService.ShowAsync<RichtigstellungDialog>("Richtigstellung",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var text = (string)result.Data!;
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Richtigstellungen.Add(new Richtigstellung
+        {
+            BetrifftTyp = Typ,
+            BetrifftId = Id,
+            Text = text,
+            EingereichtVonId = _userId,
+            Status = RichtigstellungStatus.Offen
+        });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Danke! Deine Richtigstellung wurde übermittelt.", Severity.Success);
+    }
+}

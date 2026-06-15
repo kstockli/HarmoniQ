@@ -1,0 +1,23 @@
+# Build-Artefakte
+[Bb]in/
+[Oo]bj/
+*.user
+
+# Visual Studio
+.vs/
+
+# Lokale SQLite-Datenbank (wird per Seeder erzeugt – nicht versionieren)
+*.db
+*.db-shm
+*.db-wal
+
+# Logs / temporär
+*.log
+
+# user-secrets liegen außerhalb des Repos (im Benutzerprofil) und sind nicht enthalten
+
+# Lokale Claude-Code-Einstellungen (maschinenspezifisch, enthält ggf. API-Keys in Permissions)
+.claude/settings.local.json
+
+# Persoenliche Notizen (enthaelt ggf. Keys) - nicht versionieren
+todoNotizenKuno.txt

@@ -1,0 +1,18 @@
+@* Zeigt ein Label + Fortschrittsbalken für einen Bewertungswert (1–5) *@
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudText Typo="Typo.caption" Style="width:75px;flex-shrink:0">@Label</MudText>
+    <MudProgressLinear Value="@(Wert / 5.0 * 100)"
+                       Color="Color.Warning"
+                       Rounded="true"
+                       Size="Size.Small"
+                       Style="flex:1" />
+    <MudText Typo="Typo.caption" Style="width:32px;text-align:right">
+        @Wert.ToString("0.0")
+    </MudText>
+</MudStack>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public double Wert { get; set; }
+}

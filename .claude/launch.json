@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "musicrater",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/HarmoniQ.Web/HarmoniQ.Web.csproj", "--urls", "http://localhost:5294"],
+      "port": 5294
+    }
+  ]
+}

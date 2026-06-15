@@ -1,0 +1,147 @@
+@page "/videos"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Videos – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Videos</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern"
+                          Label="Suchen (Titel / Stück)" Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudSelect T="Guid?" @bind-Value="_bandFilter" @bind-Value:after="Filtern"
+                       Label="Band" Variant="Variant.Outlined" Clearable="true">
+                @foreach (var b in _bands)
+                {
+                    <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudSelect T="Guid?" @bind-Value="_komponistFilter" @bind-Value:after="Filtern"
+                       Label="Komponist" Variant="Variant.Outlined" Clearable="true">
+                @foreach (var k in _komponisten)
+                {
+                    <MudSelectItem T="Guid?" Value="@k.Id">@k.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Videos</MudText>
+</MudPaper>
+
+<MudGrid>
+    @foreach (var v in _gefiltert)
+    {
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudLink Href="@($"/stuecke/{v.StueckId}")">
+                    <div style="position:relative;">
+                        <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                             style="width:100%;display:block;" alt="@v.Titel" />
+                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
+                                 Style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;opacity:0.85;"
+                                 Size="Size.Large" />
+                    </div>
+                </MudLink>
+                <MudCardContent>
+                    <MudLink Href="@($"/stuecke/{v.StueckId}")" Style="color:#F0E6FF;font-weight:500;"
+                             Underline="Underline.Hover">@v.StueckTitel</MudLink>
+                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.KomponistName</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Style="color:#9B59B6;" />
+                        <MudLink Href="@($"/bands/{v.BandId}")" Typo="Typo.body2" Style="color:#9B59B6;"
+                                 Underline="Underline.Hover">@v.BandName</MudLink>
+                        @if (v.BandLand != null)
+                        {
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">· @v.BandLand</MudText>
+                        }
+                    </MudStack>
+                    @if (v.Anzahl > 0)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-2">
+                            <MudText Typo="Typo.body2" Style="color:#D4AF37;">@v.Schnitt.ToString("0.0")</MudText>
+                            <MudRating ReadOnly="true" SelectedValue="@((int)Math.Round(v.Schnitt))" MaxValue="5" Size="Size.Small" />
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">(@v.Anzahl)</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:#A78FC0;">Noch keine Bewertungen</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [SupplyParameterFromQuery(Name = "band")] public Guid? BandQuery { get; set; }
+
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private List<Band> _bands = [];
+    private List<(Guid Id, string Name)> _komponisten = [];
+
+    private string _suche = "";
+    private Guid? _bandFilter;
+    private Guid? _komponistFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
+        _komponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name)
+            .Select(p => new ValueTuple<Guid, string>(p.Id, p.Name))
+            .ToListAsync();
+
+        var schnitte = await db.Bewertungen
+            .GroupBy(b => b.VideoId)
+            .Select(g => new { VideoId = g.Key, Anzahl = g.Count(), Schnitt = g.Average(b => b.GesamtEindruck) })
+            .ToDictionaryAsync(x => x.VideoId);
+
+        var videos = await db.Videos
+            .Where(v => v.Status == VideoStatus.Genehmigt)
+            .Include(v => v.Band)
+            .Include(v => v.Stueck).ThenInclude(s => s.Beitraege).ThenInclude(b => b.Person)
+            .ToListAsync();
+
+        _alle = videos.Select(v => new Zeile(
+            v.Id, v.YouTubeVideoId, v.Titel,
+            v.StueckId, v.Stueck.Titel,
+            v.Stueck.Komponisten.Select(p => p.Id).ToHashSet(), v.Stueck.KomponistenText,
+            v.BandId, v.Band?.Name ?? "Unbekannt", v.Band?.Land,
+            schnitte.TryGetValue(v.Id, out var s) ? s.Anzahl : 0,
+            schnitte.TryGetValue(v.Id, out var s2) ? s2.Schnitt : 0
+        )).OrderBy(z => z.StueckTitel).ToList();
+
+        _bandFilter = BandQuery;
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        _gefiltert = _alle
+            .Where(z =>
+                (_bandFilter == null || z.BandId == _bandFilter) &&
+                (_komponistFilter == null || z.KomponistIds.Contains(_komponistFilter.Value)) &&
+                (_suche == "" || z.StueckTitel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
+                              || z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private record Zeile(Guid Id, string YouTubeVideoId, string Titel,
+        Guid StueckId, string StueckTitel, HashSet<Guid> KomponistIds, string KomponistName,
+        Guid? BandId, string BandName, string? BandLand, int Anzahl, double Schnitt);
+}

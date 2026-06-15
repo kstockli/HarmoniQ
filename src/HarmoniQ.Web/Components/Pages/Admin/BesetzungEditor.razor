@@ -1,0 +1,197 @@
+@page "/admin/videos/{VideoId:guid}/besetzung"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Besetzung – HarmoniQ Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/videos"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Videos</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Besetzung</MudText>
+</MudStack>
+
+@if (_video == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@_video.Stueck?.Titel</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">@_video.Titel</MudText>
+
+    @* Bestehende Mitwirkende *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Mitwirkende (@_mitwirkende.Count)</MudText>
+        @if (_mitwirkende.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Noch niemand erfasst.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Style="background:transparent;">
+                <thead>
+                    <tr><th style="color:#A78FC0;">Person</th><th style="color:#A78FC0;">Rolle</th><th style="color:#A78FC0;">Instrument</th><th style="color:#A78FC0;">Stimme</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _mitwirkende)
+                    {
+                        <tr>
+                            <td style="color:#F0E6FF;">@m.PersonName</td>
+                            <td style="color:#C4B0D8;">@m.Rolle</td>
+                            <td style="color:#C4B0D8;">@(m.Instrument ?? "—")</td>
+                            <td style="color:#C4B0D8;">@(m.Stimme ?? "—")</td>
+                            <td><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => Loeschen(m.Id))" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+
+    @* Neue Mitwirkung hinzufügen *@
+    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Mitwirkende:n hinzufügen</MudText>
+        <MudText Typo="Typo.caption" Class="mb-3" Style="color:#A78FC0;">
+            Tippe einen Namen/Instrument/Stimme – existiert er nicht, wird er automatisch angelegt.
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudAutocomplete T="string" @bind-Value="_personName" Label="Person" Variant="Variant.Outlined"
+                                 SearchFunc="SuchePerson" CoerceValue="true" ResetValueOnEmptyText="false"
+                                 Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="MitwirkungRolle" @bind-Value="_rolle" @bind-Value:after="RolleGewechselt"
+                           Label="Rolle" Variant="Variant.Outlined">
+                    <MudSelectItem Value="MitwirkungRolle.Musikant">Musikant:in</MudSelectItem>
+                    <MudSelectItem Value="MitwirkungRolle.Dirigent">Dirigent:in</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="Sichtbarkeit" @bind-Value="_sichtbarkeit" Label="Sichtbarkeit (für neue Person)"
+                           Variant="Variant.Outlined"
+                           HelperText="Wird nur bei neu angelegten Personen gesetzt">
+                    <MudSelectItem Value="Sichtbarkeit.Oeffentlich">Öffentlich</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NurInitialen">Nur Initialen</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NichtBekannt">Nicht bekannt (?)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            @if (_rolle == MitwirkungRolle.Musikant)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="string" @bind-Value="_instrumentName" @bind-Value:after="InstrumentGewechselt"
+                                     Label="Instrument (optional)" Variant="Variant.Outlined"
+                                     SearchFunc="SucheInstrument" CoerceValue="true" ResetValueOnEmptyText="false" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="string" @bind-Value="_stimmeBezeichnung" Label="Stimme (optional)"
+                                     Variant="Variant.Outlined" SearchFunc="SucheStimme" CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     HelperText="@(string.IsNullOrWhiteSpace(_instrumentName) ? "zuerst Instrument wählen" : $"Stimmen von {_instrumentName}")" />
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_anmerkung" Label="Anmerkung (optional)" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-3"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="Hinzufuegen"
+                   Disabled="@(string.IsNullOrWhiteSpace(_personName))">Hinzufügen</MudButton>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid VideoId { get; set; }
+
+    private Video? _video;
+    private List<Zeile> _mitwirkende = [];
+
+    // Vorschlagslisten (für Autocomplete) + Freitext-Werte
+    private List<string> _personNamen = [];
+    private List<Instrument> _instrumente = [];
+    private List<Stimme> _stimmen = [];
+
+    private string? _personName;
+    private MitwirkungRolle _rolle = MitwirkungRolle.Musikant;
+    private Sichtbarkeit _sichtbarkeit = Sichtbarkeit.NurInitialen;   // Default für Musikant:in
+    private string? _instrumentName;
+    private string? _stimmeBezeichnung;
+    private string? _anmerkung;
+
+    // Sichtbarkeits-Vorschlag an die Rolle anpassen (überschreibbar).
+    private void RolleGewechselt() =>
+        _sichtbarkeit = _rolle == MitwirkungRolle.Dirigent ? Sichtbarkeit.Oeffentlich : Sichtbarkeit.NurInitialen;
+
+    protected override async Task OnParametersSetAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _video = await db.Videos.Include(v => v.Stueck).FirstOrDefaultAsync(v => v.Id == VideoId);
+        if (_video == null) { Nav.NavigateTo("/admin/videos"); return; }
+
+        _mitwirkende = await db.VideoMitwirkungen
+            .Where(m => m.VideoId == VideoId)
+            .Select(m => new Zeile(m.Id, m.Person.Name, m.Rolle,
+                m.Instrument != null ? m.Instrument.Name : null,
+                m.Stimme != null ? m.Stimme.Bezeichnung : null))
+            .ToListAsync();
+
+        _personNamen = await db.Personen.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+        _instrumente = await db.Instrumente.OrderBy(i => i.Name).ToListAsync();
+        _stimmen = await db.Stimmen.Include(s => s.Instrument).ToListAsync();
+    }
+
+    private Task<IEnumerable<string>> SuchePerson(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_personNamen, v));
+
+    private Task<IEnumerable<string>> SucheInstrument(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_instrumente.Select(i => i.Name), v));
+
+    private Task<IEnumerable<string>> SucheStimme(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_stimmen
+            .Where(s => string.Equals(s.Instrument.Name, _instrumentName, StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.Bezeichnung), v));
+
+    private static IEnumerable<string> Filter(IEnumerable<string> quelle, string? v) =>
+        string.IsNullOrWhiteSpace(v) ? quelle.Take(15)
+            : quelle.Where(x => x.Contains(v, StringComparison.OrdinalIgnoreCase)).Take(15);
+
+    private void InstrumentGewechselt() => _stimmeBezeichnung = null;
+
+    private async Task Hinzufuegen()
+    {
+        if (string.IsNullOrWhiteSpace(_personName)) return;
+        var name = _personName.Trim();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await MitwirkungService.ErfasseAsync(db, VideoId,
+            new MitwirkungService.Eingabe(name, _rolle, _sichtbarkeit, _instrumentName, _stimmeBezeichnung, _anmerkung),
+            VideoStatus.Genehmigt, vorgeschlagenVonId: null);
+
+        Snackbar.Add($"{name} hinzugefügt.", Severity.Success);
+        _personName = null; _instrumentName = null; _stimmeBezeichnung = null; _anmerkung = null;
+        await Laden();
+    }
+
+    private async Task Loeschen(Guid mitwirkungId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var m = await db.VideoMitwirkungen.FindAsync(mitwirkungId);
+        if (m != null) { db.VideoMitwirkungen.Remove(m); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, string PersonName, MitwirkungRolle Rolle, string? Instrument, string? Stimme);
+}

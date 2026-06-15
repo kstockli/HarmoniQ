@@ -1,0 +1,39 @@
+<svg width="780" height="220" viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HarmoniQ - The Music Database">
+  <title>HarmoniQ</title>
+  <desc>HarmoniQ logo with Beethoven's fifth symphony motif (G G G E flat)</desc>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="780" height="220" rx="16" fill="#0F0A1F"/>
+
+  <!-- Icon tile -->
+  <rect x="40" y="45" width="130" height="130" rx="28" fill="#241640"/>
+  <rect x="40" y="45" width="130" height="130" rx="28" fill="none" stroke="#5B21B6" stroke-width="1"/>
+
+  <!-- Staff lines (top to bottom: F5, D5, B4, G4, E4) -->
+  <line x1="60" y1="85"  x2="150" y2="85"  stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+  <line x1="60" y1="97"  x2="150" y2="97"  stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+  <line x1="60" y1="109" x2="150" y2="109" stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+  <line x1="60" y1="121" x2="150" y2="121" stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+  <line x1="60" y1="133" x2="150" y2="133" stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+
+  <!-- Three G4 eighth notes on line y=121, beamed, stems up -->
+  <ellipse cx="75" cy="121" rx="6" ry="4.5" fill="#DDD6FE" transform="rotate(-15,75,121)"/>
+  <line x1="81" y1="121" x2="81" y2="95" stroke="#DDD6FE" stroke-width="2"/>
+  <ellipse cx="97" cy="121" rx="6" ry="4.5" fill="#DDD6FE" transform="rotate(-15,97,121)"/>
+  <line x1="103" y1="121" x2="103" y2="95" stroke="#DDD6FE" stroke-width="2"/>
+  <ellipse cx="119" cy="121" rx="6" ry="4.5" fill="#DDD6FE" transform="rotate(-15,119,121)"/>
+  <line x1="125" y1="121" x2="125" y2="95" stroke="#DDD6FE" stroke-width="2"/>
+  <line x1="81" y1="95" x2="125" y2="95" stroke="#A78BFA" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- E flat 4 on bottom line y=133, flat + open half note, stem up -->
+  <g transform="translate(129,125)">
+    <line x1="0" y1="-2" x2="0" y2="14" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M0 4 Q7 6 7 9 Q7 13 0 13" fill="none" stroke="#A855F7" stroke-width="1.4"/>
+  </g>
+  <ellipse cx="145" cy="133" rx="6" ry="4.5" fill="none" stroke="#A855F7" stroke-width="2" transform="rotate(-15,145,133)"/>
+  <line x1="151" y1="133" x2="151" y2="107" stroke="#A855F7" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Wordmark (groß: Versalhöhe ~ Kachelhöhe) -->
+  <text x="196" y="138" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="700" letter-spacing="-2"><tspan fill="#D8B4FE">Harmoni</tspan><tspan fill="#A855F7">Q</tspan></text>
+  <text x="200" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" letter-spacing="6" fill="#7C3AED" opacity="0.85">THE MUSIC DATABASE</text>
+</svg>

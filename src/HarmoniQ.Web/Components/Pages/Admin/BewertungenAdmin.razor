@@ -1,0 +1,169 @@
+@page "/admin/bewertungen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@using HarmoniQ.Web.Components.Shared
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Bewertungen verwalten – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Bewertungen</MudText>
+</MudStack>
+
+@if (_alle.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:520px;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Spacing="2">
+            <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">Verteilung (Gesamteindruck)</MudText>
+            <MudSpacer />
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                Ø @_schnitt.ToString("0.0") · @_alle.Count gesamt
+            </MudText>
+        </MudStack>
+        @for (int stern = 5; stern >= 1; stern--)
+        {
+            var anzahl = _verteilung[stern];
+            var prozent = _alle.Count == 0 ? 0 : (double)anzahl / _alle.Count * 100;
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                <MudText Typo="Typo.caption" Style="color:#A78FC0; width:36px;">@stern ★</MudText>
+                <MudProgressLinear Value="prozent" Color="Color.Warning" Rounded="true" Size="Size.Medium" Style="flex:1;" />
+                <MudText Typo="Typo.caption" Style="color:#A78FC0; width:32px; text-align:right;">@anzahl</MudText>
+            </MudStack>
+        }
+    </MudPaper>
+}
+
+<MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Stück / Kommentar)" Variant="Variant.Outlined"
+              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+              Clearable="true" Class="mb-3" Style="max-width:360px;" />
+
+<MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+    <Columns>
+        <TemplateColumn Title="Stück" SortBy="@(z => z.StueckTitel)">
+            <CellTemplate>
+                <MudLink Href="@($"/stuecke/{context.Item.StueckId}")" Style="color:#F0E6FF;"
+                         Underline="Underline.Hover">@context.Item.StueckTitel</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="z => z.Bewerter" Title="Von" />
+        <TemplateColumn Title="Gesamt" SortBy="@(z => z.GesamtEindruck)">
+            <CellTemplate>
+                <MudRating ReadOnly="true" SelectedValue="context.Item.GesamtEindruck" MaxValue="5" Size="Size.Small" />
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="z => z.Kommentar" Title="Kommentar" />
+        <TemplateColumn Title="Datum" SortBy="@(z => z.ErstelltAm)">
+            <CellTemplate>@context.Item.ErstelltAm.ToString("dd.MM.yyyy")</CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Aktionen" Sortable="false">
+            <CellTemplate>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
+                               OnClick="@(() => Bearbeiten(context.Item))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => Loeschen(context.Item))" />
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private string _suche = "";
+    private int[] _verteilung = new int[6];  // Index 1..5 = Anzahl Bewertungen mit diesem Gesamteindruck
+    private double _schnitt;
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _alle = await db.Bewertungen
+            .Include(b => b.Video).ThenInclude(v => v.Stueck)
+            .Include(b => b.Benutzer)
+            .OrderByDescending(b => b.ErstelltAm)
+            .Select(b => new Zeile(
+                b.Id,
+                b.Video.StueckId,
+                b.Video.Stueck.Titel,
+                b.Benutzer != null ? (b.Benutzer.Email ?? "Benutzer") : "anonym (Cookie)",
+                b.GesamtEindruck, b.Praezision, b.Musikalitaet, b.AkustischeQualitaet, b.VideoQualitaet,
+                b.Kommentar, b.ErstelltAm))
+            .ToListAsync();
+
+        _verteilung = new int[6];
+        foreach (var z in _alle)
+            if (z.GesamtEindruck is >= 1 and <= 5) _verteilung[z.GesamtEindruck]++;
+        _schnitt = _alle.Count == 0 ? 0 : _alle.Average(z => z.GesamtEindruck);
+
+        Filtern();
+    }
+
+    private void Filtern() =>
+        _gefiltert = _suche == "" ? _alle
+            : _alle.Where(z => z.StueckTitel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
+                            || (z.Kommentar?.Contains(_suche, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+
+    private async Task Bearbeiten(Zeile z)
+    {
+        var parameters = new DialogParameters<BewertenDialog>
+        {
+            { x => x.VideoTitel, z.StueckTitel },
+            { x => x.Vorhanden, new BewertenDialog.BewertungsModell
+                {
+                    GesamtEindruck = z.GesamtEindruck, Praezision = z.Praezision, Musikalitaet = z.Musikalitaet,
+                    AkustischeQualitaet = z.AkustischeQualitaet, VideoQualitaet = z.VideoQualitaet, Kommentar = z.Kommentar
+                } }
+        };
+        var dialog = await DialogService.ShowAsync<BewertenDialog>("Bewertung bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        var m = (BewertenDialog.BewertungsModell)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Bewertungen.FindAsync(z.Id);
+        if (entity == null) return;
+        entity.GesamtEindruck = m.GesamtEindruck;
+        entity.Praezision = m.Praezision;
+        entity.Musikalitaet = m.Musikalitaet;
+        entity.AkustischeQualitaet = m.AkustischeQualitaet;
+        entity.VideoQualitaet = m.VideoQualitaet;
+        entity.Kommentar = m.Kommentar;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Bewertung aktualisiert.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Loeschen(Zeile z)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"Bewertung von {z.Bewerter} zu \"{z.StueckTitel}\" löschen?" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Bewertungen.FindAsync(z.Id);
+        if (entity != null)
+        {
+            db.Bewertungen.Remove(entity);
+            await db.SaveChangesAsync();
+            Snackbar.Add("Bewertung gelöscht.", Severity.Success);
+        }
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, Guid StueckId, string StueckTitel, string Bewerter,
+        int GesamtEindruck, int Praezision, int Musikalitaet, int AkustischeQualitaet, int VideoQualitaet,
+        string? Kommentar, DateTime ErstelltAm);
+}

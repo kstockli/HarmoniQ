@@ -1,0 +1,81 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color:#A78FC0;">@VideoTitel</MudText>
+        <MudText Typo="Typo.caption" Class="mb-4" Style="color:#A78FC0;">
+            Bewerte jede Kategorie von 1 bis 5 Sternen.
+        </MudText>
+
+        <MudStack Spacing="2">
+            @RatingRow("Gesamt­eindruck", _model.GesamtEindruck, v => _model.GesamtEindruck = v)
+            @RatingRow("Präzision", _model.Praezision, v => _model.Praezision = v)
+            @RatingRow("Musikalität", _model.Musikalitaet, v => _model.Musikalitaet = v)
+            @RatingRow("Akustische Qualität", _model.AkustischeQualitaet, v => _model.AkustischeQualitaet = v)
+            @RatingRow("Video-Qualität", _model.VideoQualitaet, v => _model.VideoQualitaet = v)
+        </MudStack>
+
+        <MudTextField @bind-Value="_model.Kommentar" Label="Kommentar (optional)"
+                      Variant="Variant.Outlined" Lines="2" Class="mt-4" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Submit" Disabled="@(!IstVollstaendig)">
+            @(IstBearbeitung ? "Bewertung aktualisieren" : "Bewertung abgeben")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string VideoTitel { get; set; } = "";
+    [Parameter] public BewertungsModell? Vorhanden { get; set; }
+
+    private BewertungsModell _model = new();
+    private bool IstBearbeitung => Vorhanden != null;
+
+    private bool IstVollstaendig =>
+        _model.GesamtEindruck > 0 && _model.Praezision > 0 && _model.Musikalitaet > 0
+        && _model.AkustischeQualitaet > 0 && _model.VideoQualitaet > 0;
+
+    protected override void OnInitialized()
+    {
+        if (Vorhanden != null)
+        {
+            _model = new BewertungsModell
+            {
+                GesamtEindruck = Vorhanden.GesamtEindruck,
+                Praezision = Vorhanden.Praezision,
+                Musikalitaet = Vorhanden.Musikalitaet,
+                AkustischeQualitaet = Vorhanden.AkustischeQualitaet,
+                VideoQualitaet = Vorhanden.VideoQualitaet,
+                Kommentar = Vorhanden.Kommentar
+            };
+        }
+    }
+
+    private RenderFragment RatingRow(string label, int wert, Action<int> setter) => __builder =>
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.body2" Style="color:#F0E6FF;">@label</MudText>
+            <MudRating SelectedValue="wert"
+                       SelectedValueChanged="@(v => { setter(v); StateHasChanged(); })"
+                       MaxValue="5" />
+        </MudStack>
+    };
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_model));
+    private void Cancel() => MudDialog.Cancel();
+
+    public class BewertungsModell
+    {
+        public int GesamtEindruck { get; set; }
+        public int Praezision { get; set; }
+        public int Musikalitaet { get; set; }
+        public int AkustischeQualitaet { get; set; }
+        public int VideoQualitaet { get; set; }
+        public string? Kommentar { get; set; }
+    }
+}

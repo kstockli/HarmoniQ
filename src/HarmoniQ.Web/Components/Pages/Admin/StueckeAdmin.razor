@@ -1,0 +1,172 @@
+@page "/admin/stuecke"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@using HarmoniQ.Web.Components.Shared
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Stücke verwalten – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Stücke</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
+</MudStack>
+
+<MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen" Variant="Variant.Outlined"
+              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+              Clearable="true" Class="mb-3" Style="max-width:360px;" />
+
+<MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+    <Columns>
+        <PropertyColumn Property="z => z.Titel" Title="Titel" />
+        <PropertyColumn Property="z => z.KomponistText" Title="Komponist" />
+        <PropertyColumn Property="z => z.Jahr" Title="Jahr" />
+        <TemplateColumn Title="Schwierigkeit" SortBy="@(z => (int)z.Grad)">
+            <CellTemplate>
+                @if (context.Item.Grad != Schwierigkeitsgrad.Unbekannt)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@Darstellung.GradColor(context.Item.Grad)">
+                        @Darstellung.GradText(context.Item.Grad)
+                    </MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="z => z.Besetzung" Title="Besetzung" />
+        <TemplateColumn Title="Aktionen" Sortable="false">
+            <CellTemplate>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
+                               OnClick="@(() => Bearbeiten(context.Item))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => Loeschen(context.Item))" />
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private List<(Guid Id, string Name)> _komponisten = [];
+    private string _suche = "";
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _komponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name)
+            .Select(p => new ValueTuple<Guid, string>(p.Id, p.Name))
+            .ToListAsync();
+
+        var stuecke = await db.Stuecke
+            .Include(s => s.Beitraege).ThenInclude(b => b.Person)
+            .OrderBy(s => s.Titel)
+            .ToListAsync();
+        _alle = stuecke.Select(s => new Zeile(
+            s.Id, s.Titel, s.KomponistenText,
+            s.Komponisten.Select(p => p.Id).FirstOrDefault(),
+            s.Jahr, s.Schwierigkeitsgrad, s.Besetzung)).ToList();
+        Filtern();
+    }
+
+    private void Filtern() =>
+        _gefiltert = _suche == "" ? _alle
+            : _alle.Where(z => z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private async Task Bearbeiten(Zeile? z)
+    {
+        var vorhanden = z == null ? null : new StueckDialog.StueckModell
+        {
+            Id = z.Id, Titel = z.Titel, KomponistId = z.KomponistId, Jahr = z.Jahr,
+            Schwierigkeitsgrad = z.Grad, Besetzung = z.Besetzung,
+            Beschreibung = await BeschreibungLaden(z.Id)
+        };
+
+        var parameters = new DialogParameters<StueckDialog>
+        {
+            { x => x.Vorhanden, vorhanden },
+            { x => x.Komponisten, _komponisten }
+        };
+        var dialog = await DialogService.ShowAsync<StueckDialog>(
+            z == null ? "Neues Stück" : "Stück bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        var m = (StueckDialog.StueckModell)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        Stueck entity;
+        if (z == null)
+        {
+            entity = new Stueck();
+            db.Stuecke.Add(entity);
+        }
+        else
+        {
+            entity = await db.Stuecke.Include(s => s.Beitraege).FirstAsync(s => s.Id == m.Id);
+        }
+        entity.Titel = m.Titel.Trim();
+        entity.Jahr = m.Jahr;
+        entity.Schwierigkeitsgrad = m.Schwierigkeitsgrad;
+        entity.Besetzung = m.Besetzung;
+        entity.Beschreibung = m.Beschreibung;
+
+        // Komponist:in als StückBeitrag synchronisieren (genau eine:r als Primär-Komponist:in)
+        var bestehende = entity.Beitraege.Where(b => b.Rolle == StueckRolle.Komponist).ToList();
+        foreach (var b in bestehende.Where(b => b.PersonId != m.KomponistId))
+        {
+            entity.Beitraege.Remove(b);
+            db.StueckBeitraege.Remove(b);
+        }
+        if (m.KomponistId != Guid.Empty && bestehende.All(b => b.PersonId != m.KomponistId))
+        {
+            var nb = new StueckBeitrag { Stueck = entity, PersonId = m.KomponistId, Rolle = StueckRolle.Komponist };
+            entity.Beitraege.Add(nb);
+            db.StueckBeitraege.Add(nb);
+        }
+
+        await db.SaveChangesAsync();
+        Snackbar.Add("Gespeichert.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task<string?> BeschreibungLaden(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.Stuecke.Where(s => s.Id == id).Select(s => s.Beschreibung).FirstOrDefaultAsync();
+    }
+
+    private async Task Loeschen(Zeile z)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"Stück \"{z.Titel}\" inkl. aller zugehörigen Videos und Bewertungen löschen?" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Stuecke.FindAsync(z.Id);
+        if (entity != null)
+        {
+            db.Stuecke.Remove(entity);
+            await db.SaveChangesAsync();
+            Snackbar.Add("Gelöscht.", Severity.Success);
+        }
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, string Titel, string KomponistText, Guid KomponistId,
+        int? Jahr, Schwierigkeitsgrad Grad, string? Besetzung);
+}

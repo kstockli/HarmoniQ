@@ -1,0 +1,167 @@
+@page "/personen"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Personen – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Personen</MudText>
+
+@if (_kontext != null)
+{
+    <MudChip T="string" Class="mb-3" Color="Color.Primary" Icon="@Icons.Material.Filled.FilterAlt"
+             OnClose="@(() => Nav.NavigateTo("/personen"))">@_kontext</MudChip>
+}
+
+<MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="5">
+            <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Name suchen"
+                          Variant="Variant.Outlined" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" />
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudSelect T="PersonRolleTyp?" @bind-Value="_rolle" @bind-Value:after="Filtern"
+                       Label="Rolle" Variant="Variant.Outlined" Clearable="true">
+                <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Komponist)">Komponist:in</MudSelectItem>
+                <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Dirigent)">Dirigent:in</MudSelectItem>
+                <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Musikant)">Musikant:in</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" sm="4">
+            <MudSelect T="Guid?" @bind-Value="_instrument" @bind-Value:after="Filtern"
+                       Label="Instrument" Variant="Variant.Outlined" Clearable="true">
+                @foreach (var i in _instrumente)
+                {
+                    <MudSelectItem T="Guid?" Value="@i.Id">@i.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Personen</MudText>
+</MudPaper>
+
+@if (_alle.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Noch keine Personen erfasst.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var p in _gefiltert)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudAvatar Style="background:#3a1060; color:#D4AF37;">
+                                @if (p.BildUrl != null)
+                                {
+                                    <img src="@p.BildUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@p.AnzeigeName" />
+                                }
+                                else { @(p.AnzeigeName.Length > 0 ? p.AnzeigeName[0].ToString() : "?") }
+                            </MudAvatar>
+                            <div>
+                                <MudLink Href="@($"/personen/{p.Id}")" Style="color:#F0E6FF;font-weight:600;"
+                                         Underline="Underline.Hover">@p.AnzeigeName</MudLink>
+                                <div>
+                                    @foreach (var r in p.Rollen)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Class="mr-1"
+                                                 Style="background:#2d1657; color:#A78FC0;">@RolleText(r)</MudChip>
+                                    }
+                                </div>
+                                @if (p.Instrumente.Count > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">@string.Join(", ", p.Instrumente)</MudText>
+                                }
+                            </div>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "stueck")] public Guid? StueckQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "komponist")] public Guid? KomponistQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "band")] public Guid? BandQuery { get; set; }
+
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private List<Instrument> _instrumente = [];
+    private string _suche = "";
+    private PersonRolleTyp? _rolle;
+    private Guid? _instrument;
+    private string? _kontext;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _instrumente = await db.Instrumente.OrderBy(i => i.Name).ToListAsync();
+
+        var q = db.Personen
+            .Include(p => p.Rollen)
+            .Include(p => p.Instrumente).ThenInclude(pi => pi.Instrument)
+            .AsQueryable();
+
+        _kontext = null;
+        if (StueckQuery is { } sid)
+        {
+            q = q.Where(p => p.Mitwirkungen.Any(m => m.Video.StueckId == sid));
+            var titel = await db.Stuecke.Where(s => s.Id == sid).Select(s => s.Titel).FirstOrDefaultAsync();
+            if (titel != null) _kontext = $"hat \"{titel}\" gespielt";
+        }
+        else if (KomponistQuery is { } kid)
+        {
+            q = q.Where(p => p.Mitwirkungen.Any(m =>
+                m.Video.Stueck.Beitraege.Any(b => b.PersonId == kid && b.Rolle == StueckRolle.Komponist)));
+            var name = await db.Personen.Where(x => x.Id == kid).Select(x => x.Name).FirstOrDefaultAsync();
+            if (name != null) _kontext = $"hat Stücke von {name} gespielt";
+        }
+        else if (BandQuery is { } bid)
+        {
+            q = q.Where(p => p.Mitwirkungen.Any(m => m.Video.BandId == bid));
+            var name = await db.Bands.Where(x => x.Id == bid).Select(x => x.Name).FirstOrDefaultAsync();
+            if (name != null) _kontext = $"hat bei {name} mitgewirkt";
+        }
+
+        var personen = await q.ToListAsync();
+        _alle = personen.Select(p => new Zeile(
+            p.Id,
+            p.AnzeigeName,
+            p.BildUrl,
+            p.Rollen.Select(r => r.Rolle).ToList(),
+            p.Instrumente.Select(pi => pi.InstrumentId).ToHashSet(),
+            p.Instrumente.Select(pi => pi.Instrument.Name).OrderBy(n => n).ToList()
+        )).ToList();
+
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        _gefiltert = _alle
+            .Where(z =>
+                (_rolle == null || z.Rollen.Contains(_rolle.Value)) &&
+                (_instrument == null || z.InstrumentIds.Contains(_instrument.Value)) &&
+                (_suche == "" || z.AnzeigeName.Contains(_suche, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(z => z.AnzeigeName)
+            .ToList();
+    }
+
+    private static string RolleText(PersonRolleTyp r) => r switch
+    {
+        PersonRolleTyp.Komponist => "Komponist:in",
+        PersonRolleTyp.Dirigent => "Dirigent:in",
+        PersonRolleTyp.Musikant => "Musikant:in",
+        _ => r.ToString()
+    };
+
+    private record Zeile(Guid Id, string AnzeigeName, string? BildUrl,
+        List<PersonRolleTyp> Rollen, HashSet<Guid> InstrumentIds, List<string> Instrumente);
+}

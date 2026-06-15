@@ -1,0 +1,106 @@
+@page "/account/profil"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Shared
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Meine Bewertungen – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Meine Bewertungen</MudText>
+
+@if (_zeilen == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_zeilen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-2">
+        Du hast noch keine Aufnahmen bewertet. Stöbere durch die
+        <MudLink Href="/stuecke" Style="color:#D4AF37;">Stücke</MudLink> und gib deine erste Bewertung ab!
+    </MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+        @_zeilen.Count Bewertung@(_zeilen.Count == 1 ? "" : "en")
+    </MudText>
+
+    <MudGrid>
+        @foreach (var z in _zeilen)
+        {
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudCardContent>
+                        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
+                            <MudLink Href="@($"/stuecke/{z.StueckId}")" Style="flex-shrink:0;">
+                                <img src="@($"https://i.ytimg.com/vi/{z.YouTubeVideoId}/mqdefault.jpg")"
+                                     style="width:120px;border-radius:8px;display:block;" alt="@z.StueckTitel" />
+                            </MudLink>
+                            <div style="flex:1;min-width:0;">
+                                <MudLink Href="@($"/stuecke/{z.StueckId}")" Style="color:#F0E6FF;font-weight:600;"
+                                         Underline="Underline.Hover">@z.StueckTitel</MudLink>
+                                <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@z.BandName</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                                    <MudRating ReadOnly="true" SelectedValue="z.GesamtEindruck" MaxValue="5" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">Gesamt</MudText>
+                                </MudStack>
+                            </div>
+                        </MudStack>
+
+                        <MudDivider Class="my-3" Style="border-color:#3a1060;" />
+
+                        <BewertungsBalken Label="Präzision" Wert="z.Praezision" />
+                        <BewertungsBalken Label="Musikalität" Wert="z.Musikalitaet" />
+                        <BewertungsBalken Label="Akustik" Wert="z.AkustischeQualitaet" />
+                        <BewertungsBalken Label="Videobild" Wert="z.VideoQualitaet" />
+
+                        @if (!string.IsNullOrWhiteSpace(z.Kommentar))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-3" Style="color:#C4B0D8;font-style:italic;">
+                                „@z.Kommentar"
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:#6f5a86;">
+                            bewertet am @z.ErstelltAm.ToString("dd.MM.yyyy")
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<Zeile>? _zeilen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) { _zeilen = []; return; }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _zeilen = await db.Bewertungen
+            .Where(b => b.BenutzerId == userId)
+            .Include(b => b.Video).ThenInclude(v => v.Stueck)
+            .Include(b => b.Video).ThenInclude(v => v.Band)
+            .OrderByDescending(b => b.ErstelltAm)
+            .Select(b => new Zeile(
+                b.Video.StueckId,
+                b.Video.Stueck.Titel,
+                b.Video.YouTubeVideoId,
+                b.Video.Band != null ? b.Video.Band.Name : "Unbekannte Band",
+                b.GesamtEindruck, b.Praezision, b.Musikalitaet,
+                b.AkustischeQualitaet, b.VideoQualitaet, b.Kommentar, b.ErstelltAm))
+            .ToListAsync();
+    }
+
+    private record Zeile(Guid StueckId, string StueckTitel, string YouTubeVideoId, string BandName,
+        int GesamtEindruck, int Praezision, int Musikalitaet,
+        int AkustischeQualitaet, int VideoQualitaet, string? Kommentar, DateTime ErstelltAm);
+}

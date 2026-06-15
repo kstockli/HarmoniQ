@@ -1,0 +1,20 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+            Was stimmt nicht oder fehlt? Beschreibe es kurz – ein Admin schaut es sich an.
+        </MudText>
+        <MudTextField @bind-Value="_text" Label="Richtigstellung" Variant="Variant.Outlined"
+                      Lines="4" Immediate="true" AutoFocus="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(_text!.Trim())))"
+                   Disabled="@string.IsNullOrWhiteSpace(_text)">Senden</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    private string? _text;
+}

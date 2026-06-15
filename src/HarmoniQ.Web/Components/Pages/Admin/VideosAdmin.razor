@@ -1,0 +1,161 @@
+@page "/admin/videos"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject HarmoniQ.Web.Services.YouTubeMetadataService YouTube
+
+<PageTitle>Videos verwalten – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Videos</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
+</MudStack>
+
+<MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Titel / Stück)" Variant="Variant.Outlined"
+              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+              Clearable="true" Class="mb-3" Style="max-width:360px;" />
+
+<MudDataGrid T="Video" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+    <Columns>
+        <TemplateColumn Title="" Sortable="false">
+            <CellTemplate>
+                <img src="@($"https://i.ytimg.com/vi/{context.Item.YouTubeVideoId}/default.jpg")"
+                     style="width:64px;border-radius:4px;" alt="" />
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="v => v.Titel" Title="Titel" />
+        <TemplateColumn Title="Stück"><CellTemplate>@context.Item.Stueck?.Titel</CellTemplate></TemplateColumn>
+        <TemplateColumn Title="Band"><CellTemplate>@(context.Item.Band?.Name ?? "—")</CellTemplate></TemplateColumn>
+        <TemplateColumn Title="Status" SortBy="@(v => (int)v.Status)">
+            <CellTemplate>
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Item.Status)">
+                    @context.Item.Status
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Aktionen" Sortable="false">
+            <CellTemplate>
+                <MudTooltip Text="Besetzung">
+                    <MudIconButton Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Style="color:#9B59B6;"
+                                   Href="@($"/admin/videos/{context.Item.Id}/besetzung")" />
+                </MudTooltip>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
+                               OnClick="@(() => Bearbeiten(context.Item))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => Loeschen(context.Item))" />
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+    private List<Video> _alle = [];
+    private List<Video> _gefiltert = [];
+    private List<Stueck> _stuecke = [];
+    private List<Band> _bands = [];
+    private string _suche = "";
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _stuecke = await db.Stuecke.OrderBy(s => s.Titel).ToListAsync();
+        _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
+        _alle = await db.Videos.Include(v => v.Stueck).Include(v => v.Band)
+            .OrderBy(v => v.Stueck.Titel).ToListAsync();
+        Filtern();
+    }
+
+    private void Filtern() =>
+        _gefiltert = _suche == "" ? _alle
+            : _alle.Where(v => v.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
+                            || (v.Stueck?.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+
+    private async Task Bearbeiten(Video? v)
+    {
+        var parameters = new DialogParameters<VideoDialog>
+        {
+            { x => x.Vorhanden, v },
+            { x => x.Stuecke, _stuecke },
+            { x => x.Bands, _bands }
+        };
+        var dialog = await DialogService.ShowAsync<VideoDialog>(
+            v == null ? "Neues Video" : "Video bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        var model = (Video)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Duplikat-Prüfung: gleiche YouTube-ID am gleichen Stück nicht doppelt erfassen.
+        var duplikat = await db.Videos.AnyAsync(x =>
+            x.YouTubeVideoId == model.YouTubeVideoId && x.StueckId == model.StueckId && x.Id != model.Id);
+        if (duplikat)
+        {
+            Snackbar.Add("Dieses Video ist für dieses Stück bereits erfasst.", Severity.Warning);
+            return;
+        }
+
+        // Titel automatisch aus dem YouTube-Video übernehmen, falls leer gelassen.
+        if (string.IsNullOrWhiteSpace(model.Titel))
+            model.Titel = await YouTube.HoleTitelAsync(model.YouTubeVideoId) ?? "(ohne Titel)";
+
+        if (v == null)
+        {
+            db.Videos.Add(model);
+        }
+        else
+        {
+            var entity = await db.Videos.FindAsync(model.Id);
+            if (entity == null) return;
+            entity.Titel = model.Titel;
+            entity.StueckId = model.StueckId;
+            entity.BandId = model.BandId;
+            entity.YouTubeVideoId = model.YouTubeVideoId;
+            entity.Status = model.Status;
+        }
+        await db.SaveChangesAsync();
+        Snackbar.Add("Gespeichert.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Loeschen(Video v)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"Video \"{v.Titel}\" inkl. aller Bewertungen löschen?" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Videos.FindAsync(v.Id);
+        if (entity != null)
+        {
+            db.Videos.Remove(entity);
+            await db.SaveChangesAsync();
+            Snackbar.Add("Gelöscht.", Severity.Success);
+        }
+        await Laden();
+    }
+
+    private static Color StatusColor(VideoStatus s) => s switch
+    {
+        VideoStatus.Genehmigt => Color.Success,
+        VideoStatus.Ausstehend => Color.Warning,
+        VideoStatus.Abgelehnt => Color.Error,
+        _ => Color.Default
+    };
+}

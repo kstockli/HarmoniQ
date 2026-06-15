@@ -1,0 +1,491 @@
+@page "/stuecke/{Id:guid}"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
+@inject HarmoniQ.Web.Services.YouTubeMetadataService YouTube
+
+<PageTitle>@(_stueck?.Titel ?? "Stück") – HarmoniQ</PageTitle>
+
+@if (_stueck == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4 pa-0" />
+
+    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Class="mb-2" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_stueck.Titel</MudText>
+        @if (_stueck.Schwierigkeitsgrad != Schwierigkeitsgrad.Unbekannt)
+        {
+            <MudChip T="string" Color="@GradColor(_stueck.Schwierigkeitsgrad)" Size="Size.Small">
+                @GradText(_stueck.Schwierigkeitsgrad)
+            </MudChip>
+        }
+    </MudStack>
+
+    <MudStack Row="true" Spacing="4" Class="mb-4" Wrap="Wrap.Wrap">
+        @if (_stueck.Jahr.HasValue)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;"><b>Jahr:</b> @_stueck.Jahr</MudText>
+        }
+        @if (_stueck.Besetzung != null)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;"><b>Besetzung:</b> @_stueck.Besetzung</MudText>
+        }
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+            <b>Komponist:</b>
+            @foreach (var k in _stueck.Komponisten)
+            {
+                <MudLink Href="@($"/personen/{k.Id}")" Style="color:#9B59B6;" Class="mr-1">@k.AnzeigeName</MudLink>
+            }
+        </MudText>
+    </MudStack>
+
+    @if (_stueck.Beschreibung != null)
+    {
+        <MudText Typo="Typo.body1" Class="mb-2" Style="color:#C4B0D8;">@_stueck.Beschreibung</MudText>
+    }
+    <RichtigstellungMelden Typ="RichtigstellungTyp.Stueck" Id="_stueck.Id" />
+
+    <MudDivider Class="mb-6 mt-2" Style="border-color:#3a1060;" />
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h5" Style="color:#D4AF37;">Aufnahmen (@_videos.Count)</MudText>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudButton Variant="Variant.Outlined" Style="color:#9B59B6; border-color:#9B59B6;"
+                           StartIcon="@Icons.Material.Filled.AddLink" OnClick="Vorschlagen">
+                    Video vorschlagen
+                </MudButton>
+            </Authorized>
+            <NotAuthorized>
+                <MudTooltip Text="Zum Vorschlagen bitte anmelden">
+                    <MudButton Variant="Variant.Outlined" Disabled="true"
+                               StartIcon="@Icons.Material.Filled.AddLink">Video vorschlagen</MudButton>
+                </MudTooltip>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_videos.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            Noch keine genehmigten Videos für dieses Stück vorhanden.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var video in _videos)
+            {
+                var stats = _stats.GetValueOrDefault(video.Id);
+                var eigene = _eigene.GetValueOrDefault(video.Id);
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;">
+                            <iframe
+                                src="https://www.youtube.com/embed/@video.YouTubeVideoId"
+                                style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen
+                                title="@video.Titel">
+                            </iframe>
+                        </div>
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@video.Titel</MudText>
+                            @if (video.Band != null)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Style="color:#9B59B6;" />
+                                    <MudLink Href="@($"/bands/{video.BandId}")" Typo="Typo.body2"
+                                             Style="color:#9B59B6;" Underline="Underline.Hover">@video.Band.Name</MudLink>
+                                    @if (video.Band.Land != null)
+                                    {
+                                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">· @video.Band.Land</MudText>
+                                    }
+                                </MudStack>
+                            }
+
+                            <MudDivider Class="my-3" Style="border-color:#3a1060;" />
+
+                            @if (stats != null)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                                    <MudText Typo="Typo.h5" Style="color:#D4AF37;">
+                                        @stats.GesamtEindruck.ToString("0.0")
+                                    </MudText>
+                                    <MudRating ReadOnly="true"
+                                               SelectedValue="@((int)Math.Round(stats.GesamtEindruck))"
+                                               MaxValue="5" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                                        (@stats.Anzahl Bewertung@(stats.Anzahl == 1 ? "" : "en"))
+                                    </MudText>
+                                </MudStack>
+                                <BewertungsBalken Label="Präzision" Wert="stats.Praezision" />
+                                <BewertungsBalken Label="Musikalität" Wert="stats.Musikalitaet" />
+                                <BewertungsBalken Label="Akustik" Wert="stats.AkustischeQualitaet" />
+                                <BewertungsBalken Label="Videobild" Wert="stats.VideoQualitaet" />
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                                    Noch keine Bewertungen – sei der Erste!
+                                </MudText>
+                            }
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Outlined"
+                                       Style="color:#D4AF37; border-color:#D4AF37;"
+                                       StartIcon="@Icons.Material.Filled.Star"
+                                       OnClick="@(() => Bewerten(video))"
+                                       Disabled="@(!_bereit)">
+                                @(eigene != null ? "Bewertung ändern" : "Bewerten")
+                            </MudButton>
+                            @if (stats != null && stats.Anzahl > 0)
+                            {
+                                <MudButton Variant="Variant.Text" Style="color:#9B59B6;"
+                                           StartIcon="@Icons.Material.Filled.Comment"
+                                           OnClick="@(() => BewertungenAnsehen(video))">
+                                    @stats.Anzahl Bewertung@(stats.Anzahl == 1 ? "" : "en") ansehen
+                                </MudButton>
+                            }
+                            <AuthorizeView>
+                                <Authorized>
+                                    <MudButton Variant="Variant.Text" Style="color:#9B59B6;"
+                                               StartIcon="@Icons.Material.Filled.GroupAdd"
+                                               OnClick="@(() => MitwirkungVorschlagen(video))">
+                                        Besetzung vorschlagen
+                                    </MudButton>
+                                </Authorized>
+                            </AuthorizeView>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Stueck? _stueck;
+    private List<Video> _videos = [];
+    private Dictionary<Guid, BewertungsStats> _stats = [];
+    private Dictionary<Guid, Bewertung> _eigene = [];
+
+    private string? _userId;
+    private string? _voterId;
+    private bool _bereit;  // true, sobald Identität geklärt ist (nach erstem Render)
+    private List<Band> _bands = [];
+
+    private IJSObjectReference? _voterModule;
+
+    private List<BreadcrumbItem> _breadcrumbs => _stueck == null ? [] :
+    [
+        new("Startseite", "/"),
+        new("Stücke", "/stuecke"),
+        new(_stueck.Titel, null, disabled: true)
+    ];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _stueck = await db.Stuecke
+            .Include(s => s.Beitraege).ThenInclude(b => b.Person)
+            .FirstOrDefaultAsync(s => s.Id == Id);
+
+        if (_stueck == null) { Nav.NavigateTo("/stuecke"); return; }
+
+        _videos = await db.Videos
+            .Include(v => v.Band)
+            .Where(v => v.StueckId == Id && v.Status == VideoStatus.Genehmigt)
+            .ToListAsync();
+
+        _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
+
+        await LadeStatsAsync(db);
+        SortiereVideos();
+    }
+
+    // Bestbewertete Aufnahme (höchster Gesamteindruck) zuerst; unbewertete ans Ende.
+    private void SortiereVideos() =>
+        _videos = _videos
+            .OrderByDescending(v => _stats.TryGetValue(v.Id, out var s) ? s.GesamtEindruck : -1)
+            .ToList();
+
+    private async Task Vorschlagen()
+    {
+        if (_stueck == null) return;
+        var parameters = new DialogParameters<VideoVorschlagDialog>
+        {
+            { x => x.StueckTitel, _stueck.Titel },
+            { x => x.Bands, _bands }
+        };
+        var dialog = await DialogService.ShowAsync<VideoVorschlagDialog>("Video vorschlagen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        var data = (VideoVorschlagDialog.Ergebnis)result.Data!;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Duplikat-Prüfung: gleiches Video am gleichen Stück nicht doppelt vorschlagen.
+        if (await db.Videos.AnyAsync(v => v.StueckId == Id && v.YouTubeVideoId == data.VideoId))
+        {
+            Snackbar.Add("Dieses Video wurde für dieses Stück bereits erfasst oder vorgeschlagen.", Severity.Warning);
+            return;
+        }
+
+        // Metadaten des Videos holen – der YouTube-Kanal (Owner) wird zur Band.
+        var meta = await YouTube.HoleAsync(data.VideoId);
+        var titel = data.Titel ?? meta?.Titel ?? "(ohne Titel)";
+
+        // Band = Video-Owner: bestehende Band finden, sonst aus dem Kanal neu anlegen.
+        Guid? bandId = data.BandId;
+        string? bandName = null;
+        if (bandId == null && meta != null)
+        {
+            var band = await FindeOderErstelleBandAsync(db, meta);
+            bandId = band?.Id;
+            bandName = band?.Name;
+        }
+
+        db.Videos.Add(new Video
+        {
+            StueckId = Id,
+            BandId = bandId,
+            YouTubeVideoId = data.VideoId,
+            Titel = titel,
+            Status = VideoStatus.Ausstehend,
+            VorgeschlagenVonId = _userId
+        });
+        await db.SaveChangesAsync();
+
+        var bandHinweis = data.BandId == null && bandName != null ? $" Band erkannt: {bandName}." : "";
+        Snackbar.Add($"Danke! Dein Vorschlag wird von einem Admin geprüft.{bandHinweis}", Severity.Success);
+    }
+
+    /// <summary>
+    /// Ermittelt die Band zum Video-Owner (YouTube-Kanal): erst Abgleich mit vorhandenen
+    /// Bands (per Kanal-URL, sonst Name); falls keine passt, wird eine neue Band aus dem
+    /// Kanal angelegt. Die neue Band wird dem übergebenen Kontext hinzugefügt (noch nicht gespeichert).
+    /// </summary>
+    private async Task<Band?> FindeOderErstelleBandAsync(ApplicationDbContext db, YouTubeMetadataService.Metadaten meta)
+    {
+        // 1) Bestehende Band per Kanal-URL (z. B. youtube.com/@jbluzern)
+        if (!string.IsNullOrWhiteSpace(meta.KanalUrl))
+        {
+            var perUrl = await db.Bands.FirstOrDefaultAsync(b =>
+                b.Webseite != null && b.Webseite == meta.KanalUrl);
+            if (perUrl != null) return perUrl;
+        }
+
+        // 2) Bestehende Band per Kanalname
+        if (!string.IsNullOrWhiteSpace(meta.KanalName))
+        {
+            var perName = await db.Bands.FirstOrDefaultAsync(b => b.Name == meta.KanalName);
+            if (perName != null) return perName;
+        }
+
+        // 3) Keine passende Band → neue aus dem Kanal anlegen
+        if (!string.IsNullOrWhiteSpace(meta.KanalName))
+        {
+            var neu = new Band { Name = meta.KanalName!, Webseite = meta.KanalUrl };
+            db.Bands.Add(neu);
+            return neu;
+        }
+
+        return null;
+    }
+
+    private async Task BewertungenAnsehen(Video video)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var liste = await db.Bewertungen
+            .Where(b => b.VideoId == video.Id)
+            .OrderByDescending(b => b.ErstelltAm)   // neueste zuerst
+            .Select(b => new BewertungenAnsehenDialog.Eintrag(
+                b.GesamtEindruck, b.Praezision, b.Musikalitaet, b.AkustischeQualitaet, b.VideoQualitaet,
+                b.Kommentar, b.ErstelltAm))
+            .ToListAsync();
+
+        var parameters = new DialogParameters<BewertungenAnsehenDialog>
+        {
+            { x => x.VideoTitel, video.Titel },
+            { x => x.Bewertungen, liste }
+        };
+        await DialogService.ShowAsync<BewertungenAnsehenDialog>("Bewertungen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
+    private async Task MitwirkungVorschlagen(Video video)
+    {
+        var parameters = new DialogParameters<MitwirkungVorschlagDialog> { { x => x.VideoTitel, video.Titel } };
+        var dialog = await DialogService.ShowAsync<MitwirkungVorschlagDialog>("Besetzung vorschlagen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        var eingabe = (MitwirkungService.Eingabe)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await MitwirkungService.ErfasseAsync(db, video.Id, eingabe, VideoStatus.Ausstehend, _userId);
+        Snackbar.Add("Danke! Dein Besetzungs-Vorschlag wird von einem Admin geprüft.", Severity.Success);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Identität klären: eingeloggter Benutzer hat Vorrang, sonst anonyme Voter-ID.
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (_userId == null)
+        {
+            _voterModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voter.js");
+            _voterId = await _voterModule.InvokeAsync<string>("getVoterId");
+        }
+
+        await LadeEigeneAsync();
+        _bereit = true;
+        StateHasChanged();
+    }
+
+    private async Task LadeStatsAsync(ApplicationDbContext db)
+    {
+        var videoIds = _videos.Select(v => v.Id).ToList();
+        _stats = await db.Bewertungen
+            .Where(b => videoIds.Contains(b.VideoId))
+            .GroupBy(b => b.VideoId)
+            .Select(g => new BewertungsStats
+            {
+                VideoId = g.Key,
+                Anzahl = g.Count(),
+                GesamtEindruck = g.Average(b => b.GesamtEindruck),
+                Praezision = g.Average(b => b.Praezision),
+                Musikalitaet = g.Average(b => b.Musikalitaet),
+                AkustischeQualitaet = g.Average(b => b.AkustischeQualitaet),
+                VideoQualitaet = g.Average(b => b.VideoQualitaet)
+            })
+            .ToDictionaryAsync(s => s.VideoId);
+    }
+
+    private async Task LadeEigeneAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var videoIds = _videos.Select(v => v.Id).ToList();
+
+        var query = db.Bewertungen.Where(b => videoIds.Contains(b.VideoId));
+        query = _userId != null
+            ? query.Where(b => b.BenutzerId == _userId)
+            : query.Where(b => b.AnonymerCookieId == _voterId);
+
+        _eigene = await query.ToDictionaryAsync(b => b.VideoId);
+    }
+
+    private async Task Bewerten(Video video)
+    {
+        var vorhanden = _eigene.GetValueOrDefault(video.Id);
+        var parameters = new DialogParameters<BewertenDialog>
+        {
+            { x => x.VideoTitel, video.Titel },
+            { x => x.Vorhanden, vorhanden == null ? null : new BewertenDialog.BewertungsModell
+                {
+                    GesamtEindruck = vorhanden.GesamtEindruck,
+                    Praezision = vorhanden.Praezision,
+                    Musikalitaet = vorhanden.Musikalitaet,
+                    AkustischeQualitaet = vorhanden.AkustischeQualitaet,
+                    VideoQualitaet = vorhanden.VideoQualitaet,
+                    Kommentar = vorhanden.Kommentar
+                }
+            }
+        };
+
+        var dialog = await DialogService.ShowAsync<BewertenDialog>("Aufnahme bewerten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is null || result.Canceled) return;
+        var modell = (BewertenDialog.BewertungsModell)result.Data!;
+
+        await SpeichereBewertungAsync(video.Id, modell);
+    }
+
+    private async Task SpeichereBewertungAsync(Guid videoId, BewertenDialog.BewertungsModell m)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var bestehend = _userId != null
+            ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == videoId && b.BenutzerId == _userId)
+            : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == videoId && b.AnonymerCookieId == _voterId);
+
+        if (bestehend == null)
+        {
+            bestehend = new Bewertung
+            {
+                VideoId = videoId,
+                BenutzerId = _userId,
+                AnonymerCookieId = _userId == null ? _voterId : null
+            };
+            db.Bewertungen.Add(bestehend);
+        }
+
+        bestehend.GesamtEindruck = m.GesamtEindruck;
+        bestehend.Praezision = m.Praezision;
+        bestehend.Musikalitaet = m.Musikalitaet;
+        bestehend.AkustischeQualitaet = m.AkustischeQualitaet;
+        bestehend.VideoQualitaet = m.VideoQualitaet;
+        bestehend.Kommentar = m.Kommentar;
+        bestehend.ErstelltAm = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+
+        await LadeStatsAsync(db);
+        await LadeEigeneAsync();
+        SortiereVideos();
+        Snackbar.Add("Danke für deine Bewertung!", Severity.Success);
+        StateHasChanged();
+    }
+
+    private static string GradText(Schwierigkeitsgrad g) => g switch
+    {
+        Schwierigkeitsgrad.Leicht     => "Leicht",
+        Schwierigkeitsgrad.Mittel     => "Mittel",
+        Schwierigkeitsgrad.Schwer     => "Schwer",
+        Schwierigkeitsgrad.SehrSchwer => "Sehr schwer",
+        _                             => "Unbekannt"
+    };
+
+    private static Color GradColor(Schwierigkeitsgrad g) => g switch
+    {
+        Schwierigkeitsgrad.Leicht     => Color.Success,
+        Schwierigkeitsgrad.Mittel     => Color.Info,
+        Schwierigkeitsgrad.Schwer     => Color.Warning,
+        Schwierigkeitsgrad.SehrSchwer => Color.Error,
+        _                             => Color.Default
+    };
+
+    private class BewertungsStats
+    {
+        public Guid VideoId { get; init; }
+        public int Anzahl { get; init; }
+        public double GesamtEindruck { get; init; }
+        public double Praezision { get; init; }
+        public double Musikalitaet { get; init; }
+        public double AkustischeQualitaet { get; init; }
+        public double VideoQualitaet { get; init; }
+    }
+}

@@ -1,0 +1,143 @@
+@page "/admin/richtigstellungen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Richtigstellungen – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Richtigstellungen</MudText>
+    <MudSpacer />
+    <MudSelect T="RichtigstellungStatus" @bind-Value="_filter" @bind-Value:after="Laden"
+               Label="Status" Variant="Variant.Outlined" Dense="true" Style="max-width:200px;">
+        <MudSelectItem Value="RichtigstellungStatus.Offen">Offen</MudSelectItem>
+        <MudSelectItem Value="RichtigstellungStatus.Erledigt">Erledigt</MudSelectItem>
+        <MudSelectItem Value="RichtigstellungStatus.Abgelehnt">Abgelehnt</MudSelectItem>
+    </MudSelect>
+</MudStack>
+
+@if (_liste.Count == 0)
+{
+    <MudAlert Severity="Severity.Success">Keine Richtigstellungen mit Status „@_filter".</MudAlert>
+}
+else
+{
+    <MudStack Spacing="3">
+        @foreach (var r in _liste)
+        {
+            <MudPaper Class="pa-4" Elevation="3" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@r.Typ</MudChip>
+                    @if (r.Link != null)
+                    {
+                        <MudLink Href="@r.Link" Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@r.BetrifftLabel</MudLink>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Style="color:#F0E6FF;">@r.BetrifftLabel</MudText>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">@r.ErstelltAm.ToString("dd.MM.yyyy") · @(r.VonEmail ?? "unbekannt")</MudText>
+                </MudStack>
+
+                <MudText Typo="Typo.body1" Class="mb-2" Style="color:#C4B0D8;">„@r.Text"</MudText>
+
+                @if (r.Status == RichtigstellungStatus.Offen)
+                {
+                    <MudTextField @bind-Value="_antwort[r.Id]" Label="Antwort (optional)" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" Lines="2" Class="mb-2" />
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Check"
+                                   OnClick="@(() => Setze(r.Id, RichtigstellungStatus.Erledigt))">Erledigt</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Close"
+                                   OnClick="@(() => Setze(r.Id, RichtigstellungStatus.Abgelehnt))">Ablehnen</MudButton>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                        @r.Status@(r.AntwortAm.HasValue ? $" am {r.AntwortAm:dd.MM.yyyy}" : "")
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(r.Antwort))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1" Style="color:#9B59B6;">Antwort: @r.Antwort</MudText>
+                    }
+                }
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+@code {
+    private RichtigstellungStatus _filter = RichtigstellungStatus.Offen;
+    private List<Zeile> _liste = [];
+    private readonly Dictionary<Guid, string> _antwort = new();
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var roh = await db.Richtigstellungen
+            .Where(r => r.Status == _filter)
+            .OrderByDescending(r => r.ErstelltAm)
+            .Select(r => new { r.Id, r.BetrifftTyp, r.BetrifftId, r.Text, r.ErstelltAm, r.Status,
+                r.Antwort, r.AntwortAm, Email = r.EingereichtVon != null ? r.EingereichtVon.Email : null })
+            .ToListAsync();
+
+        // Bezeichnungen + Links je Objekt auflösen
+        _liste = new();
+        foreach (var r in roh)
+        {
+            var (label, link) = await AufloesenAsync(db, r.BetrifftTyp, r.BetrifftId);
+            _liste.Add(new Zeile(r.Id, r.BetrifftTyp, label, link, r.Text, r.ErstelltAm, r.Status, r.Antwort, r.AntwortAm, r.Email));
+            _antwort.TryAdd(r.Id, "");
+        }
+    }
+
+    private static async Task<(string Label, string? Link)> AufloesenAsync(ApplicationDbContext db, RichtigstellungTyp typ, Guid id)
+    {
+        switch (typ)
+        {
+            case RichtigstellungTyp.Stueck:
+                var st = await db.Stuecke.Where(x => x.Id == id).Select(x => x.Titel).FirstOrDefaultAsync();
+                return (st ?? "(gelöscht)", st != null ? $"/stuecke/{id}" : null);
+            case RichtigstellungTyp.Person:
+                var pe = await db.Personen.Where(x => x.Id == id).Select(x => x.Name).FirstOrDefaultAsync();
+                return (pe ?? "(gelöscht)", pe != null ? $"/personen/{id}" : null);
+            case RichtigstellungTyp.Band:
+                var ba = await db.Bands.Where(x => x.Id == id).Select(x => x.Name).FirstOrDefaultAsync();
+                return (ba ?? "(gelöscht)", ba != null ? $"/bands/{id}" : null);
+            case RichtigstellungTyp.Video:
+                var v = await db.Videos.Where(x => x.Id == id).Select(x => new { x.Titel, x.StueckId }).FirstOrDefaultAsync();
+                return (v?.Titel ?? "(gelöscht)", v != null ? $"/stuecke/{v.StueckId}" : null);
+            default:
+                return ("?", null);
+        }
+    }
+
+    private async Task Setze(Guid id, RichtigstellungStatus status)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var r = await db.Richtigstellungen.FindAsync(id);
+        if (r != null)
+        {
+            r.Status = status;
+            r.Antwort = string.IsNullOrWhiteSpace(_antwort.GetValueOrDefault(id)) ? null : _antwort[id].Trim();
+            r.AntwortAm = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            Snackbar.Add(status == RichtigstellungStatus.Erledigt ? "Als erledigt markiert." : "Abgelehnt.", Severity.Success);
+        }
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, RichtigstellungTyp Typ, string BetrifftLabel, string? Link, string Text,
+        DateTime ErstelltAm, RichtigstellungStatus Status, string? Antwort, DateTime? AntwortAm, string? VonEmail);
+}

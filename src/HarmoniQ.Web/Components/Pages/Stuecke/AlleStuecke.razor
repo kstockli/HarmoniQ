@@ -1,0 +1,179 @@
+@page "/stuecke"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Shared
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Stücke – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Stücke</MudText>
+@if (_bandName != null)
+{
+    <MudChip T="string" Class="mb-3" Color="Color.Primary" OnClose="@(() => SetzeBand(null))"
+             Icon="@Icons.Material.Filled.Groups">
+        Gespielt von: @_bandName
+    </MudChip>
+}
+
+<MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern"
+                          Label="Titel suchen" Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="Guid?" @bind-Value="_komponistFilter" @bind-Value:after="Filtern"
+                       Label="Komponist" Variant="Variant.Outlined" Clearable="true">
+                @foreach (var k in _komponisten)
+                {
+                    <MudSelectItem T="Guid?" Value="@k.Id">@k.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="Guid?" @bind-Value="_bandFilter" @bind-Value:after="Filtern"
+                       Label="Band" Variant="Variant.Outlined" Clearable="true">
+                @foreach (var b in _bands)
+                {
+                    <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="Schwierigkeitsgrad?" @bind-Value="_gradFilter" @bind-Value:after="Filtern"
+                       Label="Schwierigkeit" Variant="Variant.Outlined" Clearable="true">
+                <MudSelectItem T="Schwierigkeitsgrad?" Value="@(Schwierigkeitsgrad.Leicht)">Leicht</MudSelectItem>
+                <MudSelectItem T="Schwierigkeitsgrad?" Value="@(Schwierigkeitsgrad.Mittel)">Mittel</MudSelectItem>
+                <MudSelectItem T="Schwierigkeitsgrad?" Value="@(Schwierigkeitsgrad.Schwer)">Schwer</MudSelectItem>
+                <MudSelectItem T="Schwierigkeitsgrad?" Value="@(Schwierigkeitsgrad.SehrSchwer)">Sehr schwer</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">Videos:</MudText>
+                <MudToggleGroup T="VideoFilter" @bind-Value="_videoFilter" @bind-Value:after="Filtern"
+                                Color="Color.Primary" Size="Size.Small" CheckMark="true">
+                    <MudToggleItem Value="VideoFilter.Alle" Text="Alle" />
+                    <MudToggleItem Value="VideoFilter.Mit" Text="Mit Video" />
+                    <MudToggleItem Value="VideoFilter.Ohne" Text="Ohne Video" />
+                </MudToggleGroup>
+                <MudSpacer />
+                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count</MudText>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudDataGrid T="Zeile" Items="@_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single"
+             Style="background:#1a0030;">
+    <Columns>
+        <TemplateColumn Title="Titel" SortBy="@(z => z.Titel)">
+            <CellTemplate>
+                <MudLink Href="@($"/stuecke/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                         Underline="Underline.Hover">@context.Item.Titel</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="z => z.Komponist" Title="Komponist" />
+        <PropertyColumn Property="z => z.Jahr" Title="Jahr" />
+        <TemplateColumn Title="Schwierigkeit" SortBy="@(z => (int)z.Grad)">
+            <CellTemplate>
+                @if (context.Item.Grad != Schwierigkeitsgrad.Unbekannt)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@Darstellung.GradColor(context.Item.Grad)">
+                        @Darstellung.GradText(context.Item.Grad)
+                    </MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="z => z.Besetzung" Title="Besetzung" />
+        <TemplateColumn Title="Videos" SortBy="@(z => z.VideoAnzahl)">
+            <CellTemplate>
+                @if (context.Item.VideoAnzahl > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.PlayArrow"
+                             Style="background:#2d1657; color:#D4AF37;">@context.Item.VideoAnzahl</MudChip>
+                }
+                else { <MudText Typo="Typo.caption" Style="color:#A78FC0;">–</MudText> }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+    [SupplyParameterFromQuery(Name = "band")] public Guid? BandQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "komponist")] public Guid? KomponistQuery { get; set; }
+
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private List<(Guid Id, string Name)> _komponisten = [];
+    private List<Band> _bands = [];
+
+    private string _suche = "";
+    private Guid? _komponistFilter;
+    private Guid? _bandFilter;
+    private Schwierigkeitsgrad? _gradFilter;
+    private VideoFilter _videoFilter = VideoFilter.Mit;
+    private string? _bandName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _komponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name)
+            .Select(p => new ValueTuple<Guid, string>(p.Id, p.Name))
+            .ToListAsync();
+        _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
+
+        var stuecke = await db.Stuecke
+            .Include(s => s.Beitraege).ThenInclude(b => b.Person)
+            .Include(s => s.Videos.Where(v => v.Status == VideoStatus.Genehmigt))
+            .ToListAsync();
+
+        _alle = stuecke.Select(s => new Zeile(
+            s.Id, s.Titel, s.KomponistenText,
+            s.Komponisten.Select(p => p.Id).ToHashSet(),
+            s.Jahr, s.Schwierigkeitsgrad, s.Besetzung,
+            s.Videos.Count,
+            s.Videos.Where(v => v.BandId.HasValue).Select(v => v.BandId!.Value).Distinct().ToHashSet()
+        )).ToList();
+
+        _komponistFilter = KomponistQuery;
+        _bandFilter = BandQuery;
+        _bandName = _bandFilter != null ? _bands.FirstOrDefault(b => b.Id == _bandFilter)?.Name : null;
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        _bandName = _bandFilter != null ? _bands.FirstOrDefault(b => b.Id == _bandFilter)?.Name : null;
+        _gefiltert = _alle
+            .Where(z =>
+                (_komponistFilter == null || z.KomponistIds.Contains(_komponistFilter.Value)) &&
+                (_bandFilter == null || z.BandIds.Contains(_bandFilter.Value)) &&
+                (_gradFilter == null || z.Grad == _gradFilter) &&
+                (_videoFilter == VideoFilter.Alle ||
+                 (_videoFilter == VideoFilter.Mit && z.VideoAnzahl > 0) ||
+                 (_videoFilter == VideoFilter.Ohne && z.VideoAnzahl == 0)) &&
+                (_suche == "" || z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(z => z.Jahr ?? int.MinValue)   // Neueste zuerst (ohne Jahr ans Ende)
+            .ThenBy(z => z.Titel)
+            .ToList();
+    }
+
+    private void SetzeBand(Guid? band)
+    {
+        _bandFilter = band;
+        Filtern();
+    }
+
+    private record Zeile(Guid Id, string Titel, string Komponist, HashSet<Guid> KomponistIds, int? Jahr,
+        Schwierigkeitsgrad Grad, string? Besetzung, int VideoAnzahl, HashSet<Guid> BandIds);
+
+    private enum VideoFilter { Alle, Mit, Ohne }
+}

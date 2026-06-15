@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HarmoniQ.Web/HarmoniQ.Web.csproj" />
+  </Folder>
+</Solution>

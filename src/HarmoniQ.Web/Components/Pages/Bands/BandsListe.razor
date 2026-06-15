@@ -1,0 +1,66 @@
+@page "/bands"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Bands – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Bands & Ensembles</MudText>
+
+@if (_bands == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        @foreach (var band in _bands)
+        {
+            var videoCount = band.Videos.Count(v => v.Status == VideoStatus.Genehmigt);
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;" />
+                            <MudLink Href="@($"/bands/{band.Id}")" Typo="Typo.h6" Style="color:#F0E6FF;"
+                                     Underline="Underline.Hover">@band.Name</MudLink>
+                        </MudStack>
+                        @if (band.Land != null)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-1" Style="color:#A78FC0;">@band.Land</MudText>
+                        }
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.VideoLibrary" Class="mt-2"
+                                 Style="background:#2d1657; color:#D4AF37;">
+                            @videoCount Video@(videoCount == 1 ? "" : "s")
+                        </MudChip>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                                   Href="@($"/bands/{band.Id}")">Ansehen</MudButton>
+                        @if (band.Webseite != null)
+                        {
+                            <MudButton Variant="Variant.Text" Style="color:#9B59B6;"
+                                       Href="@band.Webseite" Target="_blank"
+                                       StartIcon="@Icons.Material.Filled.OpenInNew">Kanal</MudButton>
+                        }
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<Band>? _bands;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _bands = await db.Bands
+            .Include(b => b.Videos)
+            .OrderBy(b => b.Land)
+            .ThenBy(b => b.Name)
+            .ToListAsync();
+    }
+}

@@ -1,0 +1,12 @@
+namespace HarmoniQ.Web.Data.Models;
+
+/// <summary>Art eines Personen-Links.</summary>
+public enum LinkTyp
+{
+    Webseite = 0,
+    Instagram = 1,
+    X = 2,
+    Facebook = 3,
+    YouTube = 4,
+    Sonstige = 99
+}

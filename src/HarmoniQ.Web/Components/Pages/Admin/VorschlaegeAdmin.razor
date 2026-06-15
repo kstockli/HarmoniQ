@@ -1,0 +1,86 @@
+@page "/admin/vorschlaege"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Video-Vorschläge – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Video-Vorschläge</MudText>
+</MudStack>
+
+@if (_offen.Count == 0)
+{
+    <MudAlert Severity="Severity.Success">Keine offenen Vorschläge – alles erledigt!</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var v in _offen)
+        {
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudStack Row="true">
+                        <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/mqdefault.jpg")"
+                             style="width:160px;flex-shrink:0;" alt="" />
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@v.Titel</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Stück: @v.Stueck?.Titel</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Band: @(v.Band?.Name ?? "—")</MudText>
+                            <MudText Typo="Typo.caption" Style="color:#6f5a86;">
+                                Vorgeschlagen von: @(v.VorgeschlagenVon?.Email ?? "unbekannt")
+                            </MudText>
+                            <MudLink Href="@($"https://youtu.be/{v.YouTubeVideoId}")" Target="_blank"
+                                     Typo="Typo.caption" Style="color:#9B59B6;">Auf YouTube ansehen ↗</MudLink>
+                        </MudCardContent>
+                    </MudStack>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Check"
+                                   OnClick="@(() => Setze(v, VideoStatus.Genehmigt))">Genehmigen</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Close"
+                                   OnClick="@(() => Setze(v, VideoStatus.Abgelehnt))">Ablehnen</MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<Video> _offen = [];
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _offen = await db.Videos
+            .Where(v => v.Status == VideoStatus.Ausstehend)
+            .Include(v => v.Stueck)
+            .Include(v => v.Band)
+            .Include(v => v.VorgeschlagenVon)
+            .OrderBy(v => v.Stueck.Titel)
+            .ToListAsync();
+    }
+
+    private async Task Setze(Video v, VideoStatus status)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Videos.FindAsync(v.Id);
+        if (entity != null)
+        {
+            entity.Status = status;
+            await db.SaveChangesAsync();
+            Snackbar.Add(status == VideoStatus.Genehmigt ? "Vorschlag genehmigt." : "Vorschlag abgelehnt.",
+                status == VideoStatus.Genehmigt ? Severity.Success : Severity.Info);
+        }
+        await Laden();
+    }
+}

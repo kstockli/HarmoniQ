@@ -1,0 +1,52 @@
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+            Schlage eine YouTube-Aufnahme für <b>@StueckTitel</b> vor. Ein Admin prüft den Vorschlag,
+            bevor er öffentlich erscheint.
+        </MudText>
+
+        <MudTextField @bind-Value="_youTubeEingabe" @bind-Value:after="ExtrahiereId"
+                      Label="YouTube-Link oder Video-ID" Variant="Variant.Outlined" Required="true" Class="mb-1"
+                      Placeholder="https://youtu.be/…" />
+        @if (!string.IsNullOrWhiteSpace(_videoId))
+        {
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkannte Video-ID: <b>@_videoId</b></MudText>
+        }
+
+        <MudTextField @bind-Value="_titel" Label="Titel (optional)" Variant="Variant.Outlined" Class="mt-3 mb-3"
+                      HelperText="Leer lassen → wird automatisch aus dem Video übernommen" />
+
+        <MudSelect T="Guid?" @bind-Value="_bandId" Label="Band (optional)" Variant="Variant.Outlined" Clearable="true">
+            @foreach (var b in Bands)
+            {
+                <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Senden" Disabled="@string.IsNullOrWhiteSpace(_videoId)">Vorschlag senden</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string StueckTitel { get; set; } = "";
+    [Parameter] public List<Band> Bands { get; set; } = [];
+
+    private string _youTubeEingabe = "";
+    private string _videoId = "";
+    private string? _titel;
+    private Guid? _bandId;
+
+    private void ExtrahiereId() => _videoId = YouTubeId.Extrahiere(_youTubeEingabe);
+
+    private void Senden() =>
+        MudDialog.Close(DialogResult.Ok(new Ergebnis(_videoId, string.IsNullOrWhiteSpace(_titel) ? null : _titel, _bandId)));
+
+    public record Ergebnis(string VideoId, string? Titel, Guid? BandId);
+}

@@ -1,0 +1,197 @@
+@page "/personen/{Id:guid}"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>@(_person?.AnzeigeName ?? "Person") – HarmoniQ</PageTitle>
+
+@if (_person == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4 pa-0" />
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4" Class="mb-4" Wrap="Wrap.Wrap">
+        <MudAvatar Style="background:#3a1060; color:#D4AF37; width:80px; height:80px; font-size:2rem;">
+            @if (_person.BildUrl != null)
+            {
+                <img src="@_person.BildUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@_person.AnzeigeName" />
+            }
+            else { @(_person.AnzeigeName.Length > 0 ? _person.AnzeigeName[0].ToString() : "?") }
+        </MudAvatar>
+        <div>
+            <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_person.AnzeigeName</MudText>
+            <MudStack Row="true" Spacing="1" Class="mt-1" Wrap="Wrap.Wrap">
+                @foreach (var r in _person.Rollen)
+                {
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@RolleText(r.Rolle)</MudChip>
+                }
+                @if (_person.Geburtsjahr.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">* @_person.Geburtsjahr</MudChip>
+                }
+            </MudStack>
+        </div>
+    </MudStack>
+
+    @if (_person.Sichtbarkeit != Sichtbarkeit.Oeffentlich)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            Diese Person wird aus Datenschutzgründen nur eingeschränkt angezeigt (@_person.Sichtbarkeit).
+        </MudAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_person.Biografie))
+    {
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color:#C4B0D8;">@_person.Biografie</MudText>
+    }
+
+    @* Links *@
+    @if (_person.Links.Count > 0)
+    {
+        <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
+            @foreach (var l in _person.Links)
+            {
+                <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@l.Url" Target="_blank"
+                           StartIcon="@LinkIcon(l.Typ)">@l.Typ</MudButton>
+            }
+        </MudStack>
+    }
+
+    @if (_person.Instrumente.Count > 0)
+    {
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+            <b>Instrumente:</b> @string.Join(", ", _person.Instrumente.Select(pi => pi.Instrument.Name))
+        </MudText>
+    }
+
+    <RichtigstellungMelden Typ="RichtigstellungTyp.Person" Id="_person.Id" />
+
+    <MudDivider Class="my-4" Style="border-color:#3a1060;" />
+
+    @* Werke (StückBeiträge) *@
+    <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Werke (@_werke.Count)</MudText>
+    @if (_werke.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">Keine Werke erfasst.</MudText>
+    }
+    else
+    {
+        <MudList T="string" Dense="true" Class="mb-4">
+            @foreach (var w in _werke)
+            {
+                <MudListItem T="string" Href="@($"/stuecke/{w.StueckId}")" Icon="@Icons.Material.Filled.MusicNote" Style="color:#F0E6FF;">
+                    @w.Titel
+                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                        @(w.Jahr.HasValue ? $"({w.Jahr}) " : "")· @RolleText(w.Rolle)
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    }
+
+    @* Auftritte (VideoMitwirkungen) *@
+    <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Auftritte (@_auftritte.Count)</MudText>
+    @if (_auftritte.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">Noch keine Auftritte erfasst.</MudText>
+    }
+    else
+    {
+        <MudList T="string" Dense="true">
+            @foreach (var a in _auftritte)
+            {
+                <MudListItem T="string" Href="@($"/stuecke/{a.StueckId}")" Icon="@Icons.Material.Filled.PlayCircle" Style="color:#F0E6FF;">
+                    @a.StueckTitel
+                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                        @MitwirkungText(a)
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Person? _person;
+    private List<WerkZeile> _werke = [];
+    private List<AuftrittZeile> _auftritte = [];
+
+    private List<BreadcrumbItem> _breadcrumbs => _person == null ? [] :
+    [
+        new("Startseite", "/"),
+        new("Personen", "/personen"),
+        new(_person.AnzeigeName, null, disabled: true)
+    ];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _person = await db.Personen
+            .Include(p => p.Rollen)
+            .Include(p => p.Links)
+            .Include(p => p.Instrumente).ThenInclude(pi => pi.Instrument)
+            .FirstOrDefaultAsync(p => p.Id == Id);
+
+        if (_person == null) { Nav.NavigateTo("/personen"); return; }
+
+        _werke = await db.StueckBeitraege
+            .Where(b => b.PersonId == Id)
+            .OrderByDescending(b => b.Stueck.Jahr)
+            .ThenBy(b => b.Stueck.Titel)
+            .Select(b => new WerkZeile(b.StueckId, b.Stueck.Titel, b.Stueck.Jahr, b.Rolle))
+            .ToListAsync();
+
+        _auftritte = await db.VideoMitwirkungen
+            .Where(m => m.PersonId == Id && m.Status == VideoStatus.Genehmigt)
+            .Select(m => new AuftrittZeile(
+                m.Video.StueckId, m.Video.Stueck.Titel, m.Rolle,
+                m.Instrument != null ? m.Instrument.Name : null,
+                m.Stimme != null ? m.Stimme.Bezeichnung : null))
+            .ToListAsync();
+    }
+
+    private static string RolleText(PersonRolleTyp r) => r switch
+    {
+        PersonRolleTyp.Komponist => "Komponist:in",
+        PersonRolleTyp.Dirigent => "Dirigent:in",
+        PersonRolleTyp.Musikant => "Musikant:in",
+        _ => r.ToString()
+    };
+
+    private static string RolleText(StueckRolle r) => r switch
+    {
+        StueckRolle.Komponist => "Komponist:in",
+        StueckRolle.Arrangeur => "Arrangeur:in",
+        StueckRolle.Bearbeiter => "Bearbeiter:in",
+        _ => r.ToString()
+    };
+
+    private static string MitwirkungText(AuftrittZeile a)
+    {
+        if (a.Rolle == MitwirkungRolle.Dirigent) return "Dirigent:in";
+        var teile = new List<string> { "Musikant:in" };
+        if (a.Instrument != null) teile.Add(a.Instrument);
+        if (a.Stimme != null) teile.Add(a.Stimme);
+        return string.Join(" · ", teile);
+    }
+
+    private static string LinkIcon(LinkTyp t) => t switch
+    {
+        LinkTyp.Instagram => Icons.Custom.Brands.Instagram,
+        LinkTyp.Facebook => Icons.Custom.Brands.Facebook,
+        LinkTyp.X => Icons.Custom.Brands.Twitter,
+        LinkTyp.YouTube => Icons.Custom.Brands.YouTube,
+        _ => Icons.Material.Filled.OpenInNew
+    };
+
+    private record WerkZeile(Guid StueckId, string Titel, int? Jahr, StueckRolle Rolle);
+    private record AuftrittZeile(Guid StueckId, string StueckTitel, MitwirkungRolle Rolle, string? Instrument, string? Stimme);
+}

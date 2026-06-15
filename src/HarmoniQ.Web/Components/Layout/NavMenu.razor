@@ -1,0 +1,78 @@
+@inject NavigationManager Nav
+
+<MudNavMenu Class="pa-2">
+    <MudText Typo="Typo.overline" Class="px-4 pt-4 pb-1 mud-text-secondary">Musik</MudText>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">
+        Startseite
+    </MudNavLink>
+    <MudNavLink Href="/komponisten" Icon="@Icons.Material.Filled.Person">
+        Komponisten
+    </MudNavLink>
+    <MudNavLink Href="/personen" Icon="@Icons.Material.Filled.Groups2">
+        Personen
+    </MudNavLink>
+    <MudNavLink Href="/stuecke" Icon="@Icons.Material.Filled.MusicNote">
+        Stücke
+    </MudNavLink>
+    <MudNavLink Href="/videos" Icon="@Icons.Material.Filled.VideoLibrary">
+        Videos
+    </MudNavLink>
+    <MudNavLink Href="/bands" Icon="@Icons.Material.Filled.Groups">
+        Bands
+    </MudNavLink>
+
+    <MudDivider Class="my-2" />
+
+    <AuthorizeView>
+        <Authorized>
+            <MudText Typo="Typo.overline" Class="px-4 pt-2 pb-1 mud-text-secondary">Konto</MudText>
+            <MudNavLink Href="/account/profil" Icon="@Icons.Material.Filled.FavoriteBorder">
+                Meine Bewertungen
+            </MudNavLink>
+            <MudNavLink Href="Account/Manage" Icon="@Icons.Material.Filled.Settings">
+                Profil
+            </MudNavLink>
+            <MudDivider Class="my-2" />
+        </Authorized>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <MudText Typo="Typo.overline" Class="px-4 pt-2 pb-1 mud-text-secondary">Admin</MudText>
+            <MudNavLink Href="/admin" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.AdminPanelSettings">
+                Dashboard
+            </MudNavLink>
+            <MudNavLink Href="/admin/personen" Icon="@Icons.Material.Filled.Groups2">
+                Personen
+            </MudNavLink>
+            <MudNavLink Href="/admin/instrumente" Icon="@Icons.Material.Filled.Piano">
+                Instrumente
+            </MudNavLink>
+            <MudNavLink Href="/admin/stuecke" Icon="@Icons.Material.Filled.MusicNote">
+                Stücke
+            </MudNavLink>
+            <MudNavLink Href="/admin/bands" Icon="@Icons.Material.Filled.Groups">
+                Bands
+            </MudNavLink>
+            <MudNavLink Href="/admin/videos" Icon="@Icons.Material.Filled.VideoLibrary">
+                Videos
+            </MudNavLink>
+            <MudNavLink Href="/admin/vorschlaege" Icon="@Icons.Material.Filled.RateReview">
+                Video-Vorschläge
+            </MudNavLink>
+            <MudNavLink Href="/admin/mitwirkungen" Icon="@Icons.Material.Filled.GroupAdd">
+                Mitwirkungs-Vorschläge
+            </MudNavLink>
+            <MudNavLink Href="/admin/richtigstellungen" Icon="@Icons.Material.Filled.ReportProblem">
+                Richtigstellungen
+            </MudNavLink>
+            <MudNavLink Href="/admin/bewertungen" Icon="@Icons.Material.Filled.Star">
+                Bewertungen
+            </MudNavLink>
+            <MudNavLink Href="/admin/import" Icon="@Icons.Material.Filled.Download">
+                Import-Assistent
+            </MudNavLink>
+            <MudDivider Class="my-2" />
+        </Authorized>
+    </AuthorizeView>
+</MudNavMenu>
