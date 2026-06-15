@@ -110,7 +110,7 @@ else
                 Verknüpfungs-Antrag in Prüfung
             </MudChip>
         }
-        else if (_userId != null && !_personVerknuepft)
+        else if (_userId != null && !_personVerknuepft && !_ichHabeSchonPerson)
         {
             <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
                        StartIcon="@Icons.Material.Filled.PersonPin" OnClick="DasBinIch">
@@ -178,6 +178,7 @@ else
     private bool _personVerknuepft;   // Person hat (irgend)ein Konto
     private bool _verknuepftMitMir;   // Person ist mit MIR verknüpft
     private bool _offenerAntrag;      // ich habe bereits einen offenen Antrag
+    private bool _ichHabeSchonPerson; // mein Konto ist bereits mit (irgend)einer Person verknüpft
     private Sichtbarkeit _eff = Sichtbarkeit.Oeffentlich;  // effektive Sichtbarkeit für DICH
 
     private string AnzeigeName => _person == null ? "Person" : PersonenSicht.AnzeigeName(_person.Name, _eff);
@@ -235,6 +236,7 @@ else
         _verknuepftMitMir = _userId != null && _person.BenutzerId == _userId;
         _offenerAntrag = _userId != null && await db.PersonAnsprueche.AnyAsync(a =>
             a.PersonId == Id && a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen);
+        _ichHabeSchonPerson = _userId != null && await db.Personen.AnyAsync(p => p.BenutzerId == _userId);
 
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, _userId);
         _eff = PersonenSicht.Effektiv(_person.Id, _person.Sichtbarkeit, vollSichtbar);
