@@ -1,0 +1,26 @@
+{
+  "name": "HarmoniQ – The Music Database",
+  "short_name": "HarmoniQ",
+  "description": "Entdecke, vergleiche und bewerte Aufnahmen von Blasorchester-Stücken.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e0018",
+  "theme_color": "#1a0a2e",
+  "lang": "de-CH",
+  "icons": [
+    {
+      "src": "img/harmoniq-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "img/harmoniq-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@if (_show)
+{
+    <div style="position:fixed; left:0; right:0; bottom:0; z-index:1400; display:flex; justify-content:center; padding:.5rem;">
+        <MudPaper Elevation="8" Class="px-3 py-2"
+                  Style="background:linear-gradient(135deg,#2d1657,#1a0030); border:1px solid #D4AF37; max-width:560px; width:100%;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.InstallMobile" Style="color:#D4AF37;" />
+                <div style="flex:1; min-width:0;">
+                    <MudText Typo="Typo.body2" Style="color:#F0E6FF;">HarmoniQ als App hinzufügen</MudText>
+                    @if (_isIOS && !_canPrompt)
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                            Tippe auf <b>Teilen</b> und dann auf <b>„Zum Home-Bildschirm“</b>.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                            Schnellzugriff direkt vom Startbildschirm.
+                        </MudText>
+                    }
+                </div>
+                @if (_canPrompt)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                               OnClick="Installieren">Installieren</MudButton>
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Style="color:#A78FC0;"
+                               title="Ausblenden" OnClick="Ausblenden" />
+            </MudStack>
+        </MudPaper>
+    </div>
+}
+
+@code {
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<PwaInstall>? _ref;
+    private bool _show;
+    private bool _isIOS;
+    private bool _isAndroid;
+    private bool _standalone;
+    private bool _dismissed;
+    private bool _canPrompt;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/pwa.js");
+            _ref = DotNetObjectReference.Create(this);
+            var state = await _module.InvokeAsync<State>("init", _ref);
+            _dismissed = await _module.InvokeAsync<bool>("getDismissed");
+
+            _isIOS = state.IsIOS;
+            _isAndroid = state.IsAndroid;
+            _standalone = state.Standalone;
+            _canPrompt = state.CanPrompt;
+
+            BerechneSichtbarkeit();
+            StateHasChanged();
+        }
+        catch { /* PWA ist optional – Fehler hier nie sichtbar machen */ }
+    }
+
+    private void BerechneSichtbarkeit()
+    {
+        // Nur Mobil, nicht bereits installiert (standalone), nicht weggeklickt.
+        // Android: erst wenn installierbar (canPrompt). iOS: immer (manueller Weg via Teilen).
+        var mobile = _isIOS || _isAndroid;
+        _show = mobile && !_standalone && !_dismissed && (_canPrompt || _isIOS);
+    }
+
+    [JSInvokable]
+    public Task OnInstallable()
+    {
+        _canPrompt = true;
+        BerechneSichtbarkeit();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnInstalled()
+    {
+        _show = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task Installieren()
+    {
+        if (_module == null) return;
+        var outcome = await _module.InvokeAsync<string>("install");
+        if (outcome == "accepted") _show = false;
+        StateHasChanged();
+    }
+
+    private async Task Ausblenden()
+    {
+        _show = false;
+        if (_module != null) await _module.InvokeVoidAsync("setDismissed");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _ref?.Dispose();
+        if (_module != null)
+        {
+            try { await _module.DisposeAsync(); } catch { }
+        }
+    }
+
+    private record State(bool Standalone, bool IsIOS, bool IsAndroid, bool CanPrompt);
+}
