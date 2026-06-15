@@ -196,6 +196,9 @@ Video
 ├── YouTubeVideoId (string)       ← nur die 11-stellige ID (aus URL extrahiert)
 ├── Titel (string)                ← optional bei Eingabe; sonst autom. via YouTube-oEmbed
 ├── AufnahmeDatum (DateOnly?)
+├── Ort (string?)                 ← optional, Aufnahme-Ort (z. B. "KKL Luzern")
+├── Anlass (string?)              ← optional (z. B. "Jahreskonzert 2024")
+├── ErstelltAm (DateTime)         ← Erfassungszeitpunkt (für "zuletzt hinzugefügt")
 ├── Status (enum: Ausstehend / Genehmigt / Abgelehnt)
 ├── VorgeschlagenVon (FK → User?) ← null = Admin erfasst
 └── Bewertungen [1:n]
@@ -316,8 +319,8 @@ StückBeitrag                        (wer hat zum Stück beigetragen – mehrere
 Video                              (zusätzlich zur bisherigen Band-Zuordnung)
 ├── … (wie bisher: StückId, BandId?, YouTubeVideoId, Titel, Status, …)
 ├── AufnahmeDatum (DateOnly?)      ← bereits vorhanden (optional)
-├── AufnahmeOrt (string?)          ← NEU, optional, z. B. "KKL Luzern"
-├── Anlass (string?)               ← NEU, optional, z. B. "WMC Kerkrade 2022"
+├── Ort (string?)                  ← UMGESETZT, optional, z. B. "KKL Luzern"
+├── Anlass (string?)               ← UMGESETZT, optional, z. B. "WMC Kerkrade 2022"
 └── Mitwirkungen [1:n] → VideoMitwirkung   ← „Cast & Crew" der Aufnahme
 
 VideoMitwirkung                     (eine Zeile der Besetzungsliste)
@@ -331,16 +334,20 @@ VideoMitwirkung                     (eine Zeile der Besetzungsliste)
 ├── Status (enum: Ausstehend / Genehmigt / Abgelehnt)   ← für User-Vorschläge
 └── VorgeschlagenVon (FK → User?)  ← null = vom Admin erfasst
 
-BandMitgliedschaft                  (Person ↔ Band über die Zeit, alles optional außer Verweise)
+BandMitgliedschaft                  (Person ↔ Band über die Zeit, alles optional außer Verweise) — UMGESETZT
 ├── Id (Guid)
 ├── PersonId (FK)
 ├── BandId (FK)
-├── Rolle (enum: Dirigent / Musikant)  ← gleiche Felder/Rolle wie VideoMitwirkung
-├── InstrumentId (FK?)             ← optional (bei Musikant:in)
-├── StimmeId (FK?)                 ← optional (z. B. "1. Trompete")
+├── InstrumentId (FK?)             ← optional (welches Instrument die Person in dieser Band spielt)
 ├── VonJahr (int?)                 ← optional
 ├── BisJahr (int?)                 ← optional (null = bis heute / unbekannt)
-└── Aktiv (bool?)                  ← optional
+├── Funktion (string?)             ← Freitext, z. B. "Chefdirigent", "Präsident", "Registerleitung"
+└── IstAktiv [NotMapped]           ← berechnet: BisJahr == null
+
+> Hinweis: Statt eines Rolle-Enums (Dirigent/Musikant) wird hier ein freies `Funktion`-Feld
+> verwendet – die grundsätzliche Rolle einer Person steckt bereits in `PersonRolle`, und
+> Band-Funktionen sind vielfältiger (Vorstand, Registerleitung …). `StimmeId` wurde weggelassen
+> (für eine Mitgliedschaft i. d. R. nicht relevant; Stimmen gehören zur konkreten VideoMitwirkung).
 
 Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten Usern)
 ├── Id (Guid)
@@ -375,8 +382,16 @@ eingeloggte:r Benutzer:in sich mit „ihrer" Person verknüpft, darf sie/er **di
 Personendaten selbst pflegen** (Bio, Links, Sichtbarkeit, Band-Mitgliedschaften, Instrumente
 usw.) – ohne Admin.
 > **Anti-Impersonation:** Damit niemand sich als fremde (z. B. prominente) Person ausgibt,
-> sollte die Verknüpfung **vom Admin bestätigt** werden (Verknüpfungs-Antrag → Bewilligung),
-> analog zu den Mitwirkungs-Vorschlägen. (Design-Entscheidung für die Umsetzung.)
+> wird die Verknüpfung **vom Admin bestätigt** (Verknüpfungs-Antrag → Bewilligung),
+> analog zu den Mitwirkungs-Vorschlägen.
+
+**UMGESETZT:** Entität `PersonAnspruch` (PersonId, BenutzerId, Begruendung?, Status
+[Offen/Genehmigt/Abgelehnt], ErstelltAm, EntschiedenAm?). Auf der Personen-Detailseite gibt es
+für eingeloggte Benutzer:innen den Button **„Das bin ich"** (Dialog mit optionaler Begründung),
+sofern die Person noch nicht verknüpft ist und kein offener Antrag besteht; sonst Status-Chip
+(„in Prüfung" / „Mit deinem Konto verknüpft"). Admin-Queue `/admin/verknuepfungen`: Genehmigen
+(setzt `Person.BenutzerId`, prüft UNIQUE: Konto/Person noch frei) oder Ablehnen.
+*Offen:* Selbst-Pflege der eigenen Personendaten ohne Admin (folgt separat).
 
 ### Freitext → Tabelle (Erfassung von Instrument/Stimme)
 Bei der Erfassung einer Mitwirkung werden Instrument und Stimme über **Autocomplete mit
@@ -540,7 +555,15 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 21. ✅ *(umgesetzt)* Admin-CRUD **Personen** (`/admin/personen`: Rollen, Links, Sichtbarkeit) +
     **Instrumente/Stimmen** (`/admin/instrumente`); Cast-Editor mit Sichtbarkeits-Wahl;
     **Mitwirkungs-Bewilligung** (`/admin/mitwirkungen`) + **Richtigstellungen** (`/admin/richtigstellungen`).
-22. Optionale Aufnahme-Metadaten (Ort, Anlass) + `BandMitgliedschaft` (Person↔Band über Zeit)
+22. ✅ *(umgesetzt)* `BandMitgliedschaft` (Person↔Band über Zeit): Entity + Migration; Anzeige auf
+    Band-Detailseite („Besetzung", nach Instrument gruppiert, Leitung zuerst) und Personen-Detailseite
+    („Bands"). **Admin-CRUD** `/admin/bands/{id}/mitglieder` (Mitglied hinzufügen mit Find-or-create
+    für Person/Instrument – keine Dubletten –, Funktion/Zeitraum, „beenden", löschen).
+    **Aufnahme-Metadaten** `Video.Ort` + `Video.Anlass` (Migration `VideoOrtAnlass`, editierbar im
+    Video-Dialog, Anzeige auf Stück-Detailseite). Erst-Importe: Blasorchester Stadtmusik Luzern
+    (86) via `StadtmusikLuzernImport`, Jugendblasorchester Luzern (83, 4 Personen mit Stadtmusik
+    geteilt) via `JBLLuzernImport`. Beide Importer sind idempotent; die Startup-Aufrufe wurden nach
+    erfolgtem Import wieder entfernt (Klassen bleiben als Provenienz/Re-Import erhalten).
 23. ✅ *(umgesetzt)* Community:
     - **Mitwirkungs-Vorschläge** — eingeloggte User schlagen auf der Stück-Detailseite Besetzung
       vor („Besetzung vorschlagen", Status *Ausstehend*); Admin-Review `/admin/mitwirkungen`.

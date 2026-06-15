@@ -26,6 +26,8 @@
         <TemplateColumn Title="Videos"><CellTemplate>@context.Item.Videos.Count</CellTemplate></TemplateColumn>
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
+                <MudIconButton Icon="@Icons.Material.Filled.Groups2" Size="Size.Small" Style="color:#9B59B6;"
+                               title="Mitglieder verwalten" Href="@($"/admin/bands/{context.Item.Id}/mitglieder")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                OnClick="@(() => Bearbeiten(context.Item))" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"

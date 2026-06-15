@@ -27,6 +27,7 @@ public class Person
     public ICollection<PersonInstrument> Instrumente { get; set; } = [];
     public ICollection<StueckBeitrag> StueckBeitraege { get; set; } = [];
     public ICollection<VideoMitwirkung> Mitwirkungen { get; set; } = [];
+    public ICollection<BandMitgliedschaft> Bandmitgliedschaften { get; set; } = [];
 
     // ─── Read-only / Komfort-Properties (nicht in der DB gespeichert) ───────────
 

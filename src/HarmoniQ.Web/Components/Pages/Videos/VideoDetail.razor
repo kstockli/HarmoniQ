@@ -1,0 +1,343 @@
+@page "/videos/{Id:guid}"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>@(_video?.Titel ?? "Video") – HarmoniQ</PageTitle>
+
+@if (_video == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4 pa-0" />
+
+    <MudGrid>
+        <MudItem xs="12" md="7">
+            <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;">
+                <iframe src="https://www.youtube.com/embed/@_video.YouTubeVideoId"
+                        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen title="@_video.Titel"></iframe>
+            </div>
+
+            <MudText Typo="Typo.h5" Class="mt-3" Style="color:#D4AF37;">@_video.Titel</MudText>
+
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1" Wrap="Wrap.Wrap">
+                <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Small" Style="color:#9B59B6;" />
+                <MudLink Href="@($"/stuecke/{_video.StueckId}")" Style="color:#9B59B6;" Underline="Underline.Hover">
+                    @_video.Stueck.Titel
+                </MudLink>
+                @if (_video.Band != null)
+                {
+                    <MudText Typo="Typo.body2" Style="color:#6f5a86;" Class="mx-1">·</MudText>
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Style="color:#9B59B6;" />
+                    <MudLink Href="@($"/bands/{_video.BandId}")" Style="color:#9B59B6;" Underline="Underline.Hover">
+                        @_video.Band.Name
+                    </MudLink>
+                }
+            </MudStack>
+
+            @if (!string.IsNullOrWhiteSpace(_video.Anlass) || !string.IsNullOrWhiteSpace(_video.Ort) || _video.AufnahmeDatum.HasValue)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                    <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Style="color:#9B59B6;" />
+                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                        @string.Join(" · ", new[] {
+                            _video.Anlass, _video.Ort, _video.AufnahmeDatum?.ToString("dd.MM.yyyy")
+                        }.Where(x => !string.IsNullOrWhiteSpace(x)))
+                    </MudText>
+                </MudStack>
+            }
+
+            <RichtigstellungMelden Typ="RichtigstellungTyp.Video" Id="_video.Id" />
+        </MudItem>
+
+        <MudItem xs="12" md="5">
+            @* Bewertungen *@
+            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+                @if (_stats != null)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                        <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_stats.GesamtEindruck.ToString("0.0")</MudText>
+                        <MudRating ReadOnly="true" SelectedValue="@((int)Math.Round(_stats.GesamtEindruck))" MaxValue="5" Size="Size.Small" />
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                            (@_stats.Anzahl Bewertung@(_stats.Anzahl == 1 ? "" : "en"))
+                        </MudText>
+                    </MudStack>
+                    <BewertungsBalken Label="Präzision" Wert="_stats.Praezision" />
+                    <BewertungsBalken Label="Musikalität" Wert="_stats.Musikalitaet" />
+                    <BewertungsBalken Label="Akustik" Wert="_stats.AkustischeQualitaet" />
+                    <BewertungsBalken Label="Videobild" Wert="_stats.VideoQualitaet" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">Noch keine Bewertungen – sei der Erste!</MudText>
+                }
+
+                <MudStack Row="true" Class="mt-3" Wrap="Wrap.Wrap" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
+                               StartIcon="@Icons.Material.Filled.Star" OnClick="Bewerten" Disabled="@(!_bereit)">
+                        @(_eigene != null ? "Bewertung ändern" : "Bewerten")
+                    </MudButton>
+                    @if (_stats != null && _stats.Anzahl > 0)
+                    {
+                        <MudButton Variant="Variant.Text" Style="color:#9B59B6;"
+                                   StartIcon="@Icons.Material.Filled.Comment" OnClick="BewertungenAnsehen">
+                            ansehen
+                        </MudButton>
+                    }
+                </MudStack>
+            </MudPaper>
+
+            @* Besetzung – ein-/ausklappbar *@
+            <MudExpansionPanels Elevation="2">
+                <MudExpansionPanel Style="background:#1a0030; border:1px solid #3a1060;" Expanded="false">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups2" Style="color:#D4AF37;" />
+                            <MudText Style="color:#F0E6FF;">Besetzung (@_mitwirkende.Count)</MudText>
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        @if (_mitwirkende.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                                Noch keine Mitwirkenden erfasst.
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudSimpleTable Dense="true" Style="background:transparent;">
+                                <tbody>
+                                    @foreach (var m in _mitwirkende)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <MudLink Href="@($"/personen/{m.PersonId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">
+                                                    @m.PersonName
+                                                </MudLink>
+                                            </td>
+                                            <td style="color:#C4B0D8;">@m.Beschreibung</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        <AuthorizeView>
+                            <Authorized>
+                                <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Class="mt-2"
+                                           StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="MitwirkungVorschlagen">
+                                    Besetzung vorschlagen
+                                </MudButton>
+                            </Authorized>
+                        </AuthorizeView>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Video? _video;
+    private BewertungsStats? _stats;
+    private Bewertung? _eigene;
+    private List<Zeile> _mitwirkende = [];
+
+    private string? _userId;
+    private string? _voterId;
+    private bool _bereit;
+    private IJSObjectReference? _voterModule;
+
+    private List<BreadcrumbItem> _breadcrumbs => _video == null ? [] :
+    [
+        new("Startseite", "/"),
+        new("Videos", "/videos"),
+        new(_video.Stueck.Titel, $"/stuecke/{_video.StueckId}"),
+        new(_video.Titel, null, disabled: true)
+    ];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _video = await db.Videos
+            .Include(v => v.Stueck)
+            .Include(v => v.Band)
+            .FirstOrDefaultAsync(v => v.Id == Id);
+
+        if (_video == null) { Nav.NavigateTo("/videos"); return; }
+
+        _mitwirkende = await db.VideoMitwirkungen
+            .Where(m => m.VideoId == Id && m.Status == VideoStatus.Genehmigt)
+            .Select(m => new Zeile(
+                m.PersonId, m.Person.AnzeigeName, m.Rolle,
+                m.Instrument != null ? m.Instrument.Name : null,
+                m.Stimme != null ? m.Stimme.Bezeichnung : null,
+                m.Anmerkung))
+            .ToListAsync();
+        _mitwirkende = _mitwirkende.OrderBy(m => m.Rolle == MitwirkungRolle.Dirigent ? 0 : 1)
+                                   .ThenBy(m => m.PersonName).ToList();
+
+        await LadeStatsAsync(db);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (_userId == null)
+        {
+            _voterModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voter.js");
+            _voterId = await _voterModule.InvokeAsync<string>("getVoterId");
+        }
+        await LadeEigeneAsync();
+        _bereit = true;
+        StateHasChanged();
+    }
+
+    private async Task LadeStatsAsync(ApplicationDbContext db)
+    {
+        _stats = await db.Bewertungen
+            .Where(b => b.VideoId == Id)
+            .GroupBy(b => b.VideoId)
+            .Select(g => new BewertungsStats
+            {
+                Anzahl = g.Count(),
+                GesamtEindruck = g.Average(b => b.GesamtEindruck),
+                Praezision = g.Average(b => b.Praezision),
+                Musikalitaet = g.Average(b => b.Musikalitaet),
+                AkustischeQualitaet = g.Average(b => b.AkustischeQualitaet),
+                VideoQualitaet = g.Average(b => b.VideoQualitaet)
+            })
+            .FirstOrDefaultAsync();
+    }
+
+    private async Task LadeEigeneAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _eigene = _userId != null
+            ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId)
+            : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.AnonymerCookieId == _voterId);
+    }
+
+    private async Task Bewerten()
+    {
+        if (_video == null) return;
+        var parameters = new DialogParameters<BewertenDialog>
+        {
+            { x => x.VideoTitel, _video.Titel },
+            { x => x.Vorhanden, _eigene == null ? null : new BewertenDialog.BewertungsModell
+                {
+                    GesamtEindruck = _eigene.GesamtEindruck,
+                    Praezision = _eigene.Praezision,
+                    Musikalitaet = _eigene.Musikalitaet,
+                    AkustischeQualitaet = _eigene.AkustischeQualitaet,
+                    VideoQualitaet = _eigene.VideoQualitaet,
+                    Kommentar = _eigene.Kommentar
+                }
+            }
+        };
+        var dialog = await DialogService.ShowAsync<BewertenDialog>("Aufnahme bewerten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var m = (BewertenDialog.BewertungsModell)result.Data!;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var bestehend = _userId != null
+            ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId)
+            : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.AnonymerCookieId == _voterId);
+        if (bestehend == null)
+        {
+            bestehend = new Bewertung { VideoId = Id, BenutzerId = _userId, AnonymerCookieId = _userId == null ? _voterId : null };
+            db.Bewertungen.Add(bestehend);
+        }
+        bestehend.GesamtEindruck = m.GesamtEindruck;
+        bestehend.Praezision = m.Praezision;
+        bestehend.Musikalitaet = m.Musikalitaet;
+        bestehend.AkustischeQualitaet = m.AkustischeQualitaet;
+        bestehend.VideoQualitaet = m.VideoQualitaet;
+        bestehend.Kommentar = m.Kommentar;
+        bestehend.ErstelltAm = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        await LadeStatsAsync(db);
+        await LadeEigeneAsync();
+        Snackbar.Add("Danke für deine Bewertung!", Severity.Success);
+        StateHasChanged();
+    }
+
+    private async Task BewertungenAnsehen()
+    {
+        if (_video == null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var liste = await db.Bewertungen
+            .Where(b => b.VideoId == Id)
+            .OrderByDescending(b => b.ErstelltAm)
+            .Select(b => new BewertungenAnsehenDialog.Eintrag(
+                b.GesamtEindruck, b.Praezision, b.Musikalitaet, b.AkustischeQualitaet, b.VideoQualitaet,
+                b.Kommentar, b.ErstelltAm))
+            .ToListAsync();
+        var parameters = new DialogParameters<BewertungenAnsehenDialog>
+        {
+            { x => x.VideoTitel, _video.Titel },
+            { x => x.Bewertungen, liste }
+        };
+        await DialogService.ShowAsync<BewertungenAnsehenDialog>("Bewertungen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
+    private async Task MitwirkungVorschlagen()
+    {
+        if (_video == null) return;
+        var parameters = new DialogParameters<MitwirkungVorschlagDialog> { { x => x.VideoTitel, _video.Titel } };
+        var dialog = await DialogService.ShowAsync<MitwirkungVorschlagDialog>("Besetzung vorschlagen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var eingabe = (MitwirkungService.Eingabe)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await MitwirkungService.ErfasseAsync(db, Id, eingabe, VideoStatus.Ausstehend, _userId);
+        Snackbar.Add("Danke! Dein Besetzungs-Vorschlag wird von einem Admin geprüft.", Severity.Success);
+    }
+
+    private record Zeile(Guid PersonId, string PersonName, MitwirkungRolle Rolle, string? Instrument, string? Stimme, string? Anmerkung)
+    {
+        public string Beschreibung
+        {
+            get
+            {
+                if (Rolle == MitwirkungRolle.Dirigent)
+                    return string.Join(" · ", new[] { "Dirigent:in", Anmerkung }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                var teile = new List<string> { "Musikant:in" };
+                if (Instrument != null) teile.Add(Instrument);
+                if (Stimme != null) teile.Add(Stimme);
+                if (!string.IsNullOrWhiteSpace(Anmerkung)) teile.Add(Anmerkung);
+                return string.Join(" · ", teile);
+            }
+        }
+    }
+
+    private class BewertungsStats
+    {
+        public int Anzahl { get; init; }
+        public double GesamtEindruck { get; init; }
+        public double Praezision { get; init; }
+        public double Musikalitaet { get; init; }
+        public double AkustischeQualitaet { get; init; }
+        public double VideoQualitaet { get; init; }
+    }
+}

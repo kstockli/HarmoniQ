@@ -1,9 +1,13 @@
 @page "/personen/{Id:guid}"
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>@(_person?.AnzeigeName ?? "Person") – HarmoniQ</PageTitle>
 
@@ -69,6 +73,41 @@ else
         </MudText>
     }
 
+    @if (_bands.Count > 0)
+    {
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+            <b>Bands:</b>
+            @foreach (var b in _bands)
+            {
+                <MudLink Href="@($"/bands/{b.BandId}")" Style="color:#9B59B6;" Underline="Underline.Hover">@b.BandName</MudLink>
+                <span style="color:#A78FC0;">@(b.Detail) </span>
+            }
+        </MudText>
+    }
+
+    @* Selbst-Verknüpfung „das bin ich“ *@
+    <div class="mb-2">
+        @if (_verknuepftMitMir)
+        {
+            <MudChip T="string" Icon="@Icons.Material.Filled.Verified" Style="background:#1d4d2b; color:#9fe0b0;">
+                Mit deinem Konto verknüpft
+            </MudChip>
+        }
+        else if (_offenerAntrag)
+        {
+            <MudChip T="string" Icon="@Icons.Material.Filled.HourglassTop" Style="background:#3a1060; color:#A78FC0;">
+                Verknüpfungs-Antrag in Prüfung
+            </MudChip>
+        }
+        else if (_userId != null && !_personVerknuepft)
+        {
+            <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
+                       StartIcon="@Icons.Material.Filled.PersonPin" OnClick="DasBinIch">
+                Das bin ich
+            </MudButton>
+        }
+    </div>
+
     <RichtigstellungMelden Typ="RichtigstellungTyp.Person" Id="_person.Id" />
 
     <MudDivider Class="my-4" Style="border-color:#3a1060;" />
@@ -105,10 +144,10 @@ else
         <MudList T="string" Dense="true">
             @foreach (var a in _auftritte)
             {
-                <MudListItem T="string" Href="@($"/stuecke/{a.StueckId}")" Icon="@Icons.Material.Filled.PlayCircle" Style="color:#F0E6FF;">
+                <MudListItem T="string" Href="@($"/videos/{a.VideoId}")" Icon="@Icons.Material.Filled.PlayCircle" Style="color:#F0E6FF;">
                     @a.StueckTitel
                     <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                        @MitwirkungText(a)
+                        @MitwirkungText(a)@(a.BandName != null ? $" · {a.BandName}" : "")
                     </MudText>
                 </MudListItem>
             }
@@ -122,6 +161,12 @@ else
     private Person? _person;
     private List<WerkZeile> _werke = [];
     private List<AuftrittZeile> _auftritte = [];
+    private List<BandZeile> _bands = [];
+
+    private string? _userId;
+    private bool _personVerknuepft;   // Person hat (irgend)ein Konto
+    private bool _verknuepftMitMir;   // Person ist mit MIR verknüpft
+    private bool _offenerAntrag;      // ich habe bereits einen offenen Antrag
 
     private List<BreadcrumbItem> _breadcrumbs => _person == null ? [] :
     [
@@ -152,10 +197,58 @@ else
         _auftritte = await db.VideoMitwirkungen
             .Where(m => m.PersonId == Id && m.Status == VideoStatus.Genehmigt)
             .Select(m => new AuftrittZeile(
-                m.Video.StueckId, m.Video.Stueck.Titel, m.Rolle,
+                m.VideoId, m.Video.StueckId, m.Video.Stueck.Titel, m.Rolle,
                 m.Instrument != null ? m.Instrument.Name : null,
-                m.Stimme != null ? m.Stimme.Bezeichnung : null))
+                m.Stimme != null ? m.Stimme.Bezeichnung : null,
+                m.Video.Band != null ? m.Video.Band.Name : null))
             .ToListAsync();
+
+        _bands = await db.BandMitgliedschaften
+            .Where(m => m.PersonId == Id)
+            .OrderByDescending(m => m.BisJahr == null)
+            .ThenBy(m => m.Band.Name)
+            .Select(m => new BandZeile(
+                m.BandId, m.Band.Name,
+                m.Funktion ?? (m.Instrument != null ? m.Instrument.Name : null),
+                m.VonJahr, m.BisJahr))
+            .ToListAsync();
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        _personVerknuepft = _person.BenutzerId != null;
+        _verknuepftMitMir = _userId != null && _person.BenutzerId == _userId;
+        _offenerAntrag = _userId != null && await db.PersonAnsprueche.AnyAsync(a =>
+            a.PersonId == Id && a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen);
+    }
+
+    private async Task DasBinIch()
+    {
+        if (_person == null || _userId == null) return;
+        var parameters = new DialogParameters<PersonAnspruchDialog> { { x => x.PersonName, _person.Name } };
+        var dialog = await DialogService.ShowAsync<PersonAnspruchDialog>("Mit Person verknüpfen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var begruendung = result.Data as string;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        // Doppelte offene Anträge vermeiden.
+        if (await db.PersonAnsprueche.AnyAsync(a =>
+            a.PersonId == Id && a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen))
+        {
+            _offenerAntrag = true;
+            return;
+        }
+        db.PersonAnsprueche.Add(new PersonAnspruch
+        {
+            PersonId = Id,
+            BenutzerId = _userId,
+            Begruendung = string.IsNullOrWhiteSpace(begruendung) ? null : begruendung.Trim()
+        });
+        await db.SaveChangesAsync();
+        _offenerAntrag = true;
+        Snackbar.Add("Antrag gesendet – ein:e Admin prüft die Verknüpfung.", Severity.Success);
     }
 
     private static string RolleText(PersonRolleTyp r) => r switch
@@ -193,5 +286,19 @@ else
     };
 
     private record WerkZeile(Guid StueckId, string Titel, int? Jahr, StueckRolle Rolle);
-    private record AuftrittZeile(Guid StueckId, string StueckTitel, MitwirkungRolle Rolle, string? Instrument, string? Stimme);
+    private record AuftrittZeile(Guid VideoId, Guid StueckId, string StueckTitel, MitwirkungRolle Rolle, string? Instrument, string? Stimme, string? BandName);
+    private record BandZeile(Guid BandId, string BandName, string? Rolle, int? VonJahr, int? BisJahr)
+    {
+        public string Detail
+        {
+            get
+            {
+                var teile = new List<string>();
+                if (Rolle != null) teile.Add(Rolle);
+                if (VonJahr.HasValue || BisJahr.HasValue)
+                    teile.Add($"{VonJahr?.ToString() ?? "?"}–{BisJahr?.ToString() ?? "heute"}");
+                return teile.Count > 0 ? $"({string.Join(", ", teile)})" : "";
+            }
+        }
+    }
 }

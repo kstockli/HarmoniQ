@@ -21,6 +21,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PersonInstrument> PersonInstrumente => Set<PersonInstrument>();
     public DbSet<VideoMitwirkung> VideoMitwirkungen => Set<VideoMitwirkung>();
     public DbSet<Richtigstellung> Richtigstellungen => Set<Richtigstellung>();
+    public DbSet<BandMitgliedschaft> BandMitgliedschaften => Set<BandMitgliedschaft>();
+    public DbSet<PersonAnspruch> PersonAnsprueche => Set<PersonAnspruch>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -114,6 +116,29 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(m => m.StimmeId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(m => m.VorgeschlagenVon).WithMany()
                 .HasForeignKey(m => m.VorgeschlagenVonId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // BandMitgliedschaft (Person ↔ Band über die Zeit)
+        builder.Entity<BandMitgliedschaft>(e =>
+        {
+            e.HasOne(m => m.Band).WithMany(b => b.Mitgliedschaften)
+                .HasForeignKey(m => m.BandId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.Person).WithMany(p => p.Bandmitgliedschaften)
+                .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.Instrument).WithMany()
+                .HasForeignKey(m => m.InstrumentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(m => new { m.BandId, m.PersonId });
+        });
+
+        builder.Entity<PersonAnspruch>(e =>
+        {
+            e.HasOne(a => a.Person).WithMany()
+                .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.Benutzer).WithMany()
+                .HasForeignKey(a => a.BenutzerId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(a => a.Status);
+            // Pro Benutzer nur ein offener Antrag je Person.
+            e.HasIndex(a => new { a.PersonId, a.BenutzerId, a.Status });
         });
 
         builder.Entity<Richtigstellung>(e =>

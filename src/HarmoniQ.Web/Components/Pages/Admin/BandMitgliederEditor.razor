@@ -1,0 +1,255 @@
+@page "/admin/bands/{BandId:guid}/mitglieder"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Mitglieder – HarmoniQ Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/bands"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Bands</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Mitglieder</MudText>
+</MudStack>
+
+@if (_band == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.subtitle1" Class="mb-4" Style="color:#F0E6FF;">@_band.Name</MudText>
+
+    @* Bestehende Mitglieder *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Mitglieder (@_mitglieder.Count)</MudText>
+        @if (_mitglieder.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Noch niemand erfasst.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Style="background:transparent;">
+                <thead>
+                    <tr>
+                        <th style="color:#A78FC0;">Person</th><th style="color:#A78FC0;">Instrument</th>
+                        <th style="color:#A78FC0;">Funktion</th><th style="color:#A78FC0;">Zeitraum</th>
+                        <th style="color:#A78FC0;">Status</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _mitglieder)
+                    {
+                        <tr>
+                            <td style="color:#F0E6FF;">@m.PersonName</td>
+                            <td style="color:#C4B0D8;">@(m.Instrument ?? "—")</td>
+                            <td style="color:#C4B0D8;">@(m.Funktion ?? "—")</td>
+                            <td style="color:#C4B0D8;">@m.Zeitraum</td>
+                            <td>
+                                @if (m.Aktiv)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="background:#1d4d2b; color:#9fe0b0;">aktiv</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="background:#3a1060; color:#A78FC0;">beendet</MudChip>
+                                }
+                            </td>
+                            <td>
+                                @if (m.Aktiv)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.EventBusy" Size="Size.Small" Style="color:#D4AF37;"
+                                                   title="Mitgliedschaft beenden (bis aktuelles Jahr)" OnClick="@(() => Beenden(m.Id))" />
+                                }
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => Loeschen(m.Id))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+
+    @* Neues Mitglied *@
+    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Mitglied hinzufügen</MudText>
+        <MudText Typo="Typo.caption" Class="mb-3" Style="color:#A78FC0;">
+            Tippe einen Namen/Instrument – existiert er nicht, wird er automatisch angelegt.
+            Bestehende Personen werden wiederverwendet (keine Dubletten).
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudAutocomplete T="string" @bind-Value="_personName" Label="Person" Variant="Variant.Outlined"
+                                 SearchFunc="SuchePerson" CoerceValue="true" ResetValueOnEmptyText="false" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Sichtbarkeit" @bind-Value="_sichtbarkeit" Label="Sichtbarkeit (nur für neue Person)"
+                           Variant="Variant.Outlined">
+                    <MudSelectItem Value="Sichtbarkeit.Oeffentlich">Öffentlich</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NurInitialen">Nur Initialen</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NichtBekannt">Nicht bekannt (?)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudAutocomplete T="string" @bind-Value="_instrumentName" Label="Instrument (optional)" Variant="Variant.Outlined"
+                                 SearchFunc="SucheInstrument" CoerceValue="true" ResetValueOnEmptyText="false" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_funktion" Label="Funktion (optional)" Variant="Variant.Outlined"
+                              Placeholder="z. B. Chefdirigent, Präsident" />
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudNumericField T="int?" @bind-Value="_vonJahr" Label="Von (Jahr, optional)" Variant="Variant.Outlined"
+                                 Min="1800" Max="2100" />
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudNumericField T="int?" @bind-Value="_bisJahr" Label="Bis (Jahr, optional)" Variant="Variant.Outlined"
+                                 Min="1800" Max="2100" HelperText="leer = aktiv" />
+            </MudItem>
+        </MudGrid>
+
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-3"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="Hinzufuegen"
+                   Disabled="@(string.IsNullOrWhiteSpace(_personName))">Hinzufügen</MudButton>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid BandId { get; set; }
+
+    private Band? _band;
+    private List<Zeile> _mitglieder = [];
+    private List<string> _personNamen = [];
+    private List<string> _instrumentNamen = [];
+
+    private string? _personName;
+    private Sichtbarkeit _sichtbarkeit = Sichtbarkeit.NurInitialen;
+    private string? _instrumentName;
+    private string? _funktion;
+    private int? _vonJahr;
+    private int? _bisJahr;
+
+    protected override async Task OnParametersSetAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _band = await db.Bands.FirstOrDefaultAsync(b => b.Id == BandId);
+        if (_band == null) { Nav.NavigateTo("/admin/bands"); return; }
+
+        _mitglieder = await db.BandMitgliedschaften
+            .Where(m => m.BandId == BandId)
+            .OrderByDescending(m => m.BisJahr == null)
+            .ThenBy(m => m.Person.Name)
+            .Select(m => new Zeile(
+                m.Id, m.Person.Name,
+                m.Instrument != null ? m.Instrument.Name : null,
+                m.Funktion, m.VonJahr, m.BisJahr))
+            .ToListAsync();
+
+        _personNamen = await db.Personen.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+        _instrumentNamen = await db.Instrumente.OrderBy(i => i.Name).Select(i => i.Name).ToListAsync();
+    }
+
+    private Task<IEnumerable<string>> SuchePerson(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_personNamen, v));
+
+    private Task<IEnumerable<string>> SucheInstrument(string? v, CancellationToken ct) =>
+        Task.FromResult(Filter(_instrumentNamen, v));
+
+    private static IEnumerable<string> Filter(IEnumerable<string> quelle, string? v) =>
+        string.IsNullOrWhiteSpace(v) ? quelle.Take(15)
+            : quelle.Where(x => x.Contains(v, StringComparison.OrdinalIgnoreCase)).Take(15);
+
+    private async Task Hinzufuegen()
+    {
+        if (string.IsNullOrWhiteSpace(_personName)) return;
+        var name = _personName.Trim();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Person find-or-create (keine Dubletten).
+        var person = await db.Personen.FirstOrDefaultAsync(p => p.Name == name);
+        if (person == null)
+        {
+            person = new Person { Name = name, Sichtbarkeit = _sichtbarkeit };
+            db.Personen.Add(person);
+            // Musikant:in-Rolle als sinnvoller Default für ein Bandmitglied.
+            db.PersonRollen.Add(new PersonRolle { PersonId = person.Id, Rolle = PersonRolleTyp.Musikant });
+        }
+
+        Guid? instrumentId = null;
+        if (!string.IsNullOrWhiteSpace(_instrumentName))
+        {
+            var iName = _instrumentName.Trim();
+            var instrument = await db.Instrumente.FirstOrDefaultAsync(i => i.Name == iName);
+            if (instrument == null)
+            {
+                instrument = new Instrument { Name = iName };
+                db.Instrumente.Add(instrument);
+            }
+            instrumentId = instrument.Id;
+            // Instrument auch der Person zuordnen, falls noch nicht vorhanden.
+            if (!await db.PersonInstrumente.AnyAsync(pi => pi.PersonId == person.Id && pi.InstrumentId == instrumentId))
+                db.PersonInstrumente.Add(new PersonInstrument { PersonId = person.Id, InstrumentId = instrumentId.Value });
+        }
+
+        if (await db.BandMitgliedschaften.AnyAsync(m => m.BandId == BandId && m.PersonId == person.Id))
+        {
+            Snackbar.Add($"{name} ist bereits Mitglied dieser Band.", Severity.Warning);
+            return;
+        }
+
+        db.BandMitgliedschaften.Add(new BandMitgliedschaft
+        {
+            BandId = BandId,
+            PersonId = person.Id,
+            InstrumentId = instrumentId,
+            Funktion = string.IsNullOrWhiteSpace(_funktion) ? null : _funktion.Trim(),
+            VonJahr = _vonJahr,
+            BisJahr = _bisJahr
+        });
+        await db.SaveChangesAsync();
+
+        Snackbar.Add($"{name} hinzugefügt.", Severity.Success);
+        _personName = null; _instrumentName = null; _funktion = null; _vonJahr = null; _bisJahr = null;
+        await Laden();
+    }
+
+    private async Task Beenden(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var m = await db.BandMitgliedschaften.FindAsync(id);
+        if (m != null && m.BisJahr == null)
+        {
+            m.BisJahr = DateTime.Now.Year;
+            await db.SaveChangesAsync();
+        }
+        await Laden();
+    }
+
+    private async Task Loeschen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var m = await db.BandMitgliedschaften.FindAsync(id);
+        if (m != null) { db.BandMitgliedschaften.Remove(m); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, string PersonName, string? Instrument, string? Funktion, int? VonJahr, int? BisJahr)
+    {
+        public bool Aktiv => BisJahr == null;
+        public string Zeitraum => (VonJahr, BisJahr) switch
+        {
+            (null, null) => "—",
+            (var v, null) => $"{v}–heute",
+            (null, var b) => $"…–{b}",
+            var (v, b) => $"{v}–{b}"
+        };
+    }
+}

@@ -3,6 +3,7 @@ using System;
 using HarmoniQ.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HarmoniQ.Web.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260615193127_BandMitgliedschaft")]
+    partial class BandMitgliedschaft
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -240,42 +243,6 @@ namespace HarmoniQ.Web.Migrations
                     b.ToTable("Personen");
                 });
 
-            modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonAnspruch", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Begruendung")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BenutzerId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("EntschiedenAm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("ErstelltAm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("PersonId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BenutzerId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("PersonId", "BenutzerId", "Status");
-
-                    b.ToTable("PersonAnsprueche");
-                });
-
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonInstrument", b =>
                 {
                     b.Property<Guid>("PersonId")
@@ -451,19 +418,10 @@ namespace HarmoniQ.Web.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Anlass")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateOnly?>("AufnahmeDatum")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("BandId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("ErstelltAm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Ort")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
@@ -739,25 +697,6 @@ namespace HarmoniQ.Web.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Benutzer");
-                });
-
-            modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonAnspruch", b =>
-                {
-                    b.HasOne("HarmoniQ.Web.Data.ApplicationUser", "Benutzer")
-                        .WithMany()
-                        .HasForeignKey("BenutzerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("HarmoniQ.Web.Data.Models.Person", "Person")
-                        .WithMany()
-                        .HasForeignKey("PersonId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Benutzer");
-
-                    b.Navigation("Person");
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonInstrument", b =>

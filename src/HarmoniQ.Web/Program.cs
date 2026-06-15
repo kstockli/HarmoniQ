@@ -75,6 +75,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, SmtpEmailSender>();
 
+// Befördert konfigurierte Admin-Mails sofort beim Login (ohne Neustart) zum Admin.
+builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, AdminClaimsTransformation>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -108,6 +111,9 @@ using (var scope = app.Services.CreateScope())
 
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     await AdminInitializer.EnsureAdminsAsync(scope.ServiceProvider, app.Configuration, logger);
+    // Einmalige Roster-Importe (Stadtmusik/JBL Luzern) sind erfolgt und persistiert.
+    // Mitglieder werden künftig über den Admin-Editor (/admin/bands/{id}/mitglieder) gepflegt.
+    // Die Importer-Klassen bleiben als Provenienz-/Re-Import-Quelle erhalten.
 }
 
 app.Run();

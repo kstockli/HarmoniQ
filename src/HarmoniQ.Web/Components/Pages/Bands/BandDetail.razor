@@ -30,12 +30,45 @@ else
         @if (_band.Webseite != null)
         {
             <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.Webseite" Target="_blank"
-                       StartIcon="@Icons.Material.Filled.OpenInNew">YouTube-Kanal</MudButton>
+                       StartIcon="@Icons.Material.Filled.OpenInNew">Webseite</MudButton>
         }
         <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"/stuecke?band={_band.Id}")"
                    StartIcon="@Icons.Material.Filled.MusicNote">Alle Stücke dieser Band</MudButton>
         <RichtigstellungMelden Typ="RichtigstellungTyp.Band" Id="_band.Id" />
     </MudStack>
+
+    @if (_mitglieder.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
+            Besetzung (@_mitglieder.Count)
+        </MudText>
+        <MudPaper Class="pa-4 mb-6" Style="background:#1a0030; border:1px solid #3a1060;">
+            @if (_leitung.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Style="color:#D4AF37;">Leitung</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2" Class="mb-3">
+                    @foreach (var m in _leitung)
+                    {
+                        <MudLink Href="@($"/personen/{m.PersonId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">
+                            @m.AnzeigeName <MudText Typo="Typo.caption" Style="color:#A78FC0;">(@m.Funktion)</MudText>
+                        </MudLink>
+                    }
+                </MudStack>
+            }
+            @foreach (var gruppe in _register)
+            {
+                <MudText Typo="Typo.subtitle2" Style="color:#9B59B6;">@gruppe.Key</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3" Class="mb-3">
+                    @foreach (var m in gruppe)
+                    {
+                        <MudLink Href="@($"/personen/{m.PersonId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">
+                            @m.AnzeigeName
+                        </MudLink>
+                    }
+                </MudStack>
+            }
+        </MudPaper>
+    }
 
     @if (_videos.Count == 0)
     {
@@ -51,12 +84,12 @@ else
             {
                 <MudItem xs="12" sm="6" md="4">
                     <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-                        <MudLink Href="@($"/stuecke/{v.StueckId}")">
+                        <MudLink Href="@($"/videos/{v.Id}")">
                             <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
                                  style="width:100%;display:block;" alt="@v.Titel" />
                         </MudLink>
                         <MudCardContent>
-                            <MudLink Href="@($"/stuecke/{v.StueckId}")" Style="color:#F0E6FF;font-weight:500;"
+                            <MudLink Href="@($"/videos/{v.Id}")" Style="color:#F0E6FF;font-weight:500;"
                                      Underline="Underline.Hover">@v.StueckTitel</MudLink>
                             <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.Titel</MudText>
                         </MudCardContent>
@@ -86,6 +119,9 @@ else
     private Band? _band;
     private List<VideoZeile> _videos = [];
     private List<StueckZeile> _stuecke = [];
+    private List<MitgliedZeile> _mitglieder = [];
+    private List<MitgliedZeile> _leitung = [];
+    private List<IGrouping<string, MitgliedZeile>> _register = [];
 
     private List<BreadcrumbItem> _breadcrumbs => _band == null ? [] :
     [
@@ -115,8 +151,28 @@ else
             .OrderBy(s => s.Titel)
             .Select(s => new StueckZeile(s.Id, s.Titel, s.Jahr))
             .ToList();
+
+        var mitglieder = await db.BandMitgliedschaften
+            .Where(m => m.BandId == Id && m.BisJahr == null)
+            .Include(m => m.Person)
+            .Include(m => m.Instrument)
+            .ToListAsync();
+
+        _mitglieder = mitglieder
+            .Select(m => new MitgliedZeile(m.PersonId, m.Person.AnzeigeName, m.Instrument?.Name, m.Funktion))
+            .OrderBy(m => m.AnzeigeName)
+            .ToList();
+
+        // Anzeige-Gruppen: Leitung (mit Funktion) zuerst, dann nach Instrument.
+        _leitung = _mitglieder.Where(m => m.Funktion != null).ToList();
+        _register = _mitglieder
+            .Where(m => m.Funktion == null)
+            .GroupBy(m => m.Instrument ?? "Ohne Instrument")
+            .OrderBy(g => g.Key)
+            .ToList();
     }
 
     private record VideoZeile(Guid Id, string YouTubeVideoId, string Titel, Guid StueckId, string StueckTitel);
     private record StueckZeile(Guid Id, string Titel, int? Jahr);
+    private record MitgliedZeile(Guid PersonId, string AnzeigeName, string? Instrument, string? Funktion);
 }

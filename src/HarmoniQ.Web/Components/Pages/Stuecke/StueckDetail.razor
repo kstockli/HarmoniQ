@@ -102,7 +102,8 @@ else
                             </iframe>
                         </div>
                         <MudCardContent>
-                            <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@video.Titel</MudText>
+                            <MudLink Href="@($"/videos/{video.Id}")" Typo="Typo.subtitle1"
+                                     Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@video.Titel</MudLink>
                             @if (video.Band != null)
                             {
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -113,6 +114,20 @@ else
                                     {
                                         <MudText Typo="Typo.caption" Style="color:#A78FC0;">· @video.Band.Land</MudText>
                                     }
+                                </MudStack>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(video.Anlass) || !string.IsNullOrWhiteSpace(video.Ort) || video.AufnahmeDatum.HasValue)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Style="color:#9B59B6;" />
+                                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                                        @string.Join(" · ", new[] {
+                                            video.Anlass,
+                                            video.Ort,
+                                            video.AufnahmeDatum?.ToString("dd.MM.yyyy")
+                                        }.Where(x => !string.IsNullOrWhiteSpace(x)))
+                                    </MudText>
                                 </MudStack>
                             }
 

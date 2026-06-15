@@ -1,0 +1,24 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+            Du beantragst, mit <b>@PersonName</b> verknüpft zu werden („das bin ich“).
+            Ein:e Admin prüft den Antrag. Nach Genehmigung kannst du diese Person als dein Profil nutzen.
+        </MudText>
+        <MudTextField @bind-Value="_begruendung" Label="Begründung (optional)" Variant="Variant.Outlined"
+                      Lines="3" Placeholder="z. B. Wie können wir das überprüfen? Kontakt, Webseite, …" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(_begruendung)))">Antrag senden</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string PersonName { get; set; } = "";
+
+    private string? _begruendung;
+}

@@ -27,6 +27,11 @@
             <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkannte Video-ID: <b>@_model.YouTubeVideoId</b></MudText>
         }
 
+        <MudTextField @bind-Value="_model.Ort" Label="Aufnahme-Ort (optional)" Variant="Variant.Outlined" Class="mt-3"
+                      Placeholder="z. B. KKL Luzern" />
+        <MudTextField @bind-Value="_model.Anlass" Label="Anlass (optional)" Variant="Variant.Outlined" Class="mt-3"
+                      Placeholder="z. B. Jahreskonzert 2024" />
+
         <MudSelect T="VideoStatus" @bind-Value="_model.Status" Label="Status" Variant="Variant.Outlined" Class="mt-3">
             <MudSelectItem Value="VideoStatus.Genehmigt">Genehmigt (öffentlich sichtbar)</MudSelectItem>
             <MudSelectItem Value="VideoStatus.Ausstehend">Ausstehend</MudSelectItem>
@@ -66,6 +71,8 @@
                 YouTubeVideoId = Vorhanden.YouTubeVideoId,
                 Titel = Vorhanden.Titel,
                 AufnahmeDatum = Vorhanden.AufnahmeDatum,
+                Ort = Vorhanden.Ort,
+                Anlass = Vorhanden.Anlass,
                 Status = Vorhanden.Status,
                 VorgeschlagenVonId = Vorhanden.VorgeschlagenVonId
             };

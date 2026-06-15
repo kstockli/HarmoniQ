@@ -8,4 +8,5 @@ public class Band
     public string? Webseite { get; set; }
 
     public ICollection<Video> Videos { get; set; } = [];
+    public ICollection<BandMitgliedschaft> Mitgliedschaften { get; set; } = [];
 }

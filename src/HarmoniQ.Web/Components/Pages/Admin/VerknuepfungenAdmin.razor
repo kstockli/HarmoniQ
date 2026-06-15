@@ -1,0 +1,159 @@
+@page "/admin/verknuepfungen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Verknüpfungs-Anträge – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Verknüpfungs-Anträge</MudText>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+    Anträge von Benutzer:innen, mit einer Person verknüpft zu werden („das bin ich“).
+    Bei Genehmigung wird das Konto als Eigentümer der Person gesetzt.
+</MudText>
+
+@if (_offen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-6">Keine offenen Anträge.</MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-6" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Offen (@_offen.Count)</MudText>
+        <MudSimpleTable Dense="true" Style="background:transparent;">
+            <thead>
+                <tr>
+                    <th style="color:#A78FC0;">Person</th><th style="color:#A78FC0;">Konto</th>
+                    <th style="color:#A78FC0;">Begründung</th><th style="color:#A78FC0;">Eingereicht</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in _offen)
+                {
+                    <tr>
+                        <td><MudLink Href="@($"/personen/{a.PersonId}")" Style="color:#F0E6FF;">@a.PersonName</MudLink></td>
+                        <td style="color:#C4B0D8;">@a.Email</td>
+                        <td style="color:#C4B0D8;">@(a.Begruendung ?? "—")</td>
+                        <td style="color:#C4B0D8;">@a.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#1d4d2b; color:#9fe0b0;"
+                                       OnClick="@(() => Genehmigen(a))">Genehmigen</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                       OnClick="@(() => Ablehnen(a))">Ablehnen</MudButton>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+@if (_erledigt.Count > 0)
+{
+    <MudExpansionPanels Elevation="2">
+        <MudExpansionPanel Style="background:#1a0030; border:1px solid #3a1060;" Text="@($"Erledigt ({_erledigt.Count})")">
+            <MudSimpleTable Dense="true" Style="background:transparent;">
+                <tbody>
+                    @foreach (var a in _erledigt)
+                    {
+                        <tr>
+                            <td><MudLink Href="@($"/personen/{a.PersonId}")" Style="color:#F0E6FF;">@a.PersonName</MudLink></td>
+                            <td style="color:#C4B0D8;">@a.Email</td>
+                            <td>
+                                @if (a.Status == PersonAnspruchStatus.Genehmigt)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="background:#1d4d2b; color:#9fe0b0;">genehmigt</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="background:#4d1d1d; color:#e0a0a0;">abgelehnt</MudChip>
+                                }
+                            </td>
+                            <td style="color:#C4B0D8;">@(a.EntschiedenAm?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+
+@code {
+    private List<Zeile> _offen = [];
+    private List<Zeile> _erledigt = [];
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var alle = await db.PersonAnsprueche
+            .OrderByDescending(a => a.ErstelltAm)
+            .Select(a => new Zeile(a.Id, a.PersonId, a.Person.Name,
+                a.Benutzer != null ? a.Benutzer.Email : a.BenutzerId,
+                a.Begruendung, a.Status, a.ErstelltAm, a.EntschiedenAm))
+            .ToListAsync();
+        _offen = alle.Where(a => a.Status == PersonAnspruchStatus.Offen).ToList();
+        _erledigt = alle.Where(a => a.Status != PersonAnspruchStatus.Offen).ToList();
+    }
+
+    private async Task Genehmigen(Zeile z)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var antrag = await db.PersonAnsprueche.FindAsync(z.Id);
+        if (antrag == null || antrag.Status != PersonAnspruchStatus.Offen) return;
+
+        // Konto darf nicht bereits mit einer anderen Person verknüpft sein (BenutzerId ist unique).
+        var kontoSchonVerknuepft = await db.Personen
+            .AnyAsync(p => p.BenutzerId == antrag.BenutzerId && p.Id != antrag.PersonId);
+        if (kontoSchonVerknuepft)
+        {
+            Snackbar.Add("Dieses Konto ist bereits mit einer anderen Person verknüpft.", Severity.Error);
+            return;
+        }
+
+        var person = await db.Personen.FindAsync(antrag.PersonId);
+        if (person == null) return;
+        if (person.BenutzerId != null && person.BenutzerId != antrag.BenutzerId)
+        {
+            Snackbar.Add("Diese Person ist bereits mit einem anderen Konto verknüpft.", Severity.Warning);
+            return;
+        }
+
+        person.BenutzerId = antrag.BenutzerId;
+        antrag.Status = PersonAnspruchStatus.Genehmigt;
+        antrag.EntschiedenAm = DateTime.UtcNow;
+
+        // Weitere offene Anträge desselben Kontos für dieselbe Person hinfällig.
+        var weitere = await db.PersonAnsprueche
+            .Where(a => a.PersonId == antrag.PersonId && a.Id != antrag.Id && a.Status == PersonAnspruchStatus.Offen)
+            .ToListAsync();
+        foreach (var w in weitere) { w.Status = PersonAnspruchStatus.Abgelehnt; w.EntschiedenAm = DateTime.UtcNow; }
+
+        await db.SaveChangesAsync();
+        Snackbar.Add($"{z.PersonName} mit {z.Email} verknüpft.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Ablehnen(Zeile z)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var antrag = await db.PersonAnsprueche.FindAsync(z.Id);
+        if (antrag == null || antrag.Status != PersonAnspruchStatus.Offen) return;
+        antrag.Status = PersonAnspruchStatus.Abgelehnt;
+        antrag.EntschiedenAm = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Antrag abgelehnt.", Severity.Info);
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, Guid PersonId, string PersonName, string? Email,
+        string? Begruendung, PersonAnspruchStatus Status, DateTime ErstelltAm, DateTime? EntschiedenAm);
+}

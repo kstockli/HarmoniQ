@@ -8,49 +8,88 @@
 <PageTitle>HarmoniQ – Startseite</PageTitle>
 
 <img src="img/harmoniq-logo.svg" alt="HarmoniQ" style="height:88px;max-width:100%;margin-bottom:8px;" />
-<MudText Typo="Typo.subtitle1" Class="mb-8" Style="color:#A78FC0;">
-    Entdecke, vergleiche und bewerte Aufnahmen deiner Lieblingskomponisten auf YouTube.
+<MudText Typo="Typo.subtitle1" Class="mb-4" Style="color:#A78FC0;">
+    Entdecke Komponist:innen, Stücke, Orchester und die Menschen dahinter – und vergleiche
+    Aufnahmen auf YouTube. Stöbern kannst du ganz ohne Konto.
 </MudText>
 
+<AuthorizeView>
+    <NotAuthorized>
+        <MudPaper Class="pa-4 mb-8" Elevation="4"
+                  Style="background:linear-gradient(135deg,#2d1657,#1a0030); border:1px solid #D4AF37;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color:#D4AF37;font-size:2.5rem;" />
+                <div style="flex:1;min-width:240px;">
+                    <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Mehr aus HarmoniQ herausholen</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                        Melde dich kostenlos an, um Aufnahmen zu <b>bewerten</b>, neue <b>Videos vorzuschlagen</b>,
+                        die <b>Besetzung</b> von Aufnahmen zu ergänzen, <b>Personen &amp; Bands</b> beizutragen
+                        und dich später mit deiner eigenen Person zu verknüpfen.
+                    </MudText>
+                </div>
+                <MudStack Spacing="2">
+                    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                               StartIcon="@Icons.Material.Filled.Login" Href="Account/Login">Anmelden</MudButton>
+                    <MudButton Variant="Variant.Text" Style="color:#D4AF37;"
+                               Href="Account/Register">Konto erstellen</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </NotAuthorized>
+    <Authorized Context="auth">
+        <MudText Typo="Typo.body2" Class="mb-8" Style="color:#9fe0b0;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+            Angemeldet als <b>@auth.User.Identity?.Name</b> – du kannst bewerten, Videos vorschlagen und Besetzungen ergänzen.
+        </MudText>
+    </Authorized>
+</AuthorizeView>
+
 <MudGrid Class="mb-8">
-    <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4 d-flex flex-column align-center cursor-pointer"
-                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
-                  @onclick='() => Nav.NavigateTo("/komponisten")'>
-            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Style="color:#D4AF37;" />
-            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_komponistenCount</MudText>
-            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Komponisten</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4 d-flex flex-column align-center cursor-pointer"
-                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
-                  @onclick='() => Nav.NavigateTo("/stuecke")'>
-            <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Style="color:#9B59B6;" />
-            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_stueckeCount</MudText>
-            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Stücke</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4 d-flex flex-column align-center cursor-pointer"
-                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
-                  @onclick='() => Nav.NavigateTo("/videos")'>
-            <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Size="Size.Large" Style="color:#E67E22;" />
-            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_videosCount</MudText>
-            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Videos</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4 d-flex flex-column align-center"
-                  Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-            <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Large" Style="color:#F1C40F;" />
-            <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@_bewertungenCount</MudText>
-            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Bewertungen</MudText>
-        </MudPaper>
-    </MudItem>
+    @Kachel(Icons.Material.Filled.Person, _komponistenCount, "Komponist:innen", "#D4AF37", "/komponisten")
+    @Kachel(Icons.Material.Filled.Groups2, _personenCount, "Personen", "#1ABC9C", "/personen")
+    @Kachel(Icons.Material.Filled.Groups, _bandsCount, "Bands", "#9B59B6", "/bands")
+    @Kachel(Icons.Material.Filled.MusicNote, _stueckeCount, "Stücke", "#8E44AD", "/stuecke")
+    @Kachel(Icons.Material.Filled.VideoLibrary, _videosCount, "Videos", "#E67E22", "/videos")
+    @Kachel(Icons.Material.Filled.Star, _bewertungenCount, "Bewertungen", "#F1C40F", null)
 </MudGrid>
 
-<MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Komponisten</MudText>
+@if (_neueVideos.Count > 0)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+        <MudText Typo="Typo.h5" Style="color:#D4AF37;">Zuletzt hinzugefügt</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/videos"
+                   EndIcon="@Icons.Material.Filled.ArrowForward">Alle Videos</MudButton>
+    </MudStack>
+    <MudGrid Class="mb-8">
+        @foreach (var v in _neueVideos)
+        {
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudLink Href="@($"/videos/{v.Id}")">
+                        <div style="position:relative;">
+                            <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                                 style="width:100%;display:block;" alt="@v.StueckTitel" />
+                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
+                                     Style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;opacity:0.85;"
+                                     Size="Size.Large" />
+                        </div>
+                    </MudLink>
+                    <MudCardContent Class="pa-3">
+                        <MudLink Href="@($"/videos/{v.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                                 Underline="Underline.Hover">@v.StueckTitel</MudLink>
+                        @if (v.BandName != null)
+                        {
+                            <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.BandName</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Komponist:innen</MudText>
 <MudGrid>
     @foreach (var k in _komponisten)
     {
@@ -86,14 +125,68 @@
     }
 </MudGrid>
 
+@if (_bands.Count > 0)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-10 mb-1">
+        <MudText Typo="Typo.h5" Style="color:#D4AF37;">Bands &amp; Orchester</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/bands"
+                   EndIcon="@Icons.Material.Filled.ArrowForward">Alle Bands</MudButton>
+    </MudStack>
+    <MudGrid>
+        @foreach (var b in _bands)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudAvatar Style="background:#3a1060; color:#9B59B6;" Size="Size.Large">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups" />
+                            </MudAvatar>
+                            <div>
+                                <MudLink Href="@($"/bands/{b.Id}")" Typo="Typo.h6"
+                                         Style="color:#F0E6FF;" Underline="Underline.Hover">@b.Name</MudLink>
+                                <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
+                                    @(b.Land ?? "")@(b.MitgliederCount > 0 ? $" · {b.MitgliederCount} Mitglieder" : "")@(b.VideosCount > 0 ? $" · {b.VideosCount} Aufnahmen" : "")
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Text" Style="color:#D4AF37;"
+                                   Href="@($"/bands/{b.Id}")">Zur Band</MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
 @code {
-    private int _komponistenCount, _stueckeCount, _videosCount, _bewertungenCount;
+    private RenderFragment Kachel(string icon, int anzahl, string titel, string farbe, string? ziel) => __builder =>
+    {
+        <MudItem xs="6" sm="4" md="2">
+            <MudPaper Class="@($"pa-4 d-flex flex-column align-center{(ziel != null ? " cursor-pointer" : "")}")"
+                      Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
+                      @onclick="@(() => { if (ziel != null) Nav.NavigateTo(ziel); })">
+                <MudIcon Icon="@icon" Size="Size.Large" Style="@($"color:{farbe};")" />
+                <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@anzahl</MudText>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">@titel</MudText>
+            </MudPaper>
+        </MudItem>
+    };
+
+    private int _komponistenCount, _personenCount, _bandsCount, _stueckeCount, _videosCount, _bewertungenCount;
     private List<Zeile> _komponisten = [];
+    private List<BandZeile> _bands = [];
+    private List<VideoZeile> _neueVideos = [];
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _komponistenCount = await db.Personen.CountAsync(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist));
+        _personenCount = await db.Personen.CountAsync();
+        _bandsCount = await db.Bands.CountAsync();
         _stueckeCount = await db.Stuecke.CountAsync();
         _videosCount = await db.Videos.CountAsync(v => v.Status == VideoStatus.Genehmigt);
         _bewertungenCount = await db.Bewertungen.CountAsync();
@@ -102,7 +195,25 @@
             .OrderBy(p => p.Name)
             .Select(p => new Zeile(p.Id, p.Name, p.BildUrl, p.Biografie, p.StueckBeitraege.Count))
             .ToListAsync();
+
+        // Bands mit den meisten Mitgliedern zuerst (max. 6 auf der Startseite).
+        _bands = await db.Bands
+            .OrderByDescending(b => b.Mitgliedschaften.Count)
+            .ThenBy(b => b.Name)
+            .Select(b => new BandZeile(b.Id, b.Name, b.Land, b.Mitgliedschaften.Count, b.Videos.Count))
+            .Take(6)
+            .ToListAsync();
+
+        _neueVideos = await db.Videos
+            .Where(v => v.Status == VideoStatus.Genehmigt)
+            .OrderByDescending(v => v.ErstelltAm)
+            .Select(v => new VideoZeile(v.Id, v.YouTubeVideoId, v.Stueck.Titel,
+                v.Band != null ? v.Band.Name : null))
+            .Take(4)
+            .ToListAsync();
     }
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
+    private record BandZeile(Guid Id, string Name, string? Land, int MitgliederCount, int VideosCount);
+    private record VideoZeile(Guid Id, string YouTubeVideoId, string StueckTitel, string? BandName);
 }
