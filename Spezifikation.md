@@ -372,8 +372,15 @@ Das Feld `Person.Sichtbarkeit` steuert die öffentliche Anzeige des Namens:
 - **NurInitialen:** nur Initialen, z. B. „K. S." (Default für Musikant:in – schützt Orchester-Mitglieder)
 - **NichtBekannt:** Anzeige als „?" (unbekannte/ungenannte Mitwirkende)
 
-Die Anzeige-Logik (voller Name / Initialen / „?") wird zentral angewendet, wo immer ein
-Personenname dargestellt wird. Admins sehen intern stets den vollen Namen.
+Die Anzeige-Logik (voller Name / Initialen / „?") wird zentral angewendet (`PersonenSicht`),
+wo immer ein Personenname dargestellt wird. Admins sehen intern stets den vollen Namen.
+
+**Viewer-abhängige Sichtbarkeit (UMGESETZT):** Ist ein:e Benutzer:in eingeloggt und mit einer
+Person verknüpft, werden **Bandkolleg:innen** (Personen, die mit der eigenen Person in mind. einer
+Band sind) **immer voll** angezeigt – Name *und* Bild –, unabhängig von deren Sichtbarkeits-Einstellung.
+Für alle anderen Betrachter gilt die persönliche Einstellung. Zusätzlich:
+- **Bilder** erscheinen nur bei effektiver Sichtbarkeit „Öffentlich" (Außenstehende sehen höchstens Initialen, kein Foto).
+- In der **Personen-Übersicht** (`/personen`) werden effektiv „NichtBekannt"-Personen **herausgefiltert**.
 
 ### Selbst-Verknüpfung „das bin ich" (Person ↔ Benutzerkonto)
 `Person.BenutzerId` ist eine **optionale, eindeutige (UNIQUE)** Referenz auf ein eingeloggtes
@@ -391,7 +398,9 @@ für eingeloggte Benutzer:innen den Button **„Das bin ich"** (Dialog mit optio
 sofern die Person noch nicht verknüpft ist und kein offener Antrag besteht; sonst Status-Chip
 („in Prüfung" / „Mit deinem Konto verknüpft"). Admin-Queue `/admin/verknuepfungen`: Genehmigen
 (setzt `Person.BenutzerId`, prüft UNIQUE: Konto/Person noch frei) oder Ablehnen.
-*Offen:* Selbst-Pflege der eigenen Personendaten ohne Admin (folgt separat).
+Nach Verknüpfung: **Selbst-Pflege** der eigenen Personendaten unter `/account/person`
+(Name, Bio, Bild-URL, Geburtsjahr, Sichtbarkeit, Links Webseite/Instagram/X/Facebook/YouTube) –
+verlinkt auch über „Meine Daten bearbeiten" auf der eigenen Personenseite. **UMGESETZT.**
 
 ### Freitext → Tabelle (Erfassung von Instrument/Stimme)
 Bei der Erfassung einer Mitwirkung werden Instrument und Stimme über **Autocomplete mit

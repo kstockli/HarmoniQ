@@ -1,9 +1,12 @@
 @page "/personen"
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>Personen – HarmoniQ</PageTitle>
 
@@ -57,15 +60,16 @@ else
                     <MudCardContent>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
                             <MudAvatar Style="background:#3a1060; color:#D4AF37;">
-                                @if (p.BildUrl != null)
+                                @{ var bild = Bild(p); var name = Name(p); }
+                                @if (bild != null)
                                 {
-                                    <img src="@p.BildUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@p.AnzeigeName" />
+                                    <img src="@bild" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@name" />
                                 }
-                                else { @(p.AnzeigeName.Length > 0 ? p.AnzeigeName[0].ToString() : "?") }
+                                else { @(name.Length > 0 ? name[0].ToString() : "?") }
                             </MudAvatar>
                             <div>
                                 <MudLink Href="@($"/personen/{p.Id}")" Style="color:#F0E6FF;font-weight:600;"
-                                         Underline="Underline.Hover">@p.AnzeigeName</MudLink>
+                                         Underline="Underline.Hover">@Name(p)</MudLink>
                                 <div>
                                     @foreach (var r in p.Rollen)
                                     {
@@ -94,6 +98,7 @@ else
     private List<Zeile> _alle = [];
     private List<Zeile> _gefiltert = [];
     private List<Instrument> _instrumente = [];
+    private HashSet<Guid> _vollSichtbar = [];
     private string _suche = "";
     private PersonRolleTyp? _rolle;
     private Guid? _instrument;
@@ -103,6 +108,10 @@ else
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _instrumente = await db.Instrumente.OrderBy(i => i.Name).ToListAsync();
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
 
         var q = db.Personen
             .Include(p => p.Rollen)
@@ -133,7 +142,8 @@ else
         var personen = await q.ToListAsync();
         _alle = personen.Select(p => new Zeile(
             p.Id,
-            p.AnzeigeName,
+            p.Name,
+            p.Sichtbarkeit,
             p.BildUrl,
             p.Rollen.Select(r => r.Rolle).ToList(),
             p.Instrumente.Select(pi => pi.InstrumentId).ToHashSet(),
@@ -143,14 +153,20 @@ else
         Filtern();
     }
 
+    private Sichtbarkeit Eff(Zeile z) => PersonenSicht.Effektiv(z.Id, z.Sichtbarkeit, _vollSichtbar);
+    private string Name(Zeile z) => PersonenSicht.AnzeigeName(z.RawName, Eff(z));
+    private string? Bild(Zeile z) => PersonenSicht.BildUrl(z.BildUrl, Eff(z));
+
     private void Filtern()
     {
         _gefiltert = _alle
+            // Effektiv „NichtBekannt“ (versteckte Personen) aus der Übersicht ausblenden.
+            .Where(z => Eff(z) != Sichtbarkeit.NichtBekannt)
             .Where(z =>
                 (_rolle == null || z.Rollen.Contains(_rolle.Value)) &&
                 (_instrument == null || z.InstrumentIds.Contains(_instrument.Value)) &&
-                (_suche == "" || z.AnzeigeName.Contains(_suche, StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(z => z.AnzeigeName)
+                (_suche == "" || Name(z).Contains(_suche, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(z => Name(z))
             .ToList();
     }
 
@@ -162,6 +178,6 @@ else
         _ => r.ToString()
     };
 
-    private record Zeile(Guid Id, string AnzeigeName, string? BildUrl,
+    private record Zeile(Guid Id, string RawName, Sichtbarkeit Sichtbarkeit, string? BildUrl,
         List<PersonRolleTyp> Rollen, HashSet<Guid> InstrumentIds, List<string> Instrumente);
 }

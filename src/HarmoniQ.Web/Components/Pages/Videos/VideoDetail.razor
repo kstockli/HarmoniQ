@@ -179,16 +179,25 @@ else
 
         if (_video == null) { Nav.NavigateTo("/videos"); return; }
 
-        _mitwirkende = await db.VideoMitwirkungen
+        var roh = await db.VideoMitwirkungen
             .Where(m => m.VideoId == Id && m.Status == VideoStatus.Genehmigt)
-            .Select(m => new Zeile(
-                m.PersonId, m.Person.AnzeigeName, m.Rolle,
-                m.Instrument != null ? m.Instrument.Name : null,
-                m.Stimme != null ? m.Stimme.Bezeichnung : null,
-                m.Anmerkung))
+            .Select(m => new {
+                m.PersonId, m.Person.Name, m.Person.Sichtbarkeit, m.Rolle,
+                Instrument = m.Instrument != null ? m.Instrument.Name : null,
+                Stimme = m.Stimme != null ? m.Stimme.Bezeichnung : null,
+                m.Anmerkung })
             .ToListAsync();
-        _mitwirkende = _mitwirkende.OrderBy(m => m.Rolle == MitwirkungRolle.Dirigent ? 0 : 1)
-                                   .ThenBy(m => m.PersonName).ToList();
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+
+        _mitwirkende = roh
+            .Select(m => new Zeile(m.PersonId,
+                PersonenSicht.AnzeigeName(m.Name, PersonenSicht.Effektiv(m.PersonId, m.Sichtbarkeit, vollSichtbar)),
+                m.Rolle, m.Instrument, m.Stimme, m.Anmerkung))
+            .OrderBy(m => m.Rolle == MitwirkungRolle.Dirigent ? 0 : 1)
+            .ThenBy(m => m.PersonName).ToList();
 
         await LadeStatsAsync(db);
     }

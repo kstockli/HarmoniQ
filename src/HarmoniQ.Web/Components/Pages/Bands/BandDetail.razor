@@ -1,9 +1,12 @@
 @page "/bands/{Id:guid}"
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>@(_band?.Name ?? "Band") – HarmoniQ</PageTitle>
 
@@ -158,8 +161,17 @@ else
             .Include(m => m.Instrument)
             .ToListAsync();
 
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+
         _mitglieder = mitglieder
-            .Select(m => new MitgliedZeile(m.PersonId, m.Person.AnzeigeName, m.Instrument?.Name, m.Funktion))
+            .Select(m =>
+            {
+                var eff = PersonenSicht.Effektiv(m.PersonId, m.Person.Sichtbarkeit, vollSichtbar);
+                return new MitgliedZeile(m.PersonId,
+                    PersonenSicht.AnzeigeName(m.Person.Name, eff), m.Instrument?.Name, m.Funktion);
+            })
             .OrderBy(m => m.AnzeigeName)
             .ToList();
 

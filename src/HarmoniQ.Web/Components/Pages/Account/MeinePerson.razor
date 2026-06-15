@@ -1,0 +1,146 @@
+@page "/account/person"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Meine Person – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Meine Person</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_personId == null)
+{
+    <MudAlert Severity="Severity.Info">
+        Dein Konto ist noch mit keiner Person verknüpft. Öffne <MudLink Href="/personen">die Personen-Übersicht</MudLink>,
+        finde „dich“ und klicke auf <b>„Das bin ich“</b>. Nach Freigabe durch eine:n Admin kannst du hier deine Daten pflegen.
+    </MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+        Du bist mit dieser Person verknüpft und kannst ihre Daten selbst pflegen.
+        <MudLink Href="@($"/personen/{_personId}")">Öffentliche Ansicht</MudLink>
+    </MudText>
+
+    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:720px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_m.Name" Label="Name" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int?" @bind-Value="_m.Geburtsjahr" Label="Geburtsjahr (optional)"
+                                 Variant="Variant.Outlined" Min="1850" Max="2100" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="Sichtbarkeit" @bind-Value="_m.Sichtbarkeit" Label="Sichtbarkeit" Variant="Variant.Outlined"
+                           HelperText="Steuert, wie Außenstehende dich sehen. Bandkolleg:innen sehen dich immer vollständig.">
+                    <MudSelectItem Value="Sichtbarkeit.Oeffentlich">Öffentlich (voller Name + Bild)</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NurInitialen">Nur Initialen (kein Bild)</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NichtBekannt">Nicht bekannt (anonym, „?“)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.BildUrl" Label="Bild-URL (optional)" Variant="Variant.Outlined"
+                              Placeholder="https://…/foto.jpg"
+                              HelperText="Wird nur bei Sichtbarkeit „Öffentlich“ angezeigt." />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Biografie" Label="Biografie (optional)" Variant="Variant.Outlined" Lines="4" />
+            </MudItem>
+
+            <MudItem xs="12"><MudText Typo="Typo.subtitle2" Style="color:#9B59B6;">Links</MudText></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Webseite" Label="Webseite" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.X" Label="X" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Facebook" Label="Facebook" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.YouTube" Label="YouTube" Variant="Variant.Outlined" /></MudItem>
+        </MudGrid>
+
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-4"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="Speichern"
+                   Disabled="@(string.IsNullOrWhiteSpace(_m.Name))">Speichern</MudButton>
+    </MudPaper>
+}
+
+@code {
+    private bool _geladen;
+    private Guid? _personId;
+    private string? _userId;
+    private Modell _m = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var person = await db.Personen.Include(p => p.Links)
+            .FirstOrDefaultAsync(p => p.BenutzerId == _userId);
+
+        if (person != null)
+        {
+            _personId = person.Id;
+            _m = new Modell
+            {
+                Name = person.Name,
+                Biografie = person.Biografie,
+                BildUrl = person.BildUrl,
+                Geburtsjahr = person.Geburtsjahr,
+                Sichtbarkeit = person.Sichtbarkeit,
+                Webseite = person.Webseite,
+                Instagram = person.Instagram,
+                X = person.X,
+                Facebook = person.Facebook,
+                YouTube = person.YouTube
+            };
+        }
+        _geladen = true;
+    }
+
+    private async Task Speichern()
+    {
+        if (_personId == null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var person = await db.Personen.Include(p => p.Links)
+            .FirstOrDefaultAsync(p => p.Id == _personId && p.BenutzerId == _userId);
+        if (person == null) { Snackbar.Add("Person nicht gefunden oder nicht (mehr) verknüpft.", Severity.Error); return; }
+
+        person.Name = _m.Name.Trim();
+        person.Biografie = Leer(_m.Biografie);
+        person.BildUrl = Leer(_m.BildUrl);
+        person.Geburtsjahr = _m.Geburtsjahr;
+        person.Sichtbarkeit = _m.Sichtbarkeit;
+        person.Webseite = _m.Webseite;     // Convenience-Setter pflegen die Links-Tabelle
+        person.Instagram = _m.Instagram;
+        person.X = _m.X;
+        person.Facebook = _m.Facebook;
+        person.YouTube = _m.YouTube;
+
+        await db.SaveChangesAsync();
+        Snackbar.Add("Gespeichert.", Severity.Success);
+    }
+
+    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private class Modell
+    {
+        public string Name { get; set; } = "";
+        public string? Biografie { get; set; }
+        public string? BildUrl { get; set; }
+        public int? Geburtsjahr { get; set; }
+        public Sichtbarkeit Sichtbarkeit { get; set; } = Sichtbarkeit.Oeffentlich;
+        public string? Webseite { get; set; }
+        public string? Instagram { get; set; }
+        public string? X { get; set; }
+        public string? Facebook { get; set; }
+        public string? YouTube { get; set; }
+    }
+}

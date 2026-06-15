@@ -3,13 +3,14 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>@(_person?.AnzeigeName ?? "Person") – HarmoniQ</PageTitle>
+<PageTitle>@AnzeigeName – HarmoniQ</PageTitle>
 
 @if (_person == null)
 {
@@ -21,14 +22,14 @@ else
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4" Class="mb-4" Wrap="Wrap.Wrap">
         <MudAvatar Style="background:#3a1060; color:#D4AF37; width:80px; height:80px; font-size:2rem;">
-            @if (_person.BildUrl != null)
+            @if (BildAnzeige != null)
             {
-                <img src="@_person.BildUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@_person.AnzeigeName" />
+                <img src="@BildAnzeige" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@AnzeigeName" />
             }
-            else { @(_person.AnzeigeName.Length > 0 ? _person.AnzeigeName[0].ToString() : "?") }
+            else { @(AnzeigeName.Length > 0 ? AnzeigeName[0].ToString() : "?") }
         </MudAvatar>
         <div>
-            <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_person.AnzeigeName</MudText>
+            <MudText Typo="Typo.h4" Style="color:#D4AF37;">@AnzeigeName</MudText>
             <MudStack Row="true" Spacing="1" Class="mt-1" Wrap="Wrap.Wrap">
                 @foreach (var r in _person.Rollen)
                 {
@@ -42,10 +43,16 @@ else
         </div>
     </MudStack>
 
-    @if (_person.Sichtbarkeit != Sichtbarkeit.Oeffentlich)
+    @if (_eff != Sichtbarkeit.Oeffentlich)
     {
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-            Diese Person wird aus Datenschutzgründen nur eingeschränkt angezeigt (@_person.Sichtbarkeit).
+            Diese Person wird aus Datenschutzgründen nur eingeschränkt angezeigt (@_eff).
+        </MudAlert>
+    }
+    else if (_person.Sichtbarkeit != Sichtbarkeit.Oeffentlich)
+    {
+        <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">
+            Du siehst diese Person vollständig, weil ihr in derselben Band seid.
         </MudAlert>
     }
 
@@ -92,6 +99,10 @@ else
             <MudChip T="string" Icon="@Icons.Material.Filled.Verified" Style="background:#1d4d2b; color:#9fe0b0;">
                 Mit deinem Konto verknüpft
             </MudChip>
+            <MudButton Variant="Variant.Outlined" Class="ml-1" Style="color:#D4AF37; border-color:#D4AF37;"
+                       StartIcon="@Icons.Material.Filled.Edit" Href="/account/person">
+                Meine Daten bearbeiten
+            </MudButton>
         }
         else if (_offenerAntrag)
         {
@@ -167,12 +178,16 @@ else
     private bool _personVerknuepft;   // Person hat (irgend)ein Konto
     private bool _verknuepftMitMir;   // Person ist mit MIR verknüpft
     private bool _offenerAntrag;      // ich habe bereits einen offenen Antrag
+    private Sichtbarkeit _eff = Sichtbarkeit.Oeffentlich;  // effektive Sichtbarkeit für DICH
+
+    private string AnzeigeName => _person == null ? "Person" : PersonenSicht.AnzeigeName(_person.Name, _eff);
+    private string? BildAnzeige => _person == null ? null : PersonenSicht.BildUrl(_person.BildUrl, _eff);
 
     private List<BreadcrumbItem> _breadcrumbs => _person == null ? [] :
     [
         new("Startseite", "/"),
         new("Personen", "/personen"),
-        new(_person.AnzeigeName, null, disabled: true)
+        new(AnzeigeName, null, disabled: true)
     ];
 
     protected override async Task OnParametersSetAsync()
@@ -220,6 +235,9 @@ else
         _verknuepftMitMir = _userId != null && _person.BenutzerId == _userId;
         _offenerAntrag = _userId != null && await db.PersonAnsprueche.AnyAsync(a =>
             a.PersonId == Id && a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen);
+
+        var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, _userId);
+        _eff = PersonenSicht.Effektiv(_person.Id, _person.Sichtbarkeit, vollSichtbar);
     }
 
     private async Task DasBinIch()
