@@ -1,11 +1,16 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using HarmoniQ.Web.Data.Models;
 
 namespace HarmoniQ.Web.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : IdentityDbContext<ApplicationUser>(options), IDataProtectionKeyContext
 {
+    /// <summary>Persistente DataProtection-Schlüssel (Cookies/Tokens überleben Neustart/Redeploy).</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     public DbSet<Stueck> Stuecke => Set<Stueck>();
     public DbSet<Band> Bands => Set<Band>();
     public DbSet<Video> Videos => Set<Video>();
@@ -33,11 +38,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasIndex(b => new { b.VideoId, b.BenutzerId })
                 .IsUnique()
-                .HasFilter("[BenutzerId] IS NOT NULL");
+                .HasFilter("\"BenutzerId\" IS NOT NULL");
 
             e.HasIndex(b => new { b.VideoId, b.AnonymerCookieId })
                 .IsUnique()
-                .HasFilter("[AnonymerCookieId] IS NOT NULL");
+                .HasFilter("\"AnonymerCookieId\" IS NOT NULL");
 
             e.Property(b => b.GesamtEindruck).HasColumnType("INTEGER");
             e.Property(b => b.Praezision).HasColumnType("INTEGER");
