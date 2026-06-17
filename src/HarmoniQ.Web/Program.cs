@@ -62,15 +62,16 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
-        // Für die Testphase: kein E-Mail-Bestätigungs-Zwang, damit man sich sofort
-        // einloggen kann (auch via Google, das die Mail-Adresse ohnehin verifiziert).
-        // Für Produktion ggf. wieder auf true setzen – E-Mail-Versand ist konfiguriert.
-        options.SignIn.RequireConfirmedAccount = false;
+        // Login erst nach E-Mail-Bestätigung. Externe Logins (Google/Microsoft) bestätigen
+        // das Konto automatisch (Provider verifiziert die Mail) – siehe ExternalLogin.razor.
+        // Bestehende Konten wurden per Migration einmalig bestätigt (Aussperr-Schutz).
+        options.SignIn.RequireConfirmedAccount = true;
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
+    .AddErrorDescriber<DeutscherIdentityErrorDescriber>()
     .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, SmtpEmailSender>();

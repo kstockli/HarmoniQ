@@ -8,24 +8,23 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<ResetAuthenticator> Logger
 
-<PageTitle>Reset authenticator key</PageTitle>
+<PageTitle>Authenticator-Schlüssel zurücksetzen</PageTitle>
 
 <StatusMessage />
-<h3>Reset authenticator key</h3>
+<h3 style="color:#F0E6FF;">Authenticator-Schlüssel zurücksetzen</h3>
 <div class="alert alert-warning" role="alert">
     <p>
-        <span class="glyphicon glyphicon-warning-sign"></span>
-        <strong>If you reset your authenticator key your authenticator app will not work until you reconfigure it.</strong>
+        <strong>Wenn du den Schlüssel zurücksetzt, funktioniert deine Authenticator-App erst wieder, nachdem du sie neu eingerichtet hast.</strong>
     </p>
     <p>
-        This process disables 2FA until you verify your authenticator app.
-        If you do not complete your authenticator app configuration you may lose access to your account.
+        Dieser Vorgang deaktiviert die 2FA, bis du deine Authenticator-App erneut bestätigst.
+        Schliesst du die Einrichtung nicht ab, kannst du den Zugang zu deinem Konto verlieren.
     </p>
 </div>
 <div>
     <form @formname="reset-authenticator" @onsubmit="OnSubmitAsync" method="post">
         <AntiforgeryToken />
-        <button class="btn btn-danger" type="submit">Reset authenticator key</button>
+        <button class="btn btn-danger" type="submit">Authenticator-Schlüssel zurücksetzen</button>
     </form>
 </div>
 
@@ -51,7 +50,7 @@
 
         RedirectManager.RedirectToWithStatus(
             "Account/Manage/EnableAuthenticator",
-            "Your authenticator app key has been reset, you will need to configure your authenticator app using the new key.",
+            "Dein Authenticator-Schlüssel wurde zurückgesetzt. Du musst deine Authenticator-App mit dem neuen Schlüssel neu einrichten.",
             HttpContext);
     }
 }

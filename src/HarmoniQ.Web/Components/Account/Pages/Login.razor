@@ -22,6 +22,14 @@
         {
             <div class="auth-error">@errorMessage</div>
         }
+        @if (_emailUnbestaetigt)
+        {
+            <div class="auth-links">
+                <a href="@(NavigationManager.GetUriWithQueryParameters("Account/ResendEmailConfirmation", new Dictionary<string, object?> { ["email"] = Input.Email }))">
+                    Bestätigungs-E-Mail erneut senden
+                </a>
+            </div>
+        }
 
         <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
             <DataAnnotationsValidator />
@@ -67,6 +75,7 @@
 
 @code {
     private string? errorMessage;
+    private bool _emailUnbestaetigt;
     private EditContext editContext = default!;
 
     [CascadingParameter]
@@ -134,9 +143,14 @@
             Logger.LogWarning("User account locked out.");
             RedirectManager.RedirectTo("Account/Lockout");
         }
+        else if (result.IsNotAllowed)
+        {
+            _emailUnbestaetigt = true;
+            errorMessage = "Dein Konto ist noch nicht bestätigt. Bitte öffne den Link in der Bestätigungs-E-Mail – oder fordere sie unten erneut an.";
+        }
         else
         {
-            errorMessage = "Error: Invalid login attempt.";
+            errorMessage = "Anmeldung fehlgeschlagen: E-Mail oder Passwort ist falsch.";
         }
     }
 

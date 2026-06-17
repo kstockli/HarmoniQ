@@ -9,11 +9,15 @@
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Confirm email change</PageTitle>
+<PageTitle>E-Mail-Änderung bestätigen – HarmoniQ</PageTitle>
 
-<h1>Confirm email change</h1>
-
-<StatusMessage Message="@message" />
+<div class="auth-wrap">
+    <div class="auth-card">
+        <h1 class="auth-title">E-Mail-Änderung</h1>
+        <StatusMessage Message="@message" />
+        <div class="auth-links"><a href="Account/Manage/Email">Zur E-Mail-Verwaltung</a></div>
+    </div>
+</div>
 
 @code {
     private string? message;
@@ -35,14 +39,14 @@
         if (UserId is null || Email is null || Code is null)
         {
             RedirectManager.RedirectToWithStatus(
-                "Account/Login", "Error: Invalid email change confirmation link.", HttpContext);
+                "Account/Login", "Fehler: Ungültiger Bestätigungslink für die E-Mail-Änderung.", HttpContext);
             return;
         }
 
         var user = await UserManager.FindByIdAsync(UserId);
         if (user is null)
         {
-            message = "Unable to find user with Id '{userId}'";
+            message = "Benutzer konnte nicht gefunden werden.";
             return;
         }
 
@@ -50,20 +54,19 @@
         var result = await UserManager.ChangeEmailAsync(user, Email, code);
         if (!result.Succeeded)
         {
-            message = "Error changing email.";
+            message = "Fehler beim Ändern der E-Mail-Adresse.";
             return;
         }
 
-        // In our UI email and user name are one and the same, so when we update the email
-        // we need to update the user name.
+        // In unserer UI sind E-Mail und Benutzername identisch – daher auch den Benutzernamen aktualisieren.
         var setUserNameResult = await UserManager.SetUserNameAsync(user, Email);
         if (!setUserNameResult.Succeeded)
         {
-            message = "Error changing user name.";
+            message = "Fehler beim Ändern des Benutzernamens.";
             return;
         }
 
         await SignInManager.RefreshSignInAsync(user);
-        message = "Thank you for confirming your email change.";
+        message = "Danke! Deine neue E-Mail-Adresse wurde bestätigt.";
     }
 }

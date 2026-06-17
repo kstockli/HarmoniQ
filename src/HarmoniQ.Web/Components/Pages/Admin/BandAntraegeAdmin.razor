@@ -1,0 +1,113 @@
+@page "/admin/bandantraege"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Band-Beitritts-Anträge – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Band-Beitritts-Anträge</MudText>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+    Anträge von verknüpften Benutzer:innen, einer Band beizutreten. Bei Genehmigung entsteht eine Bandmitgliedschaft.
+</MudText>
+
+@if (_offen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-6">Keine offenen Anträge.</MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-6" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Offen (@_offen.Count)</MudText>
+        <MudSimpleTable Dense="true" Style="background:transparent;">
+            <thead>
+                <tr>
+                    <th style="color:#A78FC0;">Person</th><th style="color:#A78FC0;">Band</th>
+                    <th style="color:#A78FC0;">Instrument</th><th style="color:#A78FC0;">Konto</th>
+                    <th style="color:#A78FC0;">Eingereicht</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in _offen)
+                {
+                    <tr>
+                        <td><MudLink Href="@($"/personen/{a.PersonId}")" Style="color:#F0E6FF;">@a.PersonName</MudLink></td>
+                        <td style="color:#C4B0D8;">@a.BandName</td>
+                        <td style="color:#C4B0D8;">@(a.Instrument ?? "—")</td>
+                        <td style="color:#C4B0D8;">@a.Email</td>
+                        <td style="color:#C4B0D8;">@a.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#1d4d2b; color:#9fe0b0;"
+                                       OnClick="@(() => Genehmigen(a))">Genehmigen</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                       OnClick="@(() => Ablehnen(a))">Ablehnen</MudButton>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+@code {
+    private List<Zeile> _offen = [];
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _offen = await db.BandbeitrittAntraege
+            .Where(a => a.Status == PersonAnspruchStatus.Offen)
+            .OrderBy(a => a.ErstelltAm)
+            .Select(a => new Zeile(a.Id, a.PersonId, a.Person.Name, a.BandId, a.Band.Name,
+                a.Instrument != null ? a.Instrument.Name : null,
+                a.BeantragtVon != null ? a.BeantragtVon.Email : a.BeantragtVonId,
+                a.InstrumentId, a.ErstelltAm))
+            .ToListAsync();
+    }
+
+    private async Task Genehmigen(Zeile z)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var antrag = await db.BandbeitrittAntraege.FindAsync(z.Id);
+        if (antrag == null || antrag.Status != PersonAnspruchStatus.Offen) return;
+
+        if (!await db.BandMitgliedschaften.AnyAsync(m => m.BandId == antrag.BandId && m.PersonId == antrag.PersonId))
+        {
+            db.BandMitgliedschaften.Add(new BandMitgliedschaft
+            {
+                BandId = antrag.BandId,
+                PersonId = antrag.PersonId,
+                InstrumentId = antrag.InstrumentId
+            });
+        }
+        antrag.Status = PersonAnspruchStatus.Genehmigt;
+        antrag.EntschiedenAm = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Snackbar.Add($"{z.PersonName} → {z.BandName} bestätigt.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Ablehnen(Zeile z)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var antrag = await db.BandbeitrittAntraege.FindAsync(z.Id);
+        if (antrag == null || antrag.Status != PersonAnspruchStatus.Offen) return;
+        antrag.Status = PersonAnspruchStatus.Abgelehnt;
+        antrag.EntschiedenAm = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Antrag abgelehnt.", Severity.Info);
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, Guid PersonId, string PersonName, Guid BandId, string BandName,
+        string? Instrument, string? Email, Guid? InstrumentId, DateTime ErstelltAm);
+}

@@ -82,7 +82,7 @@ else
 
     @if (_bands.Count > 0)
     {
-        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+        <MudText Typo="Typo.body2" Class="mb-1" Style="color:#A78FC0;">
             <b>Bands:</b>
             @foreach (var b in _bands)
             {
@@ -90,6 +90,13 @@ else
                 <span style="color:#A78FC0;">@(b.Detail) </span>
             }
         </MudText>
+    }
+    @if (_istAdmin)
+    {
+        <MudButton Variant="Variant.Text" Size="Size.Small" Class="mb-3" Style="color:#9B59B6;"
+                   StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="BandHinzufuegen">
+            Band hinzufügen
+        </MudButton>
     }
 
     @* Selbst-Verknüpfung „das bin ich“ *@
@@ -179,6 +186,7 @@ else
     private bool _verknuepftMitMir;   // Person ist mit MIR verknüpft
     private bool _offenerAntrag;      // ich habe bereits einen offenen Antrag
     private bool _ichHabeSchonPerson; // mein Konto ist bereits mit (irgend)einer Person verknüpft
+    private bool _istAdmin;
     private Sichtbarkeit _eff = Sichtbarkeit.Oeffentlich;  // effektive Sichtbarkeit für DICH
 
     private string AnzeigeName => _person == null ? "Person" : PersonenSicht.AnzeigeName(_person.Name, _eff);
@@ -231,6 +239,7 @@ else
 
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _istAdmin = authState.User.IsInRole("Admin");
 
         _personVerknuepft = _person.BenutzerId != null;
         _verknuepftMitMir = _userId != null && _person.BenutzerId == _userId;
@@ -269,6 +278,46 @@ else
         await db.SaveChangesAsync();
         _offenerAntrag = true;
         Snackbar.Add("Antrag gesendet – ein:e Admin prüft die Verknüpfung.", Severity.Success);
+    }
+
+    // Admin: Band direkt hinzufügen (ohne Antrag).
+    private async Task BandHinzufuegen()
+    {
+        if (!_istAdmin) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var schon = await db.BandMitgliedschaften.Where(m => m.PersonId == Id)
+            .Select(m => m.BandId).ToListAsync();
+        var bandOptionen = await db.Bands
+            .Where(b => !schon.Contains(b.Id))
+            .OrderBy(b => b.Name)
+            .Select(b => new BandbeitrittDialog.Option(b.Id, b.Name))
+            .ToListAsync();
+        if (bandOptionen.Count == 0) { Snackbar.Add("Bereits in allen Bands.", Severity.Info); return; }
+
+        var instrumentOptionen = await db.Instrumente.OrderBy(i => i.Name)
+            .Select(i => new BandbeitrittDialog.Option(i.Id, i.Name)).ToListAsync();
+        var parameters = new DialogParameters<BandbeitrittDialog>
+        {
+            { x => x.Bands, bandOptionen },
+            { x => x.Instrumente, instrumentOptionen }
+        };
+        var dialog = await DialogService.ShowAsync<BandbeitrittDialog>("Band hinzufügen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var wahl = (BandbeitrittDialog.Auswahl)result.Data!;
+
+        db.BandMitgliedschaften.Add(new BandMitgliedschaft
+        {
+            BandId = wahl.BandId,
+            PersonId = Id,
+            InstrumentId = wahl.InstrumentId
+        });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Band hinzugefügt.", Severity.Success);
+        await OnParametersSetAsync();
+        StateHasChanged();
     }
 
     private static string RolleText(PersonRolleTyp r) => r switch

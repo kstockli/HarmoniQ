@@ -37,6 +37,14 @@ public static class AdminInitializer
                 await userManager.AddToRoleAsync(user, AdminRole);
                 logger.LogInformation("Benutzer {Email} wurde zur Rolle '{Role}' hinzugefügt.", email, AdminRole);
             }
+
+            // Admin nie wegen fehlender E-Mail-Bestätigung aussperren.
+            if (!user.EmailConfirmed)
+            {
+                user.EmailConfirmed = true;
+                await userManager.UpdateAsync(user);
+                logger.LogInformation("Admin {Email} als E-Mail-bestätigt markiert.", email);
+            }
         }
     }
 }

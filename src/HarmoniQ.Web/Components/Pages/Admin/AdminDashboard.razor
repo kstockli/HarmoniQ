@@ -19,29 +19,31 @@
 
 <MudDivider Class="my-6" Style="border-color:#3a1060;" />
 
-<MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060; max-width:520px;">
-    <MudCardContent>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-            <MudBadge Content="_ausstehend" Color="Color.Error" Overlap="true" Visible="_ausstehend > 0">
-                <MudIcon Icon="@Icons.Material.Filled.RateReview" Style="color:#D4AF37;font-size:2.5rem;" />
-            </MudBadge>
-            <div>
-                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Video-Vorschläge</MudText>
-                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
-                    @_ausstehend ausstehende@(_ausstehend == 1 ? "r" : "") Vorschlag@(_ausstehend == 1 ? "" : "läge")
-                </MudText>
-            </div>
-        </MudStack>
-    </MudCardContent>
-    <MudCardActions>
-        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Href="/admin/vorschlaege">
-            Zur Review-Queue
-        </MudButton>
-    </MudCardActions>
-</MudCard>
+<MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
+    Ausstehende Anträge
+    @if (_offenGesamt > 0)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-2">@_offenGesamt</MudChip>
+    }
+</MudText>
+@if (_offenGesamt == 0)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-4" Style="max-width:520px;">
+        Alles erledigt – keine offenen Anträge.
+    </MudAlert>
+}
+<MudGrid>
+    @AntragCard("Video-Vorschläge", _videosOffen, Icons.Material.Filled.RateReview, "/admin/vorschlaege")
+    @AntragCard("Mitwirkungs-Vorschläge", _mitwirkungenOffen, Icons.Material.Filled.GroupAdd, "/admin/mitwirkungen")
+    @AntragCard("Richtigstellungen", _richtigstellungenOffen, Icons.Material.Filled.ReportProblem, "/admin/richtigstellungen")
+    @AntragCard("Verknüpfungs-Anträge", _verknuepfungenOffen, Icons.Material.Filled.PersonPin, "/admin/verknuepfungen")
+    @AntragCard("Band-Anträge", _bandantraegeOffen, Icons.Material.Filled.GroupAdd, "/admin/bandantraege")
+</MudGrid>
 
 @code {
-    private int _personen, _stuecke, _bands, _videos, _ausstehend;
+    private int _personen, _stuecke, _bands, _videos;
+    private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen;
+    private int _offenGesamt;
 
     protected override async Task OnInitializedAsync()
     {
@@ -50,8 +52,38 @@
         _stuecke = await db.Stuecke.CountAsync();
         _bands = await db.Bands.CountAsync();
         _videos = await db.Videos.CountAsync();
-        _ausstehend = await db.Videos.CountAsync(v => v.Status == VideoStatus.Ausstehend);
+
+        _videosOffen = await db.Videos.CountAsync(v => v.Status == VideoStatus.Ausstehend);
+        _mitwirkungenOffen = await db.VideoMitwirkungen.CountAsync(m => m.Status == VideoStatus.Ausstehend);
+        _richtigstellungenOffen = await db.Richtigstellungen.CountAsync(r => r.Status == RichtigstellungStatus.Offen);
+        _verknuepfungenOffen = await db.PersonAnsprueche.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
+        _bandantraegeOffen = await db.BandbeitrittAntraege.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
+        _offenGesamt = _videosOffen + _mitwirkungenOffen + _richtigstellungenOffen + _verknuepfungenOffen + _bandantraegeOffen;
     }
+
+    private RenderFragment AntragCard(string titel, int anzahl, string icon, string href) => __builder =>
+    {
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="4" Style="@($"background:#1a0030; border:1px solid {(anzahl > 0 ? "#D4AF37" : "#3a1060")};")">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        <MudBadge Content="anzahl" Color="Color.Error" Overlap="true" Visible="anzahl > 0">
+                            <MudIcon Icon="@icon" Style="@($"color:{(anzahl > 0 ? "#D4AF37" : "#6f5a86")};font-size:2.2rem;")" />
+                        </MudBadge>
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Style="color:#F0E6FF;">@titel</MudText>
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                                @(anzahl == 0 ? "keine offen" : $"{anzahl} offen")
+                            </MudText>
+                        </div>
+                    </MudStack>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Text" Style="color:#D4AF37;" Href="@href">Öffnen</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    };
 
     private RenderFragment AdminCard(string titel, int anzahl, string icon, string href) => __builder =>
     {

@@ -23,6 +23,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Richtigstellung> Richtigstellungen => Set<Richtigstellung>();
     public DbSet<BandMitgliedschaft> BandMitgliedschaften => Set<BandMitgliedschaft>();
     public DbSet<PersonAnspruch> PersonAnsprueche => Set<PersonAnspruch>();
+    public DbSet<BandbeitrittAntrag> BandbeitrittAntraege => Set<BandbeitrittAntrag>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -139,6 +140,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasIndex(a => a.Status);
             // Pro Benutzer nur ein offener Antrag je Person.
             e.HasIndex(a => new { a.PersonId, a.BenutzerId, a.Status });
+        });
+
+        builder.Entity<BandbeitrittAntrag>(e =>
+        {
+            e.HasOne(a => a.Person).WithMany()
+                .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.Band).WithMany()
+                .HasForeignKey(a => a.BandId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.Instrument).WithMany()
+                .HasForeignKey(a => a.InstrumentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(a => a.BeantragtVon).WithMany()
+                .HasForeignKey(a => a.BeantragtVonId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(a => a.Status);
         });
 
         builder.Entity<Richtigstellung>(e =>

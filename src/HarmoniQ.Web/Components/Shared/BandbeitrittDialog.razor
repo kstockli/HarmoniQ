@@ -1,0 +1,51 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        @if (Hinweis != null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">@Hinweis</MudText>
+        }
+        <MudAutocomplete T="Option" Label="Band" Variant="Variant.Outlined" Required="true" Class="mb-3"
+                         Value="_band" ValueChanged="b => _band = b" SearchFunc="@((s, ct) => Suche(Bands, s))"
+                         ToStringFunc="@(o => o?.Name ?? "")" MaxItems="25" ResetValueOnEmptyText="false" CoerceText="true"
+                         Placeholder="tippen zum Suchen…" />
+        <MudAutocomplete T="Option" Label="Instrument (optional)" Variant="Variant.Outlined" Clearable="true"
+                         Value="_instrument" ValueChanged="i => _instrument = i" SearchFunc="@((s, ct) => Suche(Instrumente, s))"
+                         ToStringFunc="@(o => o?.Name ?? "")" MaxItems="25" ResetValueOnEmptyText="false" CoerceText="true"
+                         Placeholder="tippen zum Suchen…" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Ok" Disabled="@(_band == null)">@OkText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public List<Option> Bands { get; set; } = [];
+    [Parameter] public List<Option> Instrumente { get; set; } = [];
+    [Parameter] public string? Hinweis { get; set; }
+    [Parameter] public string OkText { get; set; } = "Hinzufügen";
+
+    private Option? _band;
+    private Option? _instrument;
+
+    private static Task<IEnumerable<Option>> Suche(List<Option> quelle, string? s)
+    {
+        IEnumerable<Option> r = string.IsNullOrWhiteSpace(s)
+            ? quelle
+            : quelle.Where(o => o.Name.Contains(s, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(25));
+    }
+
+    private void Ok()
+    {
+        if (_band == null) return;
+        MudDialog.Close(DialogResult.Ok(new Auswahl(_band.Id, _instrument?.Id)));
+    }
+
+    public record Option(Guid Id, string Name);
+    public record Auswahl(Guid BandId, Guid? InstrumentId);
+}

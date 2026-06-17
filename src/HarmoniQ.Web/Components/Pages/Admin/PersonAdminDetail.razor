@@ -1,0 +1,350 @@
+@page "/admin/personen/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_name ?? "Person") verwalten – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/personen"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Personen</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_name</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"/personen/{Id}")"
+               StartIcon="@Icons.Material.Filled.Visibility">Öffentliche Ansicht</MudButton>
+</MudStack>
+
+@if (_name == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @* Stammdaten *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Stammdaten</MudText>
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_m.Name" Label="Name" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int?" @bind-Value="_m.Geburtsjahr" Label="Geburtsjahr" Variant="Variant.Outlined" Min="1800" Max="2100" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Sichtbarkeit" @bind-Value="_m.Sichtbarkeit" Label="Sichtbarkeit" Variant="Variant.Outlined">
+                    <MudSelectItem Value="Sichtbarkeit.Oeffentlich">Öffentlich</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NurInitialen">Nur Initialen</MudSelectItem>
+                    <MudSelectItem Value="Sichtbarkeit.NichtBekannt">Nicht bekannt (?)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PersonRolleTyp" MultiSelection="true" @bind-SelectedValues="_rollenSel" Label="Rollen"
+                           Variant="Variant.Outlined" MultiSelectionTextFunc="@(v => string.Join(", ", v))">
+                    <MudSelectItem Value="PersonRolleTyp.Komponist">Komponist:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Dirigent">Dirigent:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="Guid" MultiSelection="true" @bind-SelectedValues="_instrumentSel" Label="Instrumente"
+                           Variant="Variant.Outlined" MultiSelectionTextFunc="InstrNamen">
+                    @foreach (var i in _instrumente)
+                    {
+                        <MudSelectItem T="Guid" Value="@i.Id">@i.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.BildUrl" Label="Bild-URL" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Biografie" Label="Biografie" Variant="Variant.Outlined" Lines="3" />
+            </MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Webseite" Label="Webseite" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.X" Label="X" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Facebook" Label="Facebook" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.YouTube" Label="YouTube" Variant="Variant.Outlined" /></MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-3"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="StammdatenSpeichern"
+                   Disabled="@string.IsNullOrWhiteSpace(_m.Name)">Stammdaten speichern</MudButton>
+    </MudPaper>
+
+    @* Bands *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Bands (@_bands.Count)</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="BandHinzufuegen">Band hinzufügen</MudButton>
+        </MudStack>
+        @if (_bands.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Bandmitgliedschaften.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Style="background:transparent;">
+                <tbody>
+                    @foreach (var b in _bands)
+                    {
+                        <tr>
+                            <td style="color:#F0E6FF;">@b.BandName</td>
+                            <td style="color:#C4B0D8;">@(b.Instrument ?? "—")</td>
+                            <td style="color:#C4B0D8;">@(b.Funktion ?? "")</td>
+                            <td><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => BandEntfernen(b.Id))" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+
+    @* Mitwirkungen *@
+    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Mitwirkungen (@_mitwirkungen.Count)</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="MitwirkungHinzufuegen">Mitwirkung hinzufügen</MudButton>
+        </MudStack>
+        @if (_mitwirkungen.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Mitwirkungen.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Style="background:transparent;">
+                <tbody>
+                    @foreach (var m in _mitwirkungen)
+                    {
+                        <tr>
+                            <td><MudLink Href="@($"/videos/{m.VideoId}")" Style="color:#F0E6FF;">@m.VideoLabel</MudLink></td>
+                            <td style="color:#C4B0D8;">@m.Beschreibung</td>
+                            <td>
+                                @if (m.Status != VideoStatus.Genehmigt)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="background:#3a1060; color:#A78FC0;">@m.Status</MudChip>
+                                }
+                            </td>
+                            <td><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => MitwirkungEntfernen(m.Id))" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private string? _name;
+    private Modell _m = new();
+    private List<(Guid Id, string Name)> _instrumente = [];
+    private IReadOnlyCollection<PersonRolleTyp> _rollenSel = new HashSet<PersonRolleTyp>();
+    private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
+    private List<BandZeile> _bands = [];
+    private List<MitwirkungZeile> _mitwirkungen = [];
+
+    private string InstrName(Guid id) => _instrumente.FirstOrDefault(i => i.Id == id).Name ?? "?";
+    private string InstrNamen(IReadOnlyList<string> vals) => string.Join(", ", vals.Select(v => InstrName(Guid.Parse(v))));
+
+    protected override async Task OnParametersSetAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _instrumente = await db.Instrumente.OrderBy(i => i.Name)
+            .Select(i => new ValueTuple<Guid, string>(i.Id, i.Name)).ToListAsync();
+
+        var person = await db.Personen
+            .Include(p => p.Rollen).Include(p => p.Links).Include(p => p.Instrumente)
+            .FirstOrDefaultAsync(p => p.Id == Id);
+        if (person == null) { Nav.NavigateTo("/admin/personen"); return; }
+        _name = person.Name;
+        _m = new Modell
+        {
+            Name = person.Name, Sichtbarkeit = person.Sichtbarkeit, Geburtsjahr = person.Geburtsjahr,
+            BildUrl = person.BildUrl, Biografie = person.Biografie,
+            Webseite = person.Webseite, Instagram = person.Instagram, X = person.X,
+            Facebook = person.Facebook, YouTube = person.YouTube
+        };
+        _rollenSel = new HashSet<PersonRolleTyp>(person.Rollen.Select(r => r.Rolle));
+        _instrumentSel = new HashSet<Guid>(person.Instrumente.Select(pi => pi.InstrumentId));
+
+        _bands = await db.BandMitgliedschaften
+            .Where(m => m.PersonId == Id)
+            .OrderBy(m => m.Band.Name)
+            .Select(m => new BandZeile(m.Id, m.Band.Name,
+                m.Instrument != null ? m.Instrument.Name : null, m.Funktion))
+            .ToListAsync();
+
+        _mitwirkungen = await db.VideoMitwirkungen
+            .Where(m => m.PersonId == Id)
+            .OrderBy(m => m.Video.Stueck.Titel)
+            .Select(m => new MitwirkungZeile(m.Id, m.VideoId,
+                m.Video.Stueck.Titel + " – " + m.Video.Titel, m.Rolle,
+                m.Instrument != null ? m.Instrument.Name : null,
+                m.Stimme != null ? m.Stimme.Bezeichnung : null, m.Status))
+            .ToListAsync();
+    }
+
+    private async Task StammdatenSpeichern()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var p = await db.Personen.Include(x => x.Rollen).Include(x => x.Links).Include(x => x.Instrumente)
+            .FirstOrDefaultAsync(x => x.Id == Id);
+        if (p == null) return;
+
+        p.Name = _m.Name.Trim();
+        p.Sichtbarkeit = _m.Sichtbarkeit;
+        p.Geburtsjahr = _m.Geburtsjahr;
+        p.BildUrl = Leer(_m.BildUrl);
+        p.Biografie = Leer(_m.Biografie);
+        p.Webseite = _m.Webseite;
+        p.Instagram = _m.Instagram;
+        p.X = _m.X;
+        p.Facebook = _m.Facebook;
+        p.YouTube = _m.YouTube;
+
+        // Rollen synchronisieren
+        var rollen = _rollenSel.ToHashSet();
+        foreach (var weg in p.Rollen.Where(r => !rollen.Contains(r.Rolle)).ToList())
+        { p.Rollen.Remove(weg); db.PersonRollen.Remove(weg); }
+        foreach (var neu in rollen.Where(rt => p.Rollen.All(r => r.Rolle != rt)))
+        { var pr = new PersonRolle { PersonId = p.Id, Rolle = neu }; p.Rollen.Add(pr); db.PersonRollen.Add(pr); }
+
+        // Instrumente synchronisieren
+        var instr = _instrumentSel.ToHashSet();
+        foreach (var weg in p.Instrumente.Where(pi => !instr.Contains(pi.InstrumentId)).ToList())
+        { p.Instrumente.Remove(weg); db.PersonInstrumente.Remove(weg); }
+        foreach (var iid in instr.Where(id => p.Instrumente.All(pi => pi.InstrumentId != id)))
+        { var pi = new PersonInstrument { PersonId = p.Id, InstrumentId = iid }; p.Instrumente.Add(pi); db.PersonInstrumente.Add(pi); }
+
+        await db.SaveChangesAsync();
+        Snackbar.Add("Stammdaten gespeichert.", Severity.Success);
+        await Laden();
+    }
+
+    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private async Task BandHinzufuegen()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var schon = await db.BandMitgliedschaften.Where(m => m.PersonId == Id).Select(m => m.BandId).ToListAsync();
+        var bandOpt = await db.Bands.Where(b => !schon.Contains(b.Id)).OrderBy(b => b.Name)
+            .Select(b => new BandbeitrittDialog.Option(b.Id, b.Name)).ToListAsync();
+        if (bandOpt.Count == 0) { Snackbar.Add("Bereits in allen Bands.", Severity.Info); return; }
+        var instrOpt = await db.Instrumente.OrderBy(i => i.Name)
+            .Select(i => new BandbeitrittDialog.Option(i.Id, i.Name)).ToListAsync();
+
+        var parameters = new DialogParameters<BandbeitrittDialog>
+        {
+            { x => x.Bands, bandOpt }, { x => x.Instrumente, instrOpt }
+        };
+        var dialog = await DialogService.ShowAsync<BandbeitrittDialog>("Band hinzufügen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var wahl = (BandbeitrittDialog.Auswahl)result.Data!;
+
+        db.BandMitgliedschaften.Add(new BandMitgliedschaft
+        {
+            BandId = wahl.BandId, PersonId = Id, InstrumentId = wahl.InstrumentId
+        });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Band hinzugefügt.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task BandEntfernen(Guid mitgliedschaftId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var m = await db.BandMitgliedschaften.FindAsync(mitgliedschaftId);
+        if (m != null) { db.BandMitgliedschaften.Remove(m); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private async Task MitwirkungHinzufuegen()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var videoOpt = await db.Videos.OrderBy(v => v.Stueck.Titel)
+            .Select(v => new MitwirkungErfassenDialog.VideoOption(v.Id, v.Stueck.Titel + " – " + v.Titel))
+            .ToListAsync();
+        var instrOpt = await db.Instrumente.OrderBy(i => i.Name)
+            .Select(i => new MitwirkungErfassenDialog.InstrumentOption(i.Id, i.Name)).ToListAsync();
+
+        var parameters = new DialogParameters<MitwirkungErfassenDialog>
+        {
+            { x => x.Videos, videoOpt }, { x => x.Instrumente, instrOpt }
+        };
+        var dialog = await DialogService.ShowAsync<MitwirkungErfassenDialog>("Mitwirkung hinzufügen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var wahl = (MitwirkungErfassenDialog.Auswahl)result.Data!;
+
+        if (await db.VideoMitwirkungen.AnyAsync(m => m.VideoId == wahl.VideoId && m.PersonId == Id && m.Rolle == wahl.Rolle))
+        {
+            Snackbar.Add("Diese Mitwirkung existiert bereits.", Severity.Warning);
+            return;
+        }
+        db.VideoMitwirkungen.Add(new VideoMitwirkung
+        {
+            VideoId = wahl.VideoId, PersonId = Id, Rolle = wahl.Rolle,
+            InstrumentId = wahl.InstrumentId, Status = VideoStatus.Genehmigt
+        });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Mitwirkung hinzugefügt.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task MitwirkungEntfernen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var m = await db.VideoMitwirkungen.FindAsync(id);
+        if (m != null) { db.VideoMitwirkungen.Remove(m); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private class Modell
+    {
+        public string Name { get; set; } = "";
+        public Sichtbarkeit Sichtbarkeit { get; set; } = Sichtbarkeit.Oeffentlich;
+        public int? Geburtsjahr { get; set; }
+        public string? BildUrl { get; set; }
+        public string? Biografie { get; set; }
+        public string? Webseite { get; set; }
+        public string? Instagram { get; set; }
+        public string? X { get; set; }
+        public string? Facebook { get; set; }
+        public string? YouTube { get; set; }
+    }
+
+    private record BandZeile(Guid Id, string BandName, string? Instrument, string? Funktion);
+    private record MitwirkungZeile(Guid Id, Guid VideoId, string VideoLabel, MitwirkungRolle Rolle,
+        string? Instrument, string? Stimme, VideoStatus Status)
+    {
+        public string Beschreibung
+        {
+            get
+            {
+                if (Rolle == MitwirkungRolle.Dirigent) return "Dirigent:in";
+                var t = new List<string> { "Musikant:in" };
+                if (Instrument != null) t.Add(Instrument);
+                if (Stimme != null) t.Add(Stimme);
+                return string.Join(" · ", t);
+            }
+        }
+    }
+}

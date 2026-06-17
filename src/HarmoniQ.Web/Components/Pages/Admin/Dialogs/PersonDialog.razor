@@ -26,6 +26,14 @@
             <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
         </MudSelect>
 
+        <MudSelect T="Guid" MultiSelection="true" @bind-SelectedValues="_instrumentSel" Label="Instrumente"
+                   Variant="Variant.Outlined" Class="mb-3" MultiSelectionTextFunc="NamenText">
+            @foreach (var i in Instrumente)
+            {
+                <MudSelectItem T="Guid" Value="@i.Id">@i.Name</MudSelectItem>
+            }
+        </MudSelect>
+
         <MudTextField @bind-Value="_m.Biografie" Label="Biografie" Variant="Variant.Outlined" Lines="3" Class="mb-3" />
         <MudTextField @bind-Value="_m.BildUrl" Label="Bild-URL" Variant="Variant.Outlined" Class="mb-3" />
 
@@ -46,9 +54,14 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public PersonModell? Vorhanden { get; set; }
+    [Parameter] public List<InstrumentOption> Instrumente { get; set; } = [];
 
     private PersonModell _m = new();
     private IReadOnlyCollection<PersonRolleTyp> _rollen = new HashSet<PersonRolleTyp>();
+    private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
+
+    private string NameOf(Guid id) => Instrumente.FirstOrDefault(i => i.Id == id)?.Name ?? "?";
+    private string NamenText(IReadOnlyList<string> vals) => string.Join(", ", vals.Select(v => NameOf(Guid.Parse(v))));
 
     protected override void OnInitialized()
     {
@@ -67,15 +80,18 @@
                 X = Vorhanden.X,
                 Facebook = Vorhanden.Facebook,
                 YouTube = Vorhanden.YouTube,
-                Rollen = new HashSet<PersonRolleTyp>(Vorhanden.Rollen)
+                Rollen = new HashSet<PersonRolleTyp>(Vorhanden.Rollen),
+                InstrumentIds = new HashSet<Guid>(Vorhanden.InstrumentIds)
             };
             _rollen = new HashSet<PersonRolleTyp>(Vorhanden.Rollen);
+            _instrumentSel = new HashSet<Guid>(Vorhanden.InstrumentIds);
         }
     }
 
     private void Speichern()
     {
         _m.Rollen = new HashSet<PersonRolleTyp>(_rollen);
+        _m.InstrumentIds = new HashSet<Guid>(_instrumentSel);
         MudDialog.Close(DialogResult.Ok(_m));
     }
 
@@ -94,5 +110,8 @@
         public string? Facebook { get; set; }
         public string? YouTube { get; set; }
         public HashSet<PersonRolleTyp> Rollen { get; set; } = [];
+        public HashSet<Guid> InstrumentIds { get; set; } = [];
     }
+
+    public record InstrumentOption(Guid Id, string Name);
 }

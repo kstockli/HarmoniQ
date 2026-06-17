@@ -9,40 +9,33 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<LoginWith2fa> Logger
 
-<PageTitle>Two-factor authentication</PageTitle>
+<PageTitle>Zwei-Faktor-Authentifizierung – HarmoniQ</PageTitle>
 
-<h1>Two-factor authentication</h1>
-<hr />
-<StatusMessage Message="@message" />
-<p>Your login is protected with an authenticator app. Enter your authenticator code below.</p>
-<div class="row">
-    <div class="col-md-4">
+<div class="auth-wrap">
+    <div class="auth-card">
+        <h1 class="auth-title">Zwei-Faktor-Authentifizierung</h1>
+        <p class="auth-sub">Dein Login ist durch eine Authenticator-App geschützt. Gib unten deinen Code ein.</p>
+        <StatusMessage Message="@message" />
         <EditForm Model="Input" FormName="login-with-2fa" OnValidSubmit="OnValidSubmitAsync" method="post">
             <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
             <input type="hidden" name="RememberMe" value="@RememberMe" />
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.TwoFactorCode" id="Input.TwoFactorCode" class="form-control" autocomplete="off" />
-                <label for="Input.TwoFactorCode" class="form-label">Authenticator code</label>
+            <div class="auth-field">
+                <label for="Input.TwoFactorCode" class="auth-label">Authenticator-Code</label>
+                <InputText @bind-Value="Input.TwoFactorCode" id="Input.TwoFactorCode" class="auth-input" autocomplete="off" />
                 <ValidationMessage For="() => Input.TwoFactorCode" class="text-danger" />
             </div>
-            <div class="checkbox mb-3">
-                <label for="remember-machine" class="form-label">
-                    <InputCheckbox @bind-Value="Input.RememberMachine" />
-                    Remember this machine
-                </label>
-            </div>
-            <div>
-                <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-            </div>
+            <label class="auth-check">
+                <InputCheckbox @bind-Value="Input.RememberMachine" /> Diesem Gerät vertrauen
+            </label>
+            <button type="submit" class="auth-btn">Anmelden</button>
         </EditForm>
+        <div class="auth-links">
+            <a href="Account/LoginWithRecoveryCode?ReturnUrl=@ReturnUrl">Kein Zugriff auf die App? Mit Wiederherstellungscode anmelden</a>
+        </div>
     </div>
 </div>
-<p>
-    Don't have access to your authenticator device? You can
-    <a href="Account/LoginWithRecoveryCode?ReturnUrl=@ReturnUrl">log in with a recovery code</a>.
-</p>
 
 @code {
     private string? message;
@@ -85,19 +78,19 @@
         else
         {
             Logger.LogWarning("Invalid authenticator code entered for user with ID '{UserId}'.", userId);
-            message = "Error: Invalid authenticator code.";
+            message = "Fehler: Ungültiger Authenticator-Code.";
         }
     }
 
     private sealed class InputModel
     {
         [Required]
-        [StringLength(7, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [StringLength(7, ErrorMessage = "Der Code muss zwischen {2} und {1} Zeichen lang sein.", MinimumLength = 6)]
         [DataType(DataType.Text)]
-        [Display(Name = "Authenticator code")]
+        [Display(Name = "Authenticator-Code")]
         public string? TwoFactorCode { get; set; }
 
-        [Display(Name = "Remember this machine")]
+        [Display(Name = "Diesem Gerät vertrauen")]
         public bool RememberMachine { get; set; }
     }
 }

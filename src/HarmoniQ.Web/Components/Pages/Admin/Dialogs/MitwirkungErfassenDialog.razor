@@ -1,0 +1,64 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudAutocomplete T="VideoOption" Label="Video" Variant="Variant.Outlined" Required="true" Class="mb-3"
+                         Value="_video" ValueChanged="v => _video = v" SearchFunc="Suche"
+                         ToStringFunc="@(o => o?.Label ?? "")" MaxItems="25" ResetValueOnEmptyText="false" CoerceText="true" />
+
+        <MudSelect T="MitwirkungRolle" @bind-Value="_rolle" Label="Rolle" Variant="Variant.Outlined" Class="mb-3">
+            <MudSelectItem Value="MitwirkungRolle.Musikant">Musikant:in</MudSelectItem>
+            <MudSelectItem Value="MitwirkungRolle.Dirigent">Dirigent:in</MudSelectItem>
+        </MudSelect>
+
+        @if (_rolle == MitwirkungRolle.Musikant)
+        {
+            <MudAutocomplete T="InstrumentOption" Label="Instrument (optional)" Variant="Variant.Outlined" Clearable="true"
+                             Value="_instrument" ValueChanged="i => _instrument = i" SearchFunc="SucheInstrument"
+                             ToStringFunc="@(o => o?.Name ?? "")" MaxItems="25" ResetValueOnEmptyText="false" CoerceText="true"
+                             Placeholder="tippen zum Suchen…" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Ok" Disabled="@(_video == null)">Hinzufügen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public List<VideoOption> Videos { get; set; } = [];
+    [Parameter] public List<InstrumentOption> Instrumente { get; set; } = [];
+
+    private VideoOption? _video;
+    private MitwirkungRolle _rolle = MitwirkungRolle.Musikant;
+    private InstrumentOption? _instrument;
+
+    private Task<IEnumerable<VideoOption>> Suche(string? v, CancellationToken ct)
+    {
+        IEnumerable<VideoOption> r = string.IsNullOrWhiteSpace(v)
+            ? Videos
+            : Videos.Where(o => o.Label.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(25));
+    }
+
+    private Task<IEnumerable<InstrumentOption>> SucheInstrument(string? v, CancellationToken ct)
+    {
+        IEnumerable<InstrumentOption> r = string.IsNullOrWhiteSpace(v)
+            ? Instrumente
+            : Instrumente.Where(o => o.Name.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(25));
+    }
+
+    private void Ok()
+    {
+        if (_video == null) return;
+        var instr = _rolle == MitwirkungRolle.Musikant ? _instrument?.Id : null;
+        MudDialog.Close(DialogResult.Ok(new Auswahl(_video.Id, _rolle, instr)));
+    }
+
+    public record VideoOption(Guid Id, string Label);
+    public record InstrumentOption(Guid Id, string Name);
+    public record Auswahl(Guid VideoId, MitwirkungRolle Rolle, Guid? InstrumentId);
+}

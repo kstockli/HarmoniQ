@@ -7,6 +7,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>Personen verwalten – Admin</PageTitle>
 
@@ -28,14 +29,15 @@
         <PropertyColumn Property="z => z.Name" Title="Name" />
         <TemplateColumn Title="Sichtbarkeit"><CellTemplate>@SichtbarkeitText(context.Item.Sichtbarkeit)</CellTemplate></TemplateColumn>
         <TemplateColumn Title="Rollen"><CellTemplate>@string.Join(", ", context.Item.Rollen.Select(RolleText))</CellTemplate></TemplateColumn>
+        <PropertyColumn Property="z => z.AnzahlBands" Title="Bands" />
         <PropertyColumn Property="z => z.AnzahlWerke" Title="Werke" />
         <PropertyColumn Property="z => z.AnzahlAuftritte" Title="Auftritte" />
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Style="color:#9B59B6;"
-                               Href="@($"/personen/{context.Item.Id}")" />
+                               title="Öffentliche Ansicht" Href="@($"/personen/{context.Item.Id}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
-                               OnClick="@(() => Bearbeiten(context.Item.Id))" />
+                               title="Bearbeiten (Stammdaten, Bands, Mitwirkungen)" Href="@($"/admin/personen/{context.Item.Id}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => Loeschen(context.Item))" />
             </CellTemplate>
@@ -46,6 +48,7 @@
 @code {
     private List<Zeile> _alle = [];
     private List<Zeile> _gefiltert = [];
+    private List<PersonDialog.InstrumentOption> _instrumente = [];
     private string _suche = "";
 
     protected override async Task OnInitializedAsync() => await Laden();
@@ -53,6 +56,8 @@
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        _instrumente = await db.Instrumente.OrderBy(i => i.Name)
+            .Select(i => new PersonDialog.InstrumentOption(i.Id, i.Name)).ToListAsync();
         var personen = await db.Personen
             .Include(p => p.Rollen)
             .OrderBy(p => p.Name)
@@ -61,11 +66,13 @@
             .Select(g => new { g.Key, C = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.C);
         var auftritte = await db.VideoMitwirkungen.GroupBy(m => m.PersonId)
             .Select(g => new { g.Key, C = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.C);
+        var bands = await db.BandMitgliedschaften.GroupBy(m => m.PersonId)
+            .Select(g => new { g.Key, C = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.C);
 
         _alle = personen.Select(p => new Zeile(
             p.Id, p.Name, p.Sichtbarkeit,
             p.Rollen.Select(r => r.Rolle).ToList(),
-            werke.GetValueOrDefault(p.Id), auftritte.GetValueOrDefault(p.Id))).ToList();
+            bands.GetValueOrDefault(p.Id), werke.GetValueOrDefault(p.Id), auftritte.GetValueOrDefault(p.Id))).ToList();
         Filtern();
     }
 
@@ -79,18 +86,24 @@
         if (id is { } pid)
         {
             await using var db0 = await DbFactory.CreateDbContextAsync();
-            var p = await db0.Personen.Include(x => x.Rollen).Include(x => x.Links).FirstOrDefaultAsync(x => x.Id == pid);
+            var p = await db0.Personen.Include(x => x.Rollen).Include(x => x.Links).Include(x => x.Instrumente)
+                .FirstOrDefaultAsync(x => x.Id == pid);
             if (p == null) return;
             vorhanden = new PersonDialog.PersonModell
             {
                 Id = p.Id, Name = p.Name, Sichtbarkeit = p.Sichtbarkeit, Geburtsjahr = p.Geburtsjahr,
                 Biografie = p.Biografie, BildUrl = p.BildUrl,
                 Webseite = p.Webseite, Instagram = p.Instagram, X = p.X, Facebook = p.Facebook, YouTube = p.YouTube,
-                Rollen = new HashSet<PersonRolleTyp>(p.Rollen.Select(r => r.Rolle))
+                Rollen = new HashSet<PersonRolleTyp>(p.Rollen.Select(r => r.Rolle)),
+                InstrumentIds = new HashSet<Guid>(p.Instrumente.Select(pi => pi.InstrumentId))
             };
         }
 
-        var parameters = new DialogParameters<PersonDialog> { { x => x.Vorhanden, vorhanden } };
+        var parameters = new DialogParameters<PersonDialog>
+        {
+            { x => x.Vorhanden, vorhanden },
+            { x => x.Instrumente, _instrumente }
+        };
         var dialog = await DialogService.ShowAsync<PersonDialog>(id == null ? "Neue Person" : "Person bearbeiten",
             parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var result = await dialog.Result;
@@ -106,7 +119,8 @@
         }
         else
         {
-            entity = await db.Personen.Include(x => x.Rollen).Include(x => x.Links).FirstAsync(x => x.Id == m.Id);
+            entity = await db.Personen.Include(x => x.Rollen).Include(x => x.Links).Include(x => x.Instrumente)
+                .FirstAsync(x => x.Id == m.Id);
         }
 
         entity.Name = m.Name.Trim();
@@ -135,8 +149,24 @@
         SyncLink(db, entity, LinkTyp.Facebook, m.Facebook);
         SyncLink(db, entity, LinkTyp.YouTube, m.YouTube);
 
+        // Instrumente synchronisieren
+        foreach (var weg in entity.Instrumente.Where(pi => !m.InstrumentIds.Contains(pi.InstrumentId)).ToList())
+        {
+            entity.Instrumente.Remove(weg);
+            db.PersonInstrumente.Remove(weg);
+        }
+        foreach (var neu in m.InstrumentIds.Where(iid => entity.Instrumente.All(pi => pi.InstrumentId != iid)))
+        {
+            var pi = new PersonInstrument { PersonId = entity.Id, InstrumentId = neu };
+            entity.Instrumente.Add(pi);
+            db.PersonInstrumente.Add(pi);
+        }
+
         await db.SaveChangesAsync();
         Snackbar.Add("Gespeichert.", Severity.Success);
+
+        // Neue Person → direkt zur Bearbeiten-Seite (Bands/Mitwirkungen ergänzen).
+        if (id == null) { Nav.NavigateTo($"/admin/personen/{entity.Id}"); return; }
         await Laden();
     }
 
@@ -193,5 +223,5 @@
     };
 
     private record Zeile(Guid Id, string Name, Sichtbarkeit Sichtbarkeit, List<PersonRolleTyp> Rollen,
-        int AnzahlWerke, int AnzahlAuftritte);
+        int AnzahlBands, int AnzahlWerke, int AnzahlAuftritte);
 }

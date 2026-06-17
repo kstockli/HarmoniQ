@@ -1,4 +1,8 @@
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
 @inject NavigationManager Nav
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 <MudNavMenu Class="pa-2">
     <MudText Typo="Typo.overline" Class="px-4 pt-4 pb-1 mud-text-secondary">Musik</MudText>
@@ -45,6 +49,8 @@
             <MudNavLink Href="/admin" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.AdminPanelSettings">
                 Dashboard
             </MudNavLink>
+
+            <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary">Stammdaten</MudText>
             <MudNavLink Href="/admin/personen" Icon="@Icons.Material.Filled.Groups2">
                 Personen
             </MudNavLink>
@@ -60,25 +66,54 @@
             <MudNavLink Href="/admin/videos" Icon="@Icons.Material.Filled.VideoLibrary">
                 Videos
             </MudNavLink>
-            <MudNavLink Href="/admin/vorschlaege" Icon="@Icons.Material.Filled.RateReview">
-                Video-Vorschläge
-            </MudNavLink>
-            <MudNavLink Href="/admin/mitwirkungen" Icon="@Icons.Material.Filled.GroupAdd">
-                Mitwirkungs-Vorschläge
-            </MudNavLink>
-            <MudNavLink Href="/admin/richtigstellungen" Icon="@Icons.Material.Filled.ReportProblem">
-                Richtigstellungen
-            </MudNavLink>
-            <MudNavLink Href="/admin/verknuepfungen" Icon="@Icons.Material.Filled.PersonPin">
-                Verknüpfungs-Anträge
-            </MudNavLink>
             <MudNavLink Href="/admin/bewertungen" Icon="@Icons.Material.Filled.Star">
                 Bewertungen
             </MudNavLink>
-            <MudNavLink Href="/admin/import" Icon="@Icons.Material.Filled.Download">
-                Import-Assistent
+
+            <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary">Vorschläge</MudText>
+            <MudNavLink Href="/admin/vorschlaege" Icon="@Icons.Material.Filled.RateReview">
+                Video-Vorschläge @Badge(_videosOffen)
             </MudNavLink>
+            <MudNavLink Href="/admin/mitwirkungen" Icon="@Icons.Material.Filled.GroupAdd">
+                Mitwirkungs-Vorschläge @Badge(_mitwirkungenOffen)
+            </MudNavLink>
+            <MudNavLink Href="/admin/richtigstellungen" Icon="@Icons.Material.Filled.ReportProblem">
+                Richtigstellungen @Badge(_richtigstellungenOffen)
+            </MudNavLink>
+            <MudNavLink Href="/admin/verknuepfungen" Icon="@Icons.Material.Filled.PersonPin">
+                Verknüpfungs-Anträge @Badge(_verknuepfungenOffen)
+            </MudNavLink>
+            <MudNavLink Href="/admin/bandantraege" Icon="@Icons.Material.Filled.GroupAdd">
+                Band-Anträge @Badge(_bandantraegeOffen)
+            </MudNavLink>
+
+            <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary">Import-Assistenten</MudText>
+            <MudNavLink Href="/admin/import" Icon="@Icons.Material.Filled.Download">
+                Import-Assistent</MudNavLink>
             <MudDivider Class="my-2" />
         </Authorized>
     </AuthorizeView>
 </MudNavMenu>
+
+@code {
+    private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _videosOffen = await db.Videos.CountAsync(v => v.Status == VideoStatus.Ausstehend);
+            _mitwirkungenOffen = await db.VideoMitwirkungen.CountAsync(m => m.Status == VideoStatus.Ausstehend);
+            _richtigstellungenOffen = await db.Richtigstellungen.CountAsync(r => r.Status == RichtigstellungStatus.Offen);
+            _verknuepfungenOffen = await db.PersonAnsprueche.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
+            _bandantraegeOffen = await db.BandbeitrittAntraege.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
+        }
+        catch { /* Menü darf nie wegen Zählern brechen */ }
+    }
+
+    private RenderFragment? Badge(int n) => n <= 0 ? null : __builder =>
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-1 px-1" Style="height:18px;">@n</MudChip>
+    };
+}

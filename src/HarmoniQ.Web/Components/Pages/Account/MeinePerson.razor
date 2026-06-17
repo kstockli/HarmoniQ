@@ -7,6 +7,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Meine Person – HarmoniQ</PageTitle>
 
@@ -53,6 +54,16 @@ else
                               HelperText="Wird nur bei Sichtbarkeit „Öffentlich“ angezeigt." />
             </MudItem>
             <MudItem xs="12">
+                <MudSelect T="Guid" MultiSelection="true" @bind-SelectedValues="_instrumentSel" Label="Instrumente"
+                           Variant="Variant.Outlined" MultiSelectionTextFunc="NamenText"
+                           HelperText="Welche Instrumente spielst du?">
+                    @foreach (var i in _instrumente)
+                    {
+                        <MudSelectItem T="Guid" Value="@i.Id">@i.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
                 <MudTextField @bind-Value="_m.Biografie" Label="Biografie (optional)" Variant="Variant.Outlined" Lines="4" />
             </MudItem>
 
@@ -68,6 +79,44 @@ else
                    StartIcon="@Icons.Material.Filled.Save" OnClick="Speichern"
                    Disabled="@(string.IsNullOrWhiteSpace(_m.Name))">Speichern</MudButton>
     </MudPaper>
+
+    @* Bandmitgliedschaften *@
+    <MudPaper Class="pa-4 mt-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:720px;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#F0E6FF;">Meine Bands</MudText>
+        @if (_meineBands.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Du bist (noch) keiner Band zugeordnet.</MudText>
+        }
+        else
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-1">
+                @foreach (var b in _meineBands)
+                {
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@b</MudChip>
+                }
+            </MudStack>
+        }
+
+        @if (_offeneAntraege.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Class="d-block mt-2" Style="color:#A78FC0;">In Prüfung:</MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                @foreach (var b in _offeneAntraege)
+                {
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.HourglassTop"
+                             Style="background:#3a1060; color:#A78FC0;">@b</MudChip>
+                }
+            </MudStack>
+        }
+
+        <MudButton Variant="Variant.Outlined" Class="mt-3" Style="color:#D4AF37; border-color:#D4AF37;"
+                   StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="BandVorschlagen">
+            Bandmitgliedschaft vorschlagen
+        </MudButton>
+        <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color:#6f5a86;">
+            Beitritte zu Bands werden von einer Admin-Person bestätigt.
+        </MudText>
+    </MudPaper>
 }
 
 @code {
@@ -75,6 +124,13 @@ else
     private Guid? _personId;
     private string? _userId;
     private Modell _m = new();
+    private List<(Guid Id, string Name)> _instrumente = [];
+    private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
+    private List<string> _meineBands = [];
+    private List<string> _offeneAntraege = [];
+
+    private string NameOf(Guid id) => _instrumente.FirstOrDefault(i => i.Id == id).Name ?? "?";
+    private string NamenText(IReadOnlyList<string> vals) => string.Join(", ", vals.Select(v => NameOf(Guid.Parse(v))));
 
     protected override async Task OnInitializedAsync()
     {
@@ -82,12 +138,16 @@ else
         _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
         await using var db = await DbFactory.CreateDbContextAsync();
-        var person = await db.Personen.Include(p => p.Links)
+        _instrumente = await db.Instrumente.OrderBy(i => i.Name)
+            .Select(i => new ValueTuple<Guid, string>(i.Id, i.Name)).ToListAsync();
+
+        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente)
             .FirstOrDefaultAsync(p => p.BenutzerId == _userId);
 
         if (person != null)
         {
             _personId = person.Id;
+            _instrumentSel = new HashSet<Guid>(person.Instrumente.Select(pi => pi.InstrumentId));
             _m = new Modell
             {
                 Name = person.Name,
@@ -101,15 +161,83 @@ else
                 Facebook = person.Facebook,
                 YouTube = person.YouTube
             };
+
+            await LadeBandsAsync(db, person.Id);
         }
         _geladen = true;
+    }
+
+    private async Task LadeBandsAsync(ApplicationDbContext db, Guid personId)
+    {
+        _meineBands = await db.BandMitgliedschaften
+            .Where(m => m.PersonId == personId)
+            .OrderBy(m => m.Band.Name)
+            .Select(m => m.Band.Name)
+            .ToListAsync();
+
+        _offeneAntraege = await db.BandbeitrittAntraege
+            .Where(a => a.PersonId == personId && a.Status == PersonAnspruchStatus.Offen)
+            .OrderBy(a => a.Band.Name)
+            .Select(a => a.Band.Name)
+            .ToListAsync();
+    }
+
+    private async Task BandVorschlagen()
+    {
+        if (_personId == null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Bands, in denen man weder Mitglied ist noch einen offenen Antrag hat.
+        var schon = await db.BandMitgliedschaften.Where(m => m.PersonId == _personId)
+            .Select(m => m.BandId).ToListAsync();
+        var offen = await db.BandbeitrittAntraege
+            .Where(a => a.PersonId == _personId && a.Status == PersonAnspruchStatus.Offen)
+            .Select(a => a.BandId).ToListAsync();
+        var ausgeschlossen = schon.Concat(offen).ToHashSet();
+
+        var bandOptionen = await db.Bands
+            .Where(b => !ausgeschlossen.Contains(b.Id))
+            .OrderBy(b => b.Name)
+            .Select(b => new BandbeitrittDialog.Option(b.Id, b.Name))
+            .ToListAsync();
+
+        if (bandOptionen.Count == 0)
+        {
+            Snackbar.Add("Für alle Bands besteht bereits eine Mitgliedschaft oder ein offener Antrag.", Severity.Info);
+            return;
+        }
+
+        var instrumentOptionen = _instrumente.Select(i => new BandbeitrittDialog.Option(i.Id, i.Name)).ToList();
+        var parameters = new DialogParameters<BandbeitrittDialog>
+        {
+            { x => x.Bands, bandOptionen },
+            { x => x.Instrumente, instrumentOptionen },
+            { x => x.Hinweis, "Dein Beitritt wird von einer Admin-Person bestätigt." },
+            { x => x.OkText, "Vorschlagen" }
+        };
+        var dialog = await DialogService.ShowAsync<BandbeitrittDialog>("Bandmitgliedschaft vorschlagen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var wahl = (BandbeitrittDialog.Auswahl)result.Data!;
+
+        db.BandbeitrittAntraege.Add(new BandbeitrittAntrag
+        {
+            PersonId = _personId.Value,
+            BandId = wahl.BandId,
+            InstrumentId = wahl.InstrumentId,
+            BeantragtVonId = _userId
+        });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Antrag gesendet – ein:e Admin prüft den Beitritt.", Severity.Success);
+        await LadeBandsAsync(db, _personId.Value);
     }
 
     private async Task Speichern()
     {
         if (_personId == null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var person = await db.Personen.Include(p => p.Links)
+        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente)
             .FirstOrDefaultAsync(p => p.Id == _personId && p.BenutzerId == _userId);
         if (person == null) { Snackbar.Add("Person nicht gefunden oder nicht (mehr) verknüpft.", Severity.Error); return; }
 
@@ -123,6 +251,20 @@ else
         person.X = _m.X;
         person.Facebook = _m.Facebook;
         person.YouTube = _m.YouTube;
+
+        // Instrumente synchronisieren
+        var sel = _instrumentSel.ToHashSet();
+        foreach (var weg in person.Instrumente.Where(pi => !sel.Contains(pi.InstrumentId)).ToList())
+        {
+            person.Instrumente.Remove(weg);
+            db.PersonInstrumente.Remove(weg);
+        }
+        foreach (var iid in sel.Where(id => person.Instrumente.All(pi => pi.InstrumentId != id)))
+        {
+            var pi = new PersonInstrument { PersonId = person.Id, InstrumentId = iid };
+            person.Instrumente.Add(pi);
+            db.PersonInstrumente.Add(pi);
+        }
 
         await db.SaveChangesAsync();
         Snackbar.Add("Gespeichert.", Severity.Success);

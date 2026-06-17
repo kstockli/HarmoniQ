@@ -349,6 +349,23 @@ BandMitgliedschaft                  (Person ↔ Band über die Zeit, alles optio
 > Band-Funktionen sind vielfältiger (Vorstand, Registerleitung …). `StimmeId` wurde weggelassen
 > (für eine Mitgliedschaft i. d. R. nicht relevant; Stimmen gehören zur konkreten VideoMitwirkung).
 
+BandbeitrittAntrag                  (Vorschlag „Band beitreten" – UMGESETZT)
+├── Id (Guid)
+├── PersonId (FK)
+├── BandId (FK)
+├── InstrumentId (FK?)             ← optional
+├── BeantragtVon (FK → User?)      ← antragstellendes Konto
+├── Status (enum: Offen / Genehmigt / Abgelehnt)   ← (PersonAnspruchStatus)
+├── ErstelltAm (DateTime)
+└── EntschiedenAm (DateTime?)
+
+> **Warum ein Antrag?** Eine Bandmitgliedschaft macht (über die viewer-abhängige Sichtbarkeit)
+> alle Mitglieder dieser Band für die Person voll sichtbar. Damit sich niemand selbst in
+> beliebige Bands einträgt und so alle Personen „aufdeckt", darf eine verknüpfte Person über
+> `/account/person` eine Mitgliedschaft nur **vorschlagen** (`BandbeitrittAntrag`, Offen);
+> ein:e **Admin** bestätigt sie unter `/admin/bandantraege` (→ erzeugt `BandMitgliedschaft`).
+> Admins können auf der Personenseite Bands auch **direkt** hinzufügen (ohne Antrag).
+
 Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten Usern)
 ├── Id (Guid)
 ├── BetrifftTyp (enum: Video / Stück / Person / Band)
@@ -561,9 +578,17 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 20. ✅ *(umgesetzt)* Personen-Fenster `/personen` mit Filtern (Name, Rolle, Instrument, Kontext
     ?stueck/?komponist/?band) + Personen-Detailseite (Werke + Auftritte). `Person.AnzeigeName`
     (sichtbarkeitsabhängig) + Link-Komfort-Properties (Webseite/Instagram/X/Facebook/YouTube).
-21. ✅ *(umgesetzt)* Admin-CRUD **Personen** (`/admin/personen`: Rollen, Links, Sichtbarkeit) +
-    **Instrumente/Stimmen** (`/admin/instrumente`); Cast-Editor mit Sichtbarkeits-Wahl;
+21. ✅ *(umgesetzt)* Admin-CRUD **Personen** (`/admin/personen`: Rollen, Links, Sichtbarkeit,
+    **Instrumente**) + **Instrumente/Stimmen** (`/admin/instrumente`); Cast-Editor mit Sichtbarkeits-Wahl;
     **Mitwirkungs-Bewilligung** (`/admin/mitwirkungen`) + **Richtigstellungen** (`/admin/richtigstellungen`).
+    **Personen-Verwaltung** `/admin/personen/{id}` (ein vereintes Fenster): Stammdaten (Name,
+    Sichtbarkeit, Geburtsjahr, Bild, Bio, Rollen, Instrumente, Links) **plus** Bandmitgliedschaften
+    (direkt hinzufügen/entfernen) **plus** Mitwirkungen (Video + Rolle/Instrument). Die Personen-Liste
+    zeigt zusätzlich die Spalte „Bands". Band-/Instrument-Auswahl per **Autocomplete** (Tippen schlägt
+    Vorhandenes vor). „Neu" legt via Dialog an und leitet auf die Bearbeiten-Seite.
+    **Admin-Dashboard** zeigt alle ausstehenden Anträge (Video-/Mitwirkungs-Vorschläge,
+    Richtigstellungen, Verknüpfungs-/Band-Anträge) mit Zählern; die Admin-Menüpunkte sind mit
+    rotem Zähler-Badge markiert, solange etwas offen ist.
 22. ✅ *(umgesetzt)* `BandMitgliedschaft` (Person↔Band über Zeit): Entity + Migration; Anzeige auf
     Band-Detailseite („Besetzung", nach Instrument gruppiert, Leitung zuerst) und Personen-Detailseite
     („Bands"). **Admin-CRUD** `/admin/bands/{id}/mitglieder` (Mitglied hinzufügen mit Find-or-create

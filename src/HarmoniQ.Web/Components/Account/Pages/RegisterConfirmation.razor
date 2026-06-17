@@ -10,23 +10,33 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Register confirmation</PageTitle>
+<PageTitle>Konto bestätigen – HarmoniQ</PageTitle>
 
-<h1>Register confirmation</h1>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <h1 class="auth-title">Fast geschafft!</h1>
+        <StatusMessage Message="@statusMessage" />
 
-<StatusMessage Message="@statusMessage" />
+        @if (emailConfirmationLink is not null)
+        {
+            <p class="auth-sub">
+                Es ist noch kein echter E-Mail-Versand aktiv. Normalerweise käme dieser Link per Mail:
+                <a href="@emailConfirmationLink">Hier klicken, um das Konto zu bestätigen</a>.
+            </p>
+        }
+        else
+        {
+            <p class="auth-sub" role="alert">
+                Wir haben dir eine E-Mail geschickt. Bitte öffne den Bestätigungs-Link darin,
+                um dein Konto zu aktivieren – danach kannst du dich anmelden.
+            </p>
+        }
 
-@if (emailConfirmationLink is not null)
-{
-    <p>
-        This app does not currently have a real email sender registered, see <a href="https://aka.ms/aspaccountconf">these docs</a> for how to configure a real email sender.
-        Normally this would be emailed: <a href="@emailConfirmationLink">Click here to confirm your account</a>
-    </p>
-}
-else
-{
-    <p role="alert">Please check your email to confirm your account.</p>
-}
+        <div class="auth-links">
+            <a href="Account/Login">Zur Anmeldung</a>
+        </div>
+    </div>
+</div>
 
 @code {
     private string? emailConfirmationLink;

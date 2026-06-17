@@ -75,7 +75,7 @@
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
-    private string? Message => identityErrors is null ? null : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
+    private string? Message => identityErrors is null ? null : $"Fehler: {string.Join(", ", identityErrors.Select(error => error.Description))}";
 
     protected override void OnInitialized()
     {
@@ -145,20 +145,20 @@
 
     private sealed class InputModel
     {
-        [Required]
-        [EmailAddress]
-        [Display(Name = "Email")]
+        [Required(ErrorMessage = "Bitte gib eine E-Mail-Adresse ein.")]
+        [EmailAddress(ErrorMessage = "Ungültige E-Mail-Adresse.")]
+        [Display(Name = "E-Mail")]
         public string Email { get; set; } = "";
 
-        [Required]
-        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [Required(ErrorMessage = "Bitte gib ein Passwort ein.")]
+        [StringLength(100, ErrorMessage = "Das Passwort muss mindestens {2} und höchstens {1} Zeichen lang sein.", MinimumLength = 6)]
         [DataType(DataType.Password)]
-        [Display(Name = "Password")]
+        [Display(Name = "Passwort")]
         public string Password { get; set; } = "";
 
         [DataType(DataType.Password)]
-        [Display(Name = "Confirm password")]
-        [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
+        [Display(Name = "Passwort bestätigen")]
+        [Compare("Password", ErrorMessage = "Passwort und Bestätigung stimmen nicht überein.")]
         public string ConfirmPassword { get; set; } = "";
     }
 }

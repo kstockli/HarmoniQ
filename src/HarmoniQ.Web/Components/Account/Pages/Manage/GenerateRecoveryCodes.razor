@@ -7,7 +7,7 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<GenerateRecoveryCodes> Logger
 
-<PageTitle>Generate two-factor authentication (2FA) recovery codes</PageTitle>
+<PageTitle>Wiederherstellungscodes erzeugen</PageTitle>
 
 @if (recoveryCodes is not null)
 {
@@ -15,24 +15,23 @@
 }
 else
 {
-    <h3>Generate two-factor authentication (2FA) recovery codes</h3>
+    <h3 style="color:#F0E6FF;">Wiederherstellungscodes (2FA) erzeugen</h3>
     <div class="alert alert-warning" role="alert">
         <p>
-            <span class="glyphicon glyphicon-warning-sign"></span>
-            <strong>Put these codes in a safe place.</strong>
+            <strong>Bewahre diese Codes an einem sicheren Ort auf.</strong>
         </p>
         <p>
-            If you lose your device and don't have the recovery codes you will lose access to your account.
+            Wenn du dein Gerät verlierst und keine Wiederherstellungscodes hast, verlierst du den Zugang zu deinem Konto.
         </p>
         <p>
-            Generating new recovery codes does not change the keys used in authenticator apps. If you wish to change the key
-            used in an authenticator app you should <a href="Account/Manage/ResetAuthenticator">reset your authenticator keys.</a>
+            Das Erzeugen neuer Codes ändert nicht die in Authenticator-Apps verwendeten Schlüssel. Wenn du den
+            Schlüssel ändern möchtest, solltest du <a href="Account/Manage/ResetAuthenticator">deine Authenticator-Schlüssel zurücksetzen</a>.
         </p>
     </div>
     <div>
         <form @formname="generate-recovery-codes" @onsubmit="OnSubmitAsync" method="post">
             <AntiforgeryToken />
-            <button class="btn btn-danger" type="submit">Generate Recovery Codes</button>
+            <button class="btn btn-danger" type="submit">Wiederherstellungscodes erzeugen</button>
         </form>
     </div>
 }
@@ -71,7 +70,7 @@ else
 
         var userId = await UserManager.GetUserIdAsync(user);
         recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-        message = "You have generated new recovery codes.";
+        message = "Du hast neue Wiederherstellungscodes erzeugt.";
 
         Logger.LogInformation("User with ID '{UserId}' has generated new 2FA recovery codes.", userId);
     }
