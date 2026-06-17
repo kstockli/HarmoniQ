@@ -37,7 +37,10 @@
         <MudTextField @bind-Value="_m.Biografie" Label="Biografie" Variant="Variant.Outlined" Lines="3" Class="mb-3" />
         <MudTextField @bind-Value="_m.BildUrl" Label="Bild-URL" Variant="Variant.Outlined" Class="mb-3" />
 
-        <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color:#A78FC0;">Links</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color:#A78FC0;">Kontakt &amp; Links</MudText>
+        <MudTextField @bind-Value="_m.EMail" Label="E-Mail" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true"
+                      HelperText="Bei kontoverknüpften Personen wird die E-Mail automatisch synchronisiert." />
+        <MudTextField @bind-Value="_m.Mobile" Label="Mobile" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
         <MudTextField @bind-Value="_m.Webseite" Label="Webseite" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
         <MudTextField @bind-Value="_m.Instagram" Label="Instagram" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
         <MudTextField @bind-Value="_m.X" Label="X" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Immediate="true" />
@@ -80,6 +83,8 @@
                 X = Vorhanden.X,
                 Facebook = Vorhanden.Facebook,
                 YouTube = Vorhanden.YouTube,
+                EMail = Vorhanden.EMail,
+                Mobile = Vorhanden.Mobile,
                 Rollen = new HashSet<PersonRolleTyp>(Vorhanden.Rollen),
                 InstrumentIds = new HashSet<Guid>(Vorhanden.InstrumentIds)
             };
@@ -109,6 +114,8 @@
         public string? X { get; set; }
         public string? Facebook { get; set; }
         public string? YouTube { get; set; }
+        public string? EMail { get; set; }
+        public string? Mobile { get; set; }
         public HashSet<PersonRolleTyp> Rollen { get; set; } = [];
         public HashSet<Guid> InstrumentIds { get; set; } = [];
     }

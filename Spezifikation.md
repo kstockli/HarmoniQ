@@ -13,7 +13,7 @@ Eine Web-Applikation, auf der Fans von Blasmusik-Komponisten (Startpunkt: **John
 Musikant:in). Aufnahmen (Videos) erhalten eine **Besetzungsliste** wie der Cast eines
 Films: wer dirigiert, wer spielt welches **Instrument** auf welcher **Stimme**
 (z. B. „1. Klarinette"). So entsteht ein vernetztes Nachschlagewerk – von der Person über
-ihre Werke/Auftritte bis zur einzelnen Aufnahme. Siehe **Abschnitt 5b**.
+ihre Werke/Auftritte bis zur einzelnen Aufnahme. Siehe **Abschnitt 5 (Datenmodell)**.
 
 ---
 
@@ -147,11 +147,7 @@ Schritt 3: Speichern
 
 ---
 
-## 5. Datenmodell
-
-> ⚠️ **Veraltet:** Die Entität **`Komponist` existiert nicht mehr** – sie wurde durch **`Person`**
-> ersetzt (siehe Abschnitt 5b, jetzt umgesetzt). Stücke verweisen über **`StueckBeitrag`** auf
-> Personen. Der untenstehende `Komponist`-Block ist nur noch historisch; maßgeblich ist 5b.
+## 5. Datenmodell (IMDb-Stil: Personen, Werke & Aufnahmen)
 
 > **Quelle des Modells:** Die eigenen Entitäten (Stück, Band, Video, Bewertung, Person, …)
 > sind als C#-Klassen in `src/HarmoniQ.Web/Data/Models/` definiert; der DbContext in
@@ -163,86 +159,9 @@ Schritt 3: Speichern
 > für diese App relevanten Felder aufgeführt. Maßgeblich ist immer das Identity-Schema,
 > nicht diese vereinfachte Darstellung.
 
-```
-Komponist
-├── Id (Guid)
-├── Name (string)
-├── Biografie (string?)
-├── Webseite (string?)            ← URL für Import-Assistent
-├── BildUrl (string?)
-└── Stücke [1:n]
-
-Stück
-├── Id (Guid)
-├── KomponistId (FK)
-├── Titel (string)
-├── Jahr (int?)
-├── Schwierigkeitsgrad (enum: Leicht / Mittel / Schwer / SehrSchwer / Unbekannt)
-├── Besetzung (string?)           ← z. B. "Blasorchester"
-├── Beschreibung (string?)
-├── OriginalUrl (string?)         ← Quell-URL beim Import
-└── Videos [1:n]
-
-Band
-├── Id (Guid)
-├── Name (string)
-├── Land (string?)
-└── Webseite (string?)
-
-Video
-├── Id (Guid)
-├── StückId (FK)
-├── BandId (FK?)                  ← nullable, falls Band unbekannt
-├── YouTubeVideoId (string)       ← nur die 11-stellige ID (aus URL extrahiert)
-├── Titel (string)                ← optional bei Eingabe; sonst autom. via YouTube-oEmbed
-├── AufnahmeDatum (DateOnly?)
-├── Ort (string?)                 ← optional, Aufnahme-Ort (z. B. "KKL Luzern")
-├── Anlass (string?)              ← optional (z. B. "Jahreskonzert 2024")
-├── ErstelltAm (DateTime)         ← Erfassungszeitpunkt (für "zuletzt hinzugefügt")
-├── Status (enum: Ausstehend / Genehmigt / Abgelehnt)
-├── VorgeschlagenVon (FK → User?) ← null = Admin erfasst
-└── Bewertungen [1:n]
-
-Benutzer                          ← ASP.NET Core Identity (AspNetUsers)
-├── Id (string)
-├── Email (string)
-├── (externe Logins z. B. Google → AspNetUserLogins)
-└── Bewertungen [1:n]
-
-Rollen                            ← ASP.NET Core Identity (AspNetRoles / AspNetUserRoles)
-├── "Admin"  → Vollzugriff auf /admin
-└── (Standard-Benutzer haben keine Rolle)
-   Zuweisung: Beim App-Start werden die in appsettings unter "Admin:Emails"
-   konfigurierten Benutzer automatisch der Rolle "Admin" zugeordnet, sobald sie
-   registriert sind (siehe Services/AdminInitializer.cs).
-
-Bewertung
-├── Id (Guid)
-├── VideoId (FK)
-├── BenutzerId (FK?)              ← null = anonymer Vote
-├── AnonymerCookieId (string?)    ← UUID aus Cookie, wenn nicht eingeloggt
-├── GesamtEindruck (int 1–5)
-├── Präzision (int 1–5)
-├── Musikalität (int 1–5)
-├── AkustischeQualität (int 1–5)
-├── VideoQualität (int 1–5)
-├── Kommentar (string?)
-└── ErstelltAm (DateTime)
-
-CONSTRAINT: UNIQUE (VideoId, BenutzerId)        -- ein Vote pro User+Video
-CONSTRAINT: UNIQUE (VideoId, AnonymerCookieId)  -- ein Vote pro Cookie+Video
-```
-
-> **Hinweis:** Das obige Modell ist der **aktuell umgesetzte Stand**. Abschnitt 5b
-> beschreibt die geplante Erweiterung zum Personen-/Rollen-Modell (noch nicht umgesetzt).
-
----
-
-## 5b. Datenmodell – Personen & Rollen (IMDb-Stil) *(umgesetzt)*
-
 ### Konzept
-Die bisherige Entität **Komponist** wird durch **Person** ersetzt. Eine Person kann
-**mehrere Rollen** haben (Komponist:in, Dirigent:in, Musikant:in).
+Zentrale Entität ist **Person**. Eine Person kann **mehrere Rollen** haben
+(Komponist:in, Dirigent:in, Musikant:in) – einen separaten „Komponist"-Typ gibt es nicht.
 
 > ⚠️ Zwei verschiedene „Rollen"-Begriffe nicht verwechseln: **App-Benutzerrollen**
 > (Anonym / User / Admin, Abschnitt 3, via ASP.NET Identity) steuern Zugriffsrechte.
@@ -281,8 +200,14 @@ Sichtbarkeit (enum)                 (steuert, wie viel von einer Person öffentl
 PersonLink                          (Detail-Tabelle: beliebig viele Links je Person)
 ├── Id (Guid)
 ├── PersonId (FK)
-├── Url (string)
-└── Typ (enum: Webseite / Instagram / X / Facebook / …)   ← erweiterbar
+├── Url (string)                   ← bei EMail die Adresse, bei Mobile die Nummer
+└── Typ (enum: Webseite / Instagram / X / Facebook / YouTube / EMail / Mobile / Sonstige)
+
+> **E-Mail-Sync (UMGESETZT):** Ist die Person mit einem Konto verknüpft (`BenutzerId` gesetzt),
+> wird der `EMail`-Link automatisch mit der Konto-E-Mail synchronisiert (`PersonLinkSync`):
+> bei Genehmigung der Verknüpfung, bei E-Mail-Änderung des Kontos und beim Öffnen von
+> `/account/person`. In „Meine Person" ist die E-Mail daher schreibgeschützt; `Mobile` ist frei
+> editierbar. Anzeige: `EMail` als `mailto:`, `Mobile` als `tel:`-Link.
 
 PersonRolle                         (welche Rollen kann die Person grundsätzlich?)
 ├── PersonId (FK)
@@ -306,9 +231,24 @@ PersonInstrument                    (n:m – mögliche Instrumente einer Musikan
 ├── InstrumentId (FK)
 └── PK (PersonId, InstrumentId)
 
-Stück                               (KomponistId entfällt → StückBeitrag)
-├── Id, Titel, Jahr, Schwierigkeitsgrad, Besetzung, Beschreibung, OriginalUrl
-└── Beiträge [1:n] → StückBeitrag
+Band
+├── Id (Guid)
+├── Name (string)
+├── Land (string?)
+├── Webseite (string?)
+├── Videos [1:n]
+└── Mitgliedschaften [1:n] → BandMitgliedschaft
+
+Stück                               (kein KomponistId mehr → über StückBeitrag)
+├── Id (Guid)
+├── Titel (string)
+├── Jahr (int?)
+├── Schwierigkeitsgrad (enum: Leicht / Mittel / Schwer / SehrSchwer / Unbekannt)
+├── Besetzung (string?)            ← z. B. "Blasorchester"
+├── Beschreibung (string?)
+├── OriginalUrl (string?)          ← Quell-URL beim Import
+├── Beiträge [1:n] → StückBeitrag  ← Komponist:in / Arrangeur:in / Bearbeiter:in
+└── Videos [1:n]
 
 StückBeitrag                        (wer hat zum Stück beigetragen – mehrere möglich)
 ├── Id (Guid)
@@ -316,11 +256,19 @@ StückBeitrag                        (wer hat zum Stück beigetragen – mehrere
 ├── PersonId (FK)
 └── Rolle (enum: Komponist / Arrangeur / Bearbeiter)
 
-Video                              (zusätzlich zur bisherigen Band-Zuordnung)
-├── … (wie bisher: StückId, BandId?, YouTubeVideoId, Titel, Status, …)
-├── AufnahmeDatum (DateOnly?)      ← bereits vorhanden (optional)
-├── Ort (string?)                  ← UMGESETZT, optional, z. B. "KKL Luzern"
-├── Anlass (string?)               ← UMGESETZT, optional, z. B. "WMC Kerkrade 2022"
+Video
+├── Id (Guid)
+├── StückId (FK)
+├── BandId (FK?)                   ← nullable, falls Band unbekannt
+├── YouTubeVideoId (string)        ← nur die 11-stellige ID (aus URL extrahiert)
+├── Titel (string)                 ← optional bei Eingabe; sonst autom. via YouTube-oEmbed
+├── AufnahmeDatum (DateOnly?)
+├── Ort (string?)                  ← optional, Aufnahme-Ort (z. B. "KKL Luzern")
+├── Anlass (string?)               ← optional (z. B. "WMC Kerkrade 2022")
+├── ErstelltAm (DateTime)          ← Erfassungszeitpunkt (für "zuletzt hinzugefügt")
+├── Status (enum: Ausstehend / Genehmigt / Abgelehnt)
+├── VorgeschlagenVon (FK → User?)  ← null = Admin erfasst
+├── Bewertungen [1:n]
 └── Mitwirkungen [1:n] → VideoMitwirkung   ← „Cast & Crew" der Aufnahme
 
 VideoMitwirkung                     (eine Zeile der Besetzungsliste)
@@ -376,6 +324,36 @@ Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten
 ├── Status (enum: Offen / Erledigt / Abgelehnt)
 ├── Antwort (string?)              ← Antwort/Notiz des Admins
 └── AntwortAm (DateTime?)          ← wann der Admin geantwortet hat
+
+Bewertung
+├── Id (Guid)
+├── VideoId (FK)
+├── BenutzerId (FK?)              ← null = anonymer Vote
+├── AnonymerCookieId (string?)    ← UUID aus Cookie, wenn nicht eingeloggt
+├── GesamtEindruck (int 1–5)
+├── Präzision (int 1–5)
+├── Musikalität (int 1–5)
+├── AkustischeQualität (int 1–5)
+├── VideoQualität (int 1–5)
+├── Kommentar (string?)
+└── ErstelltAm (DateTime)
+
+CONSTRAINT: UNIQUE (VideoId, BenutzerId)        -- ein Vote pro User+Video
+CONSTRAINT: UNIQUE (VideoId, AnonymerCookieId)  -- ein Vote pro Cookie+Video
+
+Benutzer                          ← ASP.NET Core Identity (AspNetUsers)
+├── Id (string)
+├── Email (string)                ← Login erst nach E-Mail-Bestätigung möglich
+├── EmailConfirmed (bool)
+├── (externe Logins Google/Microsoft → AspNetUserLogins; verifiziert → auto-bestätigt)
+└── Bewertungen [1:n]
+
+Rollen                            ← ASP.NET Core Identity (AspNetRoles / AspNetUserRoles)
+├── "Admin"  → Vollzugriff auf /admin
+└── (Standard-Benutzer haben keine Rolle)
+   Zuweisung: Beim App-Start werden die in appsettings unter "Admin:Emails"
+   konfigurierten Benutzer automatisch der Rolle "Admin" zugeordnet (AdminInitializer);
+   zusätzlich befördert eine ClaimsTransformation Admin-Mails sofort beim Login.
 ```
 
 > **Prinzip „möglichst viel optional":** Außer den Pflicht-Verknüpfungen (Fremdschlüssel)
@@ -557,7 +535,7 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 > - Video: anhand `YouTubeVideoId` (eindeutig)
 > Bereits vorhandene Einträge werden erkannt und nur ergänzt/aktualisiert, nicht neu angelegt.
 
-### Phase 6 – Personen- & Rollen-Modell (IMDb-Stil) ⏳ *geplant* — siehe Abschnitt 5b
+### Phase 6 – Personen- & Rollen-Modell (IMDb-Stil) ✅ *umgesetzt* — siehe Abschnitt 5
 > *(vorgezogen vor das Deployment – das Datenmodell soll vor dem produktiven Launch stehen.)*
 
 16. ✅ *(umgesetzt)* Datenmodell: `Person` (+ `PersonRolle`, `PersonLink`, `StueckBeitrag`).

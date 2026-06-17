@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
@@ -67,7 +68,12 @@ else
                 <MudTextField @bind-Value="_m.Biografie" Label="Biografie (optional)" Variant="Variant.Outlined" Lines="4" />
             </MudItem>
 
-            <MudItem xs="12"><MudText Typo="Typo.subtitle2" Style="color:#9B59B6;">Links</MudText></MudItem>
+            <MudItem xs="12"><MudText Typo="Typo.subtitle2" Style="color:#9B59B6;">Kontakt &amp; Links</MudText></MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="@_kontoEmail" Label="E-Mail (vom Konto)" Variant="Variant.Outlined" ReadOnly="true" Disabled="true"
+                              HelperText="Wird automatisch synchronisiert. Ändern unter „E-Mail“ in den Konto-Einstellungen." />
+            </MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Mobile" Label="Mobile" Variant="Variant.Outlined" Placeholder="+41 …" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Webseite" Label="Webseite" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.X" Label="X" Variant="Variant.Outlined" /></MudItem>
@@ -123,6 +129,7 @@ else
     private bool _geladen;
     private Guid? _personId;
     private string? _userId;
+    private string? _kontoEmail;
     private Modell _m = new();
     private List<(Guid Id, string Name)> _instrumente = [];
     private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
@@ -140,6 +147,10 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _instrumente = await db.Instrumente.OrderBy(i => i.Name)
             .Select(i => new ValueTuple<Guid, string>(i.Id, i.Name)).ToListAsync();
+
+        // Konto-E-Mail in den E-Mail-Link der verknüpften Person spiegeln (selbstheilend).
+        _kontoEmail = await db.Users.Where(u => u.Id == _userId).Select(u => u.Email).FirstOrDefaultAsync();
+        await PersonLinkSync.SyncEmailAsync(db, _userId, _kontoEmail);
 
         var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente)
             .FirstOrDefaultAsync(p => p.BenutzerId == _userId);
@@ -159,7 +170,8 @@ else
                 Instagram = person.Instagram,
                 X = person.X,
                 Facebook = person.Facebook,
-                YouTube = person.YouTube
+                YouTube = person.YouTube,
+                Mobile = person.Mobile
             };
 
             await LadeBandsAsync(db, person.Id);
@@ -251,6 +263,8 @@ else
         person.X = _m.X;
         person.Facebook = _m.Facebook;
         person.YouTube = _m.YouTube;
+        person.Mobile = _m.Mobile;
+        // E-Mail-Link bleibt automatisch ans Konto gekoppelt (nicht manuell editierbar).
 
         // Instrumente synchronisieren
         var sel = _instrumentSel.ToHashSet();
@@ -284,5 +298,6 @@ else
         public string? X { get; set; }
         public string? Facebook { get; set; }
         public string? YouTube { get; set; }
+        public string? Mobile { get; set; }
     }
 }

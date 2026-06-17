@@ -94,6 +94,7 @@
                 Id = p.Id, Name = p.Name, Sichtbarkeit = p.Sichtbarkeit, Geburtsjahr = p.Geburtsjahr,
                 Biografie = p.Biografie, BildUrl = p.BildUrl,
                 Webseite = p.Webseite, Instagram = p.Instagram, X = p.X, Facebook = p.Facebook, YouTube = p.YouTube,
+                EMail = p.EMail, Mobile = p.Mobile,
                 Rollen = new HashSet<PersonRolleTyp>(p.Rollen.Select(r => r.Rolle)),
                 InstrumentIds = new HashSet<Guid>(p.Instrumente.Select(pi => pi.InstrumentId))
             };
@@ -148,6 +149,8 @@
         SyncLink(db, entity, LinkTyp.X, m.X);
         SyncLink(db, entity, LinkTyp.Facebook, m.Facebook);
         SyncLink(db, entity, LinkTyp.YouTube, m.YouTube);
+        SyncLink(db, entity, LinkTyp.EMail, m.EMail);
+        SyncLink(db, entity, LinkTyp.Mobile, m.Mobile);
 
         // Instrumente synchronisieren
         foreach (var weg in entity.Instrumente.Where(pi => !m.InstrumentIds.Contains(pi.InstrumentId)).ToList())

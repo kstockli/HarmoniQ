@@ -3,6 +3,7 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ISnackbar Snackbar
 
@@ -138,6 +139,11 @@ else
         foreach (var w in weitere) { w.Status = PersonAnspruchStatus.Abgelehnt; w.EntschiedenAm = DateTime.UtcNow; }
 
         await db.SaveChangesAsync();
+
+        // E-Mail-Link der Person mit der Konto-E-Mail synchronisieren.
+        var kontoEmail = await db.Users.Where(u => u.Id == antrag.BenutzerId).Select(u => u.Email).FirstOrDefaultAsync();
+        await PersonLinkSync.SyncEmailAsync(db, antrag.BenutzerId, kontoEmail);
+
         Snackbar.Add($"{z.PersonName} mit {z.Email} verknüpft.", Severity.Success);
         await Laden();
     }

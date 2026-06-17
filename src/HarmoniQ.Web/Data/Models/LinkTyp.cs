@@ -8,5 +8,7 @@ public enum LinkTyp
     X = 2,
     Facebook = 3,
     YouTube = 4,
+    EMail = 5,
+    Mobile = 6,
     Sonstige = 99
 }

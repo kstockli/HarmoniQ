@@ -67,8 +67,8 @@ else
         <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
             @foreach (var l in _person.Links)
             {
-                <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@l.Url" Target="_blank"
-                           StartIcon="@LinkIcon(l.Typ)">@l.Typ</MudButton>
+                <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@LinkHref(l)"
+                           Target="@(LinkExtern(l.Typ) ? "_blank" : null)" StartIcon="@LinkIcon(l.Typ)">@LinkLabel(l)</MudButton>
             }
         </MudStack>
     }
@@ -351,7 +351,25 @@ else
         LinkTyp.Facebook => Icons.Custom.Brands.Facebook,
         LinkTyp.X => Icons.Custom.Brands.Twitter,
         LinkTyp.YouTube => Icons.Custom.Brands.YouTube,
+        LinkTyp.EMail => Icons.Material.Filled.Email,
+        LinkTyp.Mobile => Icons.Material.Filled.Phone,
         _ => Icons.Material.Filled.OpenInNew
+    };
+
+    private static bool LinkExtern(LinkTyp t) => t is not (LinkTyp.EMail or LinkTyp.Mobile);
+
+    private static string LinkHref(PersonLink l) => l.Typ switch
+    {
+        LinkTyp.EMail => $"mailto:{l.Url}",
+        LinkTyp.Mobile => $"tel:{l.Url.Replace(" ", "")}",
+        _ => l.Url
+    };
+
+    private static string LinkLabel(PersonLink l) => l.Typ switch
+    {
+        LinkTyp.EMail => l.Url,
+        LinkTyp.Mobile => l.Url,
+        _ => l.Typ.ToString()
     };
 
     private record WerkZeile(Guid StueckId, string Titel, int? Jahr, StueckRolle Rolle);

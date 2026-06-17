@@ -3,11 +3,14 @@
 @using System.Text
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Services
 
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IdentityRedirectManager RedirectManager
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 <PageTitle>E-Mail-Änderung bestätigen – HarmoniQ</PageTitle>
 
@@ -67,6 +70,13 @@
         }
 
         await SignInManager.RefreshSignInAsync(user);
+
+        // E-Mail-Link einer ggf. verknüpften Person mitziehen.
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            await PersonLinkSync.SyncEmailAsync(db, user.Id, Email);
+        }
+
         message = "Danke! Deine neue E-Mail-Adresse wurde bestätigt.";
     }
 }

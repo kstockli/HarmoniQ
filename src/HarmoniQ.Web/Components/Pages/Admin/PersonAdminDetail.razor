@@ -66,6 +66,9 @@ else
             <MudItem xs="12">
                 <MudTextField @bind-Value="_m.Biografie" Label="Biografie" Variant="Variant.Outlined" Lines="3" />
             </MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.EMail" Label="E-Mail" Variant="Variant.Outlined"
+                          HelperText="Bei kontoverknüpften Personen automatisch synchronisiert." /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Mobile" Label="Mobile" Variant="Variant.Outlined" Placeholder="+41 …" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Webseite" Label="Webseite" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.Instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_m.X" Label="X" Variant="Variant.Outlined" /></MudItem>
@@ -177,7 +180,8 @@ else
             Name = person.Name, Sichtbarkeit = person.Sichtbarkeit, Geburtsjahr = person.Geburtsjahr,
             BildUrl = person.BildUrl, Biografie = person.Biografie,
             Webseite = person.Webseite, Instagram = person.Instagram, X = person.X,
-            Facebook = person.Facebook, YouTube = person.YouTube
+            Facebook = person.Facebook, YouTube = person.YouTube,
+            EMail = person.EMail, Mobile = person.Mobile
         };
         _rollenSel = new HashSet<PersonRolleTyp>(person.Rollen.Select(r => r.Rolle));
         _instrumentSel = new HashSet<Guid>(person.Instrumente.Select(pi => pi.InstrumentId));
@@ -216,6 +220,8 @@ else
         p.X = _m.X;
         p.Facebook = _m.Facebook;
         p.YouTube = _m.YouTube;
+        p.EMail = _m.EMail;
+        p.Mobile = _m.Mobile;
 
         // Rollen synchronisieren
         var rollen = _rollenSel.ToHashSet();
@@ -329,6 +335,8 @@ else
         public string? X { get; set; }
         public string? Facebook { get; set; }
         public string? YouTube { get; set; }
+        public string? EMail { get; set; }
+        public string? Mobile { get; set; }
     }
 
     private record BandZeile(Guid Id, string BandName, string? Instrument, string? Funktion);
