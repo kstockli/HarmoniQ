@@ -126,6 +126,32 @@ h1:focus {
     transition: filter .15s ease;
 }
 .auth-btn:hover { filter: brightness(1.08); }
+
+/* Externe Login-Buttons (Google / Microsoft) */
+.ext-login-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .8rem 1.1rem;
+    font-size: 1.02rem;
+    font-weight: 500;
+    color: #1f1f1f;
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: box-shadow .15s ease, background .15s ease;
+}
+.ext-login-btn:hover { background: #f7f8fa; box-shadow: 0 1px 6px rgba(0,0,0,.25); }
+.ext-login-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    flex: 0 0 22px;
+}
+.ext-login-text { flex: 1; text-align: center; }
 .auth-divider {
     display: flex;
     align-items: center;
