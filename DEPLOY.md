@@ -32,13 +32,16 @@ Authentication__Google__ClientSecret = <dein Google Secret>
 Authentication__Microsoft__ClientId  = <deine Microsoft Client ID>
 Authentication__Microsoft__ClientSecret = <dein Microsoft Secret>
 
-Email__Host     = www05.servertown.ch
-Email__Port     = 465
-Email__User     = me@q-no.ch
-Email__Password = <SMTP-Passwort>
-Email__From     = me@q-no.ch
+Email__Resend__ApiKey = <Resend API-Key, re_...>
+Email__From           = harmoniq@q-no.ch
 ```
 (ASPNETCORE_ENVIRONMENT=Production ist schon im Dockerfile gesetzt.)
+
+> **Mailversand:** Railway **blockt ausgehenden SMTP (Port 465/587)**. Daher läuft der Versand
+> in Prod über die **Resend-HTTPS-API** (`ResendEmailSender`): Sobald `Email__Resend__ApiKey`
+> gesetzt ist, schaltet die App automatisch von SMTP auf Resend. Die Absender-Domain (`q-no.ch`)
+> muss bei Resend **verifiziert** sein (SPF/DKIM-DNS-Einträge), damit an beliebige Empfänger
+> gesendet werden darf. Lokal/Dev bleibt es bei SMTP (MailKit).
 
 ## 4. Domain
 1. Web-Service → **Settings → Networking → Generate Domain** → du bekommst `…up.railway.app`
@@ -67,10 +70,32 @@ Email__From     = me@q-no.ch
 - **WebSockets:** von Railway unterstützt (Blazor-Server-Circuits laufen).
 - **Eine Instanz:** Blazor Server braucht Sticky State → Replica-Anzahl auf **1** lassen
   (nicht horizontal skalieren ohne Sticky Sessions).
-- **ForwardedHeaders:** aktiv → OAuth-Redirects zeigen korrekt auf `https`.
-- **SMTP Port 465:** ausgehend nötig (servertown). Falls Mails nicht rausgehen → Railway-Support/Port prüfen.
 - **Backups:** `pg_dump` gegen die Railway-DB (Connection-Daten im Postgres-Service → „Connect").
 
 ## 8. Updates ausrollen
 `git push` auf den Default-Branch → Railway baut & deployt automatisch neu. Migrationen laufen
 beim Start mit; Daten bleiben (Postgres ist entkoppelt).
+
+## 9. Bekannte Stolpersteine (gelöst – nicht wieder hineinlaufen!)
+Diese Punkte haben beim Erst-Deployment Zeit gekostet; sie sind im Code/Dockerfile bereits gelöst:
+
+- **OAuth `redirect_uri_mismatch` hinter dem Railway-Proxy.** Der Edge-Proxy terminiert TLS und
+  spricht intern `http` mit dem Container → die OAuth-Middleware baute die `redirect_uri` mit `http`.
+  Lösungen in `Program.cs`:
+  1. `UseForwardedHeaders` (X-Forwarded-Proto/-For, `ForwardLimit = null`, KnownProxies/Networks geleert).
+  2. In Produktion zusätzlich `ctx.Request.Scheme = "https"` erzwingen.
+  3. **`UseAuthentication`/`UseAuthorization` EXPLIZIT** und **nach** den obigen Schritten einhängen –
+     sonst hängt das Framework die Auth automatisch zu früh in die Pipeline und baut wieder `http`-URLs.
+- **`Cannot load library libgssapi_krb5.so.2`** beim DB-Zugriff. Npgsql versucht eine
+  GSSAPI/Kerberos-Aushandlung; die Lib fehlt im schlanken Runtime-Image. → im **Dockerfile**
+  `libgssapi-krb5-2` nachinstalliert.
+- **SMTP blockiert.** Railway lässt ausgehenden SMTP (465/587) nicht zu → Mailversand über die
+  **Resend-HTTPS-API** (siehe §3).
+- **Custom-Domain-Port:** Bei der Custom Domain den **Container-Port (8080)** angeben, nicht 443
+  (443 macht Railway selbst).
+- **Google OAuth „Testmodus".** Solange der OAuth-Zustimmungsbildschirm auf **„Testing"** steht,
+  können sich nur eingetragene Testnutzer anmelden. Für öffentliche Nutzung im
+  **Google Cloud Console → OAuth-Zustimmungsbildschirm** auf **„In Produktion"** veröffentlichen
+  (bei nur Basis-Scopes E-Mail/Profil ohne aufwändigen Review).
+- **Microsoft & Entra:** App-Registrierung als *multi-tenant + personal accounts*. Externe Nutzer
+  werden **nicht** als Gäste im eigenen Tenant angelegt – ihre Identität lebt nur in `AspNetUsers`.
