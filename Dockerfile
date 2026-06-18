@@ -13,6 +13,11 @@ COPY . .
 RUN dotnet publish src/HarmoniQ.Web/HarmoniQ.Web.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+# Npgsql versucht beim Verbinden eine GSSAPI/Kerberos-Aushandlung; die Bibliothek fehlt im
+# schlanken Runtime-Image und muss nachinstalliert werden, sonst bricht der DB-Zugriff ab.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
 
