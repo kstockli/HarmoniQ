@@ -110,7 +110,10 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
 {
     options.ForwardedHeaders =
         Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
-        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto |
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedHost;
+    // Railway hat mehrere Proxy-Hops → kein Limit, damit das ursprüngliche https/Host gilt.
+    options.ForwardLimit = null;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
