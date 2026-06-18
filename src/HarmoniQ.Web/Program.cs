@@ -110,9 +110,8 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
 {
     options.ForwardedHeaders =
         Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
-        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto |
-        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedHost;
-    // Railway hat mehrere Proxy-Hops → kein Limit, damit das ursprüngliche https/Host gilt.
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    // Railway hat mehrere Proxy-Hops → kein Limit, damit das ursprüngliche https gilt.
     options.ForwardLimit = null;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
@@ -139,6 +138,12 @@ if (!app.Environment.IsDevelopment())
         return next();
     });
 }
+
+// Authentifizierung EXPLIZIT hier einhängen – nach ForwardedHeaders/Scheme-Fix, damit die
+// OAuth-Middleware die redirect_uri mit dem korrekten https-Scheme baut (sonst hängt der
+// Framework die Auth automatisch zu früh in die Pipeline → redirect_uri mit http).
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
