@@ -176,9 +176,9 @@ using (var scope = app.Services.CreateScope())
 
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     await AdminInitializer.EnsureAdminsAsync(scope.ServiceProvider, app.Configuration, logger);
-    // EINMALIG (Prod-Erstbefüllung): Roster importieren. Nach erfolgtem Deploy wieder entfernen.
-    await StadtmusikLuzernImport.ImportAsync(db, logger);
-    await JBLLuzernImport.ImportAsync(db, logger);
+    // Roster-Importe (Stadtmusik/JBL Luzern) sind lokal und in Prod erfolgt und persistiert.
+    // Mitglieder werden künftig über den Admin-Editor gepflegt; Importer-Klassen bleiben als
+    // Provenienz-/Re-Import-Quelle erhalten.
 }
 
 app.Run();
