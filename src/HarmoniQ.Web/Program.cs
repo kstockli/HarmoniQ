@@ -125,24 +125,20 @@ if (!string.IsNullOrWhiteSpace(port))
 
 var app = builder.Build();
 
-// Reverse-Proxy-Header zuerst auswerten (vor Auth/HTTPS-Redirect).
+// Reverse-Proxy-Header auswerten (vor Auth/HTTPS-Redirect).
 app.UseForwardedHeaders();
 
-// TEMP-Diagnose: zeigt beim OAuth-Callback, welches Scheme/Host die App effektiv sieht
-// (daraus baut die OAuth-Middleware die redirect_uri für den Token-Tausch).
-app.Use(async (ctx, next) =>
+// Hinter Railway terminiert der Edge-Proxy TLS und spricht intern http mit dem Container.
+// In Produktion erzwingen wir daher das Scheme https, damit die OAuth-Middleware die
+// redirect_uri (Authorize & Token-Tausch) korrekt mit https baut.
+if (!app.Environment.IsDevelopment())
 {
-    var p = ctx.Request.Path.Value ?? "";
-    if (p.StartsWith("/signin-google") || p.StartsWith("/signin-microsoft"))
+    app.Use((ctx, next) =>
     {
-        var log = ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("OAuthDiag");
-        log.LogWarning("OAuth-Callback {Path}: Scheme={Scheme} Host={Host} X-Forwarded-Proto='{XFP}' X-Forwarded-Host='{XFH}'",
-            p, ctx.Request.Scheme, ctx.Request.Host.Value,
-            ctx.Request.Headers["X-Forwarded-Proto"].ToString(),
-            ctx.Request.Headers["X-Forwarded-Host"].ToString());
-    }
-    await next();
-});
+        ctx.Request.Scheme = "https";
+        return next();
+    });
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
