@@ -91,7 +91,12 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddErrorDescriber<DeutscherIdentityErrorDescriber>()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, SmtpEmailSender>();
+// E-Mail-Versand: per HTTPS-API (Resend) wenn ein API-Key konfiguriert ist (z. B. Prod auf
+// Railway, wo SMTP geblockt ist), sonst über SMTP (lokal/MailKit).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Email:Resend:ApiKey"]))
+    builder.Services.AddHttpClient<IEmailSender<ApplicationUser>, ResendEmailSender>();
+else
+    builder.Services.AddSingleton<IEmailSender<ApplicationUser>, SmtpEmailSender>();
 
 // Befördert konfigurierte Admin-Mails sofort beim Login (ohne Neustart) zum Admin.
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, AdminClaimsTransformation>();
