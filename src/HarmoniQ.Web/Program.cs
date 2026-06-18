@@ -128,6 +128,22 @@ var app = builder.Build();
 // Reverse-Proxy-Header zuerst auswerten (vor Auth/HTTPS-Redirect).
 app.UseForwardedHeaders();
 
+// TEMP-Diagnose: zeigt beim OAuth-Callback, welches Scheme/Host die App effektiv sieht
+// (daraus baut die OAuth-Middleware die redirect_uri für den Token-Tausch).
+app.Use(async (ctx, next) =>
+{
+    var p = ctx.Request.Path.Value ?? "";
+    if (p.StartsWith("/signin-google") || p.StartsWith("/signin-microsoft"))
+    {
+        var log = ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("OAuthDiag");
+        log.LogWarning("OAuth-Callback {Path}: Scheme={Scheme} Host={Host} X-Forwarded-Proto='{XFP}' X-Forwarded-Host='{XFH}'",
+            p, ctx.Request.Scheme, ctx.Request.Host.Value,
+            ctx.Request.Headers["X-Forwarded-Proto"].ToString(),
+            ctx.Request.Headers["X-Forwarded-Host"].ToString());
+    }
+    await next();
+});
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
