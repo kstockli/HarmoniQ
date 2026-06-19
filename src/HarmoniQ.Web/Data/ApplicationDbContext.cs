@@ -30,6 +30,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PersonAnspruch> PersonAnsprueche => Set<PersonAnspruch>();
     public DbSet<BandbeitrittAntrag> BandbeitrittAntraege => Set<BandbeitrittAntrag>();
 
+    // Phase 8 – Vernetzung & Konzerte
+    public DbSet<Konzert> Konzerte => Set<Konzert>();
+    public DbSet<KonzertBand> KonzertBands => Set<KonzertBand>();
+    public DbSet<Freundschaft> Freundschaften => Set<Freundschaft>();
+    public DbSet<Aktivitaet> Aktivitaeten => Set<Aktivitaet>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -56,6 +62,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasOne(v => v.VorgeschlagenVon)
                 .WithMany()
                 .HasForeignKey(v => v.VorgeschlagenVonId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Optionaler Konzertbezug: Konzert löschen lässt Videos bestehen (KonzertId → null).
+            e.HasOne(v => v.Konzert)
+                .WithMany(k => k.Videos)
+                .HasForeignKey(v => v.KonzertId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -166,6 +178,44 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(r => r.EingereichtVonId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(r => new { r.BetrifftTyp, r.BetrifftId });
             e.HasIndex(r => r.Status);
+        });
+
+        // ─── Phase 8 – Vernetzung & Konzerte ───────────────────────────────────
+
+        // KonzertBand (n:m), zusammengesetzter Schlüssel
+        builder.Entity<KonzertBand>().HasKey(kb => new { kb.KonzertId, kb.BandId });
+        builder.Entity<KonzertBand>(e =>
+        {
+            e.HasOne(kb => kb.Konzert).WithMany(k => k.Bands)
+                .HasForeignKey(kb => kb.KonzertId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(kb => kb.Band).WithMany(b => b.Konzertteilnahmen)
+                .HasForeignKey(kb => kb.BandId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Konzert>().HasIndex(k => k.Datum);
+
+        // Freundschaft: zwei FKs auf Person. Restrict, um doppelte Kaskadenpfade auf dieselbe
+        // Tabelle zu vermeiden (eine gelöschte Person wird vorher aus Freundschaften entfernt).
+        builder.Entity<Freundschaft>(e =>
+        {
+            e.HasOne(f => f.AnfragerPerson).WithMany()
+                .HasForeignKey(f => f.AnfragerPersonId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(f => f.EmpfaengerPerson).WithMany()
+                .HasForeignKey(f => f.EmpfaengerPersonId).OnDelete(DeleteBehavior.Restrict);
+            // Höchstens eine Verbindung je gerichtetem Paar.
+            e.HasIndex(f => new { f.AnfragerPersonId, f.EmpfaengerPersonId }).IsUnique();
+            e.HasIndex(f => f.Status);
+        });
+
+        // Aktivitaet: Feed-Ereignis. Index auf Zeitpunkt (Feed nach Datum absteigend).
+        builder.Entity<Aktivitaet>(e =>
+        {
+            e.HasOne(a => a.AkteurPerson).WithMany()
+                .HasForeignKey(a => a.AkteurPersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.NebenPerson).WithMany()
+                .HasForeignKey(a => a.NebenPersonId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(a => a.Zeitpunkt);
+            e.HasIndex(a => a.AkteurPersonId);
         });
     }
 }

@@ -5,5 +5,8 @@ public enum PersonRolleTyp
 {
     Komponist = 0,
     Dirigent = 1,
-    Musikant = 2
+    Musikant = 2,
+    /// <summary>Nur-Hörer:in / vernetzte:r Nutzer:in ohne aktive musikalische Tätigkeit
+    /// (typischer Start-Status neu registrierter Konten).</summary>
+    Zuhoerer = 3
 }
