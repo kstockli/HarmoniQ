@@ -50,7 +50,7 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
 | Rolle | Beschreibung |
 |---|---|
 | **Anonym** | Kann Stücke/Videos ansehen und **einmal pro Video voten** (Cookie-basiert, kein Login nötig) |
-| **User (Google-Login)** | Zusätzlich: Video-Vorschläge einreichen, eigene Bewertungen verwalten |
+| **User (Login: lokal / Google / Microsoft)** | Zusätzlich: Video-/Mitwirkungs-Vorschläge, eigene Bewertungen verwalten, eigene Person pflegen, **Freundschaften** knüpfen |
 | **Admin** | Vollzugriff: Daten erfassen, Importe starten, Vorschläge freigeben |
 
 ### Voting ohne Login
@@ -66,6 +66,11 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
 ### 4.1 Öffentliche Bereiche (ohne Login)
 
 - **Startseite:** Featured Komponist / Stück des Monats, Statistiken
+  - *(NEU, geplant)* **QR-Code ganz unten**: zeigt einen QR-Code auf `https://harmoniq.q-no.ch`,
+    damit man die App **von Smartphone zu Smartphone** spontan weitergeben kann (App öffnen → unten
+    zeigen → abscannen → installieren). Erzeugung serverseitig/clientseitig ohne Personenbezug;
+    URL ist konstant, daher cachebar. Sinnvolle Ergänzung gerade in der offenen Anfangsphase
+    (niederschwellige Verbreitung, „bring a friend").
 - **Komponisten-Übersicht:** Liste aller erfassten Komponisten
 - **Stück-Liste:** Alle Stücke eines Komponisten, filterbar/sortierbar nach Jahr, Schwierigkeit, Bewertung
 - **Stück-Detailseite:**
@@ -94,9 +99,10 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
   spielt 1. Oboe" → Review-Queue → bei Genehmigung werden die Verknüpfungen gesetzt
 - *(geplant, Phase 6)* **Richtigstellung melden:** Freitext-Hinweis auf Fehler (Video/Stück/Person/Band)
 
-> **Hinweis Login:** Implementiert sind sowohl **lokale Konten** (E-Mail/Passwort, mit
-> SMTP-Mailversand) als auch **Google-Login**. E-Mail-Bestätigung ist in der Testphase
-> deaktiviert (`RequireConfirmedAccount = false`).
+> **Hinweis Login (aktualisiert):** Implementiert sind **lokale Konten** (E-Mail/Passwort) sowie
+> **Google-** und **Microsoft-Login**. E-Mail-Bestätigung ist **aktiv** (`RequireConfirmedAccount = true`);
+> Login erst nach Bestätigung, externe (verifizierte) Logins werden auto-bestätigt. Mailversand in
+> Produktion via **Resend HTTPS-API** (Railway blockt SMTP).
 
 ### 4.3 Admin-Bereich (`/admin`)
 
@@ -161,7 +167,15 @@ Schritt 3: Speichern
 
 ### Konzept
 Zentrale Entität ist **Person**. Eine Person kann **mehrere Rollen** haben
-(Komponist:in, Dirigent:in, Musikant:in) – einen separaten „Komponist"-Typ gibt es nicht.
+(Komponist:in, Dirigent:in, Musikant:in, **Zuhörer:in**) – einen separaten „Komponist"-Typ gibt es nicht.
+
+> **Rolle „Zuhörer:in" (NEU):** Nicht jede Person macht aktiv Musik. Wer die App nur nutzt,
+> um Aufnahmen zu entdecken/zu bewerten und sich mit anderen zu vernetzen, ist **Zuhörer:in**.
+> Das ist v. a. der typische Start-Status von neu registrierten Konten ohne musikalische Tätigkeit
+> (siehe Onboarding, Abschnitt 5 „Freundschaften & Onboarding"). Eine Person kann später zusätzlich
+> Musikant:in/Dirigent:in werden – die Rollen schließen sich nicht aus.
+> **Default-Sichtbarkeit Zuhörer:in = `NurInitialen`** (extern nur Initialen; voll für Freund:innen
+> und Bandkolleg:innen) – konsistent mit Musikant:innen.
 
 > ⚠️ Zwei verschiedene „Rollen"-Begriffe nicht verwechseln: **App-Benutzerrollen**
 > (Anonym / User / Admin, Abschnitt 3, via ASP.NET Identity) steuern Zugriffsrechte.
@@ -181,12 +195,12 @@ Person                              (ersetzt „Komponist")
 ├── Id (Guid)
 ├── Name (string)
 ├── Sichtbarkeit (enum)            ← Datenschutz-Stufe der Personendaten, siehe unten
-│                                    Default: Öffentlich (Komponist/Dirigent), Nur Initialen (Musikant)
+│                                    Default: Öffentlich (Komponist/Dirigent), NurInitialen (Musikant/Zuhörer)
 ├── Biografie (string?)
 ├── BildUrl (string?)
 ├── Geburtsjahr (int?)
 ├── BenutzerId (FK → User?, UNIQUE) ← optional: „das bin ich"-Verknüpfung zum eingeloggten Konto
-├── Rollen [n] → PersonRolle        ← Komponist / Dirigent / Musikant
+├── Rollen [n] → PersonRolle        ← Komponist / Dirigent / Musikant / Zuhörer
 ├── Instrumente [n:m] → Instrument  ← nur relevant für Musikant:innen (PersonInstrument)
 ├── Links [1:n] → PersonLink        ← mehrere Links statt einzelner Webseite
 ├── StückBeiträge [1:n]
@@ -211,7 +225,7 @@ PersonLink                          (Detail-Tabelle: beliebig viele Links je Per
 
 PersonRolle                         (welche Rollen kann die Person grundsätzlich?)
 ├── PersonId (FK)
-├── Rolle (enum: Komponist / Dirigent / Musikant)
+├── Rolle (enum: Komponist / Dirigent / Musikant / Zuhörer)
 └── PK (PersonId, Rolle)
 
 Instrument                          (Nachschlage-Tabelle)
@@ -236,6 +250,7 @@ Band
 ├── Name (string)
 ├── Land (string?)
 ├── Webseite (string?)
+├── BildUrl (string?)               ← NEU: Band-Logo/Foto (optional)
 ├── Videos [1:n]
 └── Mitgliedschaften [1:n] → BandMitgliedschaft
 
@@ -260,6 +275,7 @@ Video
 ├── Id (Guid)
 ├── StückId (FK)
 ├── BandId (FK?)                   ← nullable, falls Band unbekannt
+├── KonzertId (FK?)               ← NEU, nullable: optionaler Verweis auf das Konzert/den Auftritt
 ├── YouTubeVideoId (string)        ← nur die 11-stellige ID (aus URL extrahiert)
 ├── Titel (string)                 ← optional bei Eingabe; sonst autom. via YouTube-oEmbed
 ├── AufnahmeDatum (DateOnly?)
@@ -314,9 +330,63 @@ BandbeitrittAntrag                  (Vorschlag „Band beitreten" – UMGESETZT)
 > ein:e **Admin** bestätigt sie unter `/admin/bandantraege` (→ erzeugt `BandMitgliedschaft`).
 > Admins können auf der Personenseite Bands auch **direkt** hinzufügen (ohne Antrag).
 
+Freundschaft                        (NEU – gegenseitige Verbindung zweier Personen)
+├── Id (Guid)
+├── AnfragerPersonId (FK → Person)  ← wer die Anfrage gestellt hat (verknüpfte Person des Kontos)
+├── EmpfaengerPersonId (FK → Person)← wer angefragt wird
+├── Status (enum: Offen / Bestätigt / Abgelehnt)
+├── ErstelltAm (DateTime)
+└── EntschiedenAm (DateTime?)
+CONSTRAINT: UNIQUE (AnfragerPersonId, EmpfaengerPersonId)
+CONSTRAINT: AnfragerPersonId <> EmpfaengerPersonId
+
+> **Wirkung (analog Bandkolleg:innen):** Ist eine Freundschaft **Bestätigt**, sehen die
+> beiden Personen einander **immer voll** – Name *und* Bild –, unabhängig von der
+> Sichtbarkeits-Einstellung der Gegenseite (siehe „Viewer-abhängige Sichtbarkeit"). Eine
+> Anfrage setzt eine **verknüpfte Person** beim Anfrager voraus (man knüpft als „ich" an).
+> Die Beziehung ist **symmetrisch**: für die Sichtbarkeits-Prüfung zählt jedes bestätigte
+> Paar in beide Richtungen. Eine abgelehnte Anfrage kann später erneut gestellt werden
+> (alter Eintrag wird überschrieben/neu angelegt).
+
+Konzert                             (NEU – ein Auftritt/Event, an dem eine oder mehrere Bands mitwirken)
+├── Id (Guid)
+├── Datum (DateOnly)               ← PFLICHT
+├── Name (string?)                 ← optional, z. B. "Jahreskonzert 2025", "Eidg. Musikfest"
+├── Ort (string?)                  ← optional, Standort/Lokal, z. B. "KKL Luzern"
+├── Beschreibung (string?)         ← optional
+├── BildUrl (string?)              ← NEU: Plakat/Foto des Konzerts (optional)
+├── Bands [n:m] → KonzertBand      ← teilnehmende Bands (eine bis mehrere)
+└── Videos [1:n]                   ← Videos, die auf dieses Konzert verweisen (Video.KonzertId)
+
+> **Namensentscheid:** Entität heißt **`Konzert`** (klar und gebräuchlich). „Auftritt"/„Event"
+> wäre breiter (Umzug, Probe …); falls künftig nötig, lässt sich ein optionales `Typ`-Enum
+> (Konzert / Wertungsspiel / Sonstiges) ergänzen, ohne das Modell umzubauen. Vorerst bewusst
+> schlank: nur Datum (Pflicht) + optional Name/Ort.
+
+KonzertBand                         (n:m – welche Bands beim Konzert mitwirken)
+├── KonzertId (FK)
+├── BandId (FK)
+└── PK (KonzertId, BandId)
+
+> **Beispiel (wie vom User beschrieben):** Konzert „Jahreskonzert 2025" mit **drei** Bands
+> (3 × `KonzertBand`). Band A hat **kein** Video an diesem Konzert; Band B hat **mehrere**
+> Videos (je ein Stück); Band C hat **genau ein** Video. Die Videos hängen über `Video.KonzertId`
+> am Konzert und über `Video.BandId` an ihrer Band – beide Bezüge sind unabhängig, daher sind
+> alle drei Fälle abbildbar. Eine Konzert-Detailseite gruppiert die Videos nach Band; Bands ohne
+> Video erscheinen trotzdem als Teilnehmerinnen.
+
+> **Niederschwellige Erfassung (entschieden):** Im **Video-Dialog** wird das Konzert per
+> **Autocomplete-mit-Anlegen** gewählt – bestehendes Konzert auswählen *oder* per **Datum (+ optional
+> Name/Ort)** neu anlegen (analog Instrument/Stimme). Kein separater Admin-Schritt nötig; Konzerte
+> entstehen organisch beim Video-Erfassen.
+>
+> **Automatische Band-Zuordnung (entschieden):** Verweist ein Video auf ein Konzert, wird die **Band
+> des Videos automatisch** als `KonzertBand`-Teilnehmerin eingetragen (idempotent, keine Dublette).
+> Zusätzliche Bands ohne Video können im `/admin/konzerte`-CRUD manuell ergänzt werden.
+
 Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten Usern)
 ├── Id (Guid)
-├── BetrifftTyp (enum: Video / Stück / Person / Band)
+├── BetrifftTyp (enum: Video / Stück / Person / Band / Konzert)
 ├── BetrifftId (Guid)              ← Verweis auf das gemeinte Objekt
 ├── Text (string)                  ← die eigentliche Richtigstellung (Freitext)
 ├── EingereichtVon (FK → User)
@@ -376,6 +446,63 @@ Band sind) **immer voll** angezeigt – Name *und* Bild –, unabhängig von der
 Für alle anderen Betrachter gilt die persönliche Einstellung. Zusätzlich:
 - **Bilder** erscheinen nur bei effektiver Sichtbarkeit „Öffentlich" (Außenstehende sehen höchstens Initialen, kein Foto).
 - In der **Personen-Übersicht** (`/personen`) werden effektiv „NichtBekannt"-Personen **herausgefiltert**.
+- **Bestätigte Freundschaften** (NEU) wirken wie Bandkolleg:innen: befreundete Personen sehen
+  einander **immer voll** (Name + Bild), unabhängig von der Sichtbarkeits-Einstellung. Die zentrale
+  Sichtprüfung (`PersonenSicht`) prüft also: Admin → bandkollegial → befreundet → sonst Einstellung.
+
+### Freundschaften & Onboarding *(NEU – geplant)*
+**Freundschaften.** Zwei Personen können sich verbinden (Entität `Freundschaft`): ein:e eingeloggte:r
+Benutzer:in mit verknüpfter Person stellt eine **Anfrage** an eine andere Person; diese **bestätigt**
+oder **lehnt ab** (gegenseitig). Erst nach Bestätigung sehen beide einander voll (s. o.). UI:
+- Button **„Befreunden"** auf der Personen-Detailseite (sofern eigene Person verknüpft, nicht man selbst,
+  noch keine offene/bestätigte Verbindung). Sonst Status-Chip („Anfrage gesendet" / „Befreundet").
+- Seite **`/account/freunde`**: eingehende Anfragen bestätigen/ablehnen, eigene Freundesliste, gesendete Anfragen.
+
+**Onboarding für Konten ohne verknüpfte Person.** Wer sich einloggt, aber (noch) keine Person verknüpft
+hat, wird **niederschwellig aufgefordert**, sich zu erfassen – ein Hinweis-Banner/Dialog führt zu einem
+kurzen Assistenten:
+1. **Bestehende Person finden:** Wählt man eine **Band** und tippt den **Namen**, werden **bereits
+   vorhandene Personen** dieser Band vorgeschlagen (Autocomplete) → „Das bin ich" (→ `PersonAnspruch`,
+   Admin-Bestätigung wie gehabt).
+2. **Sonst neu anlegen:** Findet sich nichts, legt man eine neue Person an (Default-Rolle **Zuhörer:in**;
+   Musikant:in/Band optional ergänzbar). Bei verknüpftem Konto wird die E-Mail synchronisiert.
+
+> **Bewusst offene Anfangsphase:** Damit die App früh „lebt", wird bewusst **wenig erzwungen** –
+> z. B. dürfen Freundschaftsanfragen ohne Admin-Freigabe laufen, und das Onboarding ist optional/
+> überspringbar. Die Anti-Impersonation-Bestätigung bleibt nur dort, wo es um das **Aufdecken**
+> geschützter Personendaten geht (Person-Verknüpfung, Band-Beitritt).
+
+**Aktivitäts-Feed (NEU – der Sozial-Hebel).** Auf der Startseite (für eingeloggte Nutzer:innen) bzw.
+unter `/account/freunde` ein **Feed** der jüngsten Aktivitäten der eigenen **Freund:innen** und
+**Bandkolleg:innen**: „X hat Video Y **bewertet**", „X hat Video Y **hinzugefügt/vorgeschlagen**",
+„X ist jetzt mit Z **befreundet**", „X **wirkt mit** in Video Y".
+
+> **Umsetzung mit eigener Tabelle `Aktivitaet` (entschieden).** Statt die Ereignisse bei jeder
+> Anzeige aus vielen Tabellen zu unionen, wird **append-only** eine `Aktivitaet`-Zeile geschrieben,
+> sobald ein Ereignis passiert. Begründung: günstig lesbar (Index auf `Zeitpunkt`), Zustand pro
+> Event möglich (gelesen/ungelesen, Push, Zusammenfassen/Throttling), Historie bleibt stabil auch
+> wenn die Quelle (z. B. Bewertung) später gelöscht wird, und neue Event-Typen lassen sich einfach
+> anhängen. Der Feed selbst ist dann ein simpler, indizierter `WHERE AkteurPersonId IN (Freunde+Bandkollegen)
+> ORDER BY Zeitpunkt DESC`-Query. Sichtbarkeit wird respektiert (nur Akteur:innen, die der Betrachter
+> sehen darf). **Backfill** bestehender Daten beim Einführen einmalig.
+
+Aktivitaet                          (NEU – append-only Feed-Ereignis; System-Ereignis ODER eigener Beitrag)
+├── Id (Guid)
+├── AkteurPersonId (FK → Person)    ← wer die Aktivität ausgelöst / den Beitrag geschrieben hat
+├── Typ (enum: Beitrag / BewertungAbgegeben / VideoHinzugefuegt / FreundschaftBestaetigt / MitwirkungHinzugefuegt)
+├── Text (string?)                  ← NEU: Freitext; PFLICHT bei Typ=Beitrag, sonst optionale Notiz
+├── ZielTyp (enum?: Video / Person / Band / Konzert / Stück)  ← bei Typ=Beitrag i. d. R. null
+├── ZielId (Guid?)                  ← lose Referenz auf das betroffene Objekt (null bei reinem Beitrag)
+├── NebenPersonId (FK → Person?)    ← optional, z. B. die neue Freundin bei FreundschaftBestaetigt
+└── Zeitpunkt (DateTime)            ← INDEX (Feed nach Datum absteigend)
+
+> **Eigene Beiträge (`Typ=Beitrag`):** Eingeloggte Nutzer:innen mit verknüpfter Person können über
+> ein Eingabefeld im Feed (Startseite / `/account/freunde`) **selbst etwas an ihre Freund:innen &
+> Bandkolleg:innen schreiben** – derselbe `Aktivitaet`-Datensatz, nur mit `Text` statt System-Ereignis.
+> Sichtbar für dieselbe Gruppe wie der übrige Feed (Freunde + Bandkollegen). `ZielTyp/ZielId` bleiben
+> i. d. R. leer, können aber optional auf ein Objekt verweisen (z. B. ein Beitrag *zu* einem Video).
+> Bearbeiten/Löschen des eigenen Beitrags möglich; Admin kann moderieren. *(Antworten/Kommentare auf
+> Beiträge sind eine mögliche spätere Erweiterung und vorerst nicht modelliert.)*
 
 ### Selbst-Verknüpfung „das bin ich" (Person ↔ Benutzerkonto)
 `Person.BenutzerId` ist eine **optionale, eindeutige (UNIQUE)** Referenz auf ein eingeloggtes
@@ -412,7 +539,10 @@ So bleibt die Tabelle sauber/normalisiert und wächst organisch mit der Nutzung.
 - Stück `1—n` StückBeitrag `n—1` Person
 - Video `1—n` VideoMitwirkung `n—1` Person; VideoMitwirkung `n—1` Instrument/Stimme (optional)
 - Person `1—n` BandMitgliedschaft `n—1` Band (Person ↔ Band über die Zeit)
-- Richtigstellung verweist lose (Typ + Id) auf Video/Stück/Person/Band
+- Person `n—m` Person über **Freundschaft** (gegenseitig, mit Status)
+- Konzert `n—m` Band über **KonzertBand**; Konzert `1—n` Video (`Video.KonzertId`, optional)
+- Person `1—n` Aktivitaet (Akteur); Aktivitaet verweist lose (ZielTyp + ZielId) auf das Objekt
+- Richtigstellung verweist lose (Typ + Id) auf Video/Stück/Person/Band/Konzert
 
 ### Community-Beiträge: Ergänzungen & Richtigstellungen *(geplant)*
 Eingeloggte User können – analog zu den Video-Vorschlägen – auch **Mitwirkungen vorschlagen**:
@@ -455,10 +585,15 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 /stuecke/{id}                 → Stück-Detail + Videos + Bewertungen + Voting + „Video vorschlagen"
 /videos                       → Gesamtliste aller Videos (Filter: Band, Komponist)
 /bands                        → Band-Übersicht
-/bands/{id}                   → Band-Detail (Aufnahmen + gespielte Stücke)
-/account/login                → Login (lokal + Google)
+/bands/{id}                   → Band-Detail (Aufnahmen + gespielte Stücke + Konzerte der Band)
+/konzerte                     → (NEU) Konzert-Übersicht (Liste, nach Datum sortiert)
+/konzerte/{id}                → (NEU) Konzert-Detail: Datum/Name/Ort, teilnehmende Bands,
+                                 Videos je Band gruppiert (Bands ohne Video trotzdem gelistet)
+/account/login                → Login (lokal + Google + Microsoft)
 /account/register             → Registrierung (lokales Konto)
 /account/profil               → Meine Bewertungen
+/account/person               → Eigene Personendaten pflegen
+/account/freunde              → (NEU) Freundschaften: Anfragen, eigene Freundesliste
 /admin                        → Admin-Dashboard
 /admin/komponisten            → CRUD Komponisten
 /admin/stuecke                → CRUD Stücke
@@ -467,6 +602,7 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 /admin/bewertungen            → Bewertungen verwalten (bearbeiten / löschen)
 /admin/vorschlaege            → Review-Queue für User-Vorschläge
 /admin/import                 → Import-Assistent (3-Schritt-Wizard)
+/admin/konzerte               → (NEU) CRUD Konzerte (Datum/Name/Ort, Bands zuordnen)
 
 — geplant (Phase 6, Personen-/Rollen-Modell) —
 /personen                     → Personen-Liste (Komponist:innen, Dirigent:innen, Musikant:innen)
@@ -583,10 +719,35 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     - **Richtigstellungen** — „Fehler melden" auf Stück-/Personen-/Band-Detailseiten (Freitext);
       Admin bearbeitet unter `/admin/richtigstellungen` (Antwort + Erledigt/Abgelehnt).
 
-### Phase 7 – Deployment ⏳ *geplant*
-24. PostgreSQL-Migration
-25. Deployment (servertown.ch-Container oder Railway.app)
-26. Google OAuth + SMTP Produktions-Konfiguration
+### Phase 7 – Deployment ✅ *umgesetzt*
+24. ✅ **PostgreSQL-Migration** (dev + prod komplett auf Postgres 18; nativ unter Windows lokal,
+    managed Postgres auf Railway). Siehe `DEPLOY.md` und `Postgres.md`.
+25. ✅ **Deployment auf Railway.app** (Dockerfile, `$PORT`, WebSockets, ForwardedHeaders);
+    Custom Domain **harmoniq.q-no.ch** mit automatischem TLS.
+26. ✅ **OAuth + Mail in Produktion**: Google **und** Microsoft (Multi-Tenant + persönliche Konten),
+    E-Mail-Versand via **Resend HTTPS-API** (Railway blockt SMTP); `RequireConfirmedAccount = true`,
+    deutsche Identity-Fehlermeldungen, alle Auth-/Profil-Seiten übersetzt & gestaltet.
+27. ✅ **PWA**: Web-Manifest, Service Worker, Install-Banner, maskable Icons (Beethoven-5-Motiv).
+
+### Phase 8 – Vernetzung & Konzerte ⏳ *geplant* — siehe Abschnitt 5
+> Ziel: aus dem Katalog ein **soziales** Entdeck-Werkzeug machen. Bewusst **offene** Anfangsphase
+> (wenig Zwang/Bestätigung), um früh genug Teilnehmer:innen für spannende Vernetzung zu gewinnen.
+
+28. **Person-Typ Zuhörer:in** (`PersonRolle`-Enum + Default-Rolle beim Onboarding).
+29. **Freundschaften** (`Freundschaft`-Entity + Migration): „Befreunden"-Button auf der Personenseite,
+    `/account/freunde` (Anfragen/Liste), Einbindung in die viewer-abhängige Sichtbarkeit (wie Bandkolleg:innen).
+30. **Onboarding** für Konten ohne verknüpfte Person: Hinweis-Banner + Assistent (bestehende Person
+    via Band+Name vorschlagen → „Das bin ich"; sonst neu als Zuhörer:in anlegen).
+31. **Konzerte** (`Konzert` + `KonzertBand` + `Video.KonzertId`, Migration): `/konzerte`, `/konzerte/{id}`
+    (Videos je Band gruppiert), `/admin/konzerte` (CRUD), Konzert-Auswahl im Video-Dialog,
+    Konzerte-Abschnitt auf der Band-Detailseite.
+32. **QR-Code** auf der Startseite (unten) für `https://harmoniq.q-no.ch` zur Smartphone-zu-Smartphone-Weitergabe
+    (clientseitig generiert, kein Personenbezug).
+33. **Aktivitäts-Feed** der Freund:innen/Bandkolleg:innen (Startseite eingeloggt + `/account/freunde`)
+    über append-only `Aktivitaet`-Tabelle (Schreiben bei Ereignis + einmaliger Backfill); respektiert Sichtbarkeit.
+    Inkl. **eigener Freitext-Beiträge** (`Typ=Beitrag`) an Freunde/Bandkollegen (schreiben/bearbeiten/löschen).
+34. **Konzert-Komfort**: Autocomplete-mit-Anlegen im Video-Dialog + automatische `KonzertBand`-Zuordnung
+    der Video-Band.
 
 ---
 
