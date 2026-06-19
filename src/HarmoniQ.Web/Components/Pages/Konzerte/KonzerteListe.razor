@@ -8,70 +8,123 @@
 
 <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Konzerte & Auftritte</MudText>
 
-@if (_konzerte == null)
+@if (_alle == null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
-else if (_konzerte.Count == 0)
+else if (_alle.Count == 0)
 {
     <MudAlert Severity="Severity.Info">Es sind noch keine Konzerte erfasst.</MudAlert>
 }
 else
 {
-    <MudGrid>
-        @foreach (var k in _konzerte)
-        {
-            <MudItem xs="12" sm="6" md="4">
-                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-                    @if (!string.IsNullOrWhiteSpace(k.BildUrl))
-                    {
-                        <MudLink Href="@($"/konzerte/{k.Id}")">
-                            <img src="@k.BildUrl" style="width:100%;display:block;max-height:160px;object-fit:cover;" alt="" />
-                        </MudLink>
-                    }
-                    <MudCardContent>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Event" Style="color:#D4AF37;" />
-                            <MudLink Href="@($"/konzerte/{k.Id}")" Typo="Typo.h6" Style="color:#F0E6FF;"
-                                     Underline="Underline.Hover">@(k.Name ?? k.Datum.ToString("dd.MM.yyyy"))</MudLink>
-                        </MudStack>
-                        <MudText Typo="Typo.body2" Class="mt-1" Style="color:#A78FC0;">
-                            @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
-                        </MudText>
-                        <MudStack Row="true" Spacing="2" Class="mt-2">
-                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Groups"
-                                     Style="background:#2d1657; color:#D4AF37;">
-                                @k.Bands Band@(k.Bands == 1 ? "" : "s")
-                            </MudChip>
-                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.VideoLibrary"
-                                     Style="background:#2d1657; color:#D4AF37;">
-                                @k.VideoAnzahl Video@(k.VideoAnzahl == 1 ? "" : "s")
-                            </MudChip>
-                        </MudStack>
-                    </MudCardContent>
-                    <MudCardActions>
-                        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
-                                   Href="@($"/konzerte/{k.Id}")">Ansehen</MudButton>
-                    </MudCardActions>
-                </MudCard>
-            </MudItem>
-        }
+    <MudGrid Class="mb-4" Spacing="2">
+        <MudItem xs="12" sm="6" md="5">
+            <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Immediate="true" Clearable="true"
+                          Label="Suchen (Name / Ort)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="8" sm="4" md="3">
+            <MudSelect T="Zeitraum" @bind-Value="_zeitraum" @bind-Value:after="Filtern" Label="Zeitraum"
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem Value="Zeitraum.Alle">Alle</MudSelectItem>
+                <MudSelectItem Value="Zeitraum.Kommende">Kommende</MudSelectItem>
+                <MudSelectItem Value="Zeitraum.Vergangene">Vergangene</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="4" sm="2" md="4" Class="d-flex align-center">
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count</MudText>
+        </MudItem>
     </MudGrid>
+
+    @if (_gefiltert.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Keine Konzerte für diese Filter.</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var k in _gefiltert)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                        @if (!string.IsNullOrWhiteSpace(k.BildUrl))
+                        {
+                            <MudLink Href="@($"/konzerte/{k.Id}")">
+                                <img src="@k.BildUrl" style="width:100%;display:block;max-height:160px;object-fit:cover;" alt="" />
+                            </MudLink>
+                        }
+                        <MudCardContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Event" Style="color:#D4AF37;" />
+                                <MudLink Href="@($"/konzerte/{k.Id}")" Typo="Typo.h6" Style="color:#F0E6FF;"
+                                         Underline="Underline.Hover">@(k.Name ?? k.Datum.ToString("dd.MM.yyyy"))</MudLink>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Class="mt-1" Style="color:#A78FC0;">
+                                @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                            </MudText>
+                            <MudStack Row="true" Spacing="2" Class="mt-2">
+                                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Groups"
+                                         Style="background:#2d1657; color:#D4AF37;">
+                                    @k.Bands Band@(k.Bands == 1 ? "" : "s")
+                                </MudChip>
+                                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.VideoLibrary"
+                                         Style="background:#2d1657; color:#D4AF37;">
+                                    @k.VideoAnzahl Video@(k.VideoAnzahl == 1 ? "" : "s")
+                                </MudChip>
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                                       Href="@($"/konzerte/{k.Id}")">Ansehen</MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
 }
 
 @code {
-    private List<KonzertZeile>? _konzerte;
+    private List<KonzertZeile>? _alle;
+    private List<KonzertZeile> _gefiltert = [];
+    private string _suche = "";
+    private Zeitraum _zeitraum = Zeitraum.Alle;
+
+    private enum Zeitraum { Alle, Kommende, Vergangene }
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _konzerte = await db.Konzerte
+        _alle = await db.Konzerte
             .OrderByDescending(k => k.Datum)
             .Select(k => new KonzertZeile(
                 k.Id, k.Datum, k.Name, k.Ort, k.BildUrl,
                 k.Bands.Count,
                 k.Videos.Count(v => v.Status == VideoStatus.Genehmigt)))
             .ToListAsync();
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        if (_alle == null) return;
+        var heute = DateOnly.FromDateTime(DateTime.Today);
+        IEnumerable<KonzertZeile> q = _alle;
+
+        q = _zeitraum switch
+        {
+            Zeitraum.Kommende => q.Where(k => k.Datum >= heute).OrderBy(k => k.Datum),
+            Zeitraum.Vergangene => q.Where(k => k.Datum < heute).OrderByDescending(k => k.Datum),
+            _ => q.OrderByDescending(k => k.Datum)
+        };
+
+        var s = _suche.Trim();
+        if (s.Length > 0)
+            q = q.Where(k => (k.Name ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)
+                          || (k.Ort ?? "").Contains(s, StringComparison.OrdinalIgnoreCase));
+
+        _gefiltert = q.ToList();
     }
 
     private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort, string? BildUrl,

@@ -1,5 +1,6 @@
 @page "/"
 @using Microsoft.EntityFrameworkCore
+@using QRCoder
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -147,7 +148,12 @@
     </MudGrid>
 }
 
-<MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Komponist:innen</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+    <MudText Typo="Typo.h5" Style="color:#D4AF37;">Komponist:innen</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/komponisten"
+               EndIcon="@Icons.Material.Filled.ArrowForward">Alle Komponist:innen</MudButton>
+</MudStack>
 <MudGrid>
     @foreach (var k in _komponisten)
     {
@@ -220,6 +226,19 @@
     </MudGrid>
 }
 
+<MudPaper Class="pa-6 mt-10 d-flex flex-column align-center" Elevation="2"
+          Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudText Typo="Typo.h6" GutterBottom="true" Style="color:#D4AF37;">HarmoniQ weitergeben</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Align="Align.Center" Style="color:#A78FC0; max-width:420px;">
+        Scanne den Code mit dem Smartphone, um HarmoniQ direkt zu öffnen – ideal, um die App
+        von Handy zu Handy weiterzugeben.
+    </MudText>
+    <div style="background:#fff; padding:14px; border-radius:14px; line-height:0;">
+        @_qrSvg
+    </div>
+    <MudText Typo="Typo.caption" Class="mt-3" Style="color:#6f5a86;">harmoniq.q-no.ch</MudText>
+</MudPaper>
+
 @code {
     private RenderFragment Kachel(string icon, int anzahl, string titel, string farbe, string? ziel) => __builder =>
     {
@@ -240,6 +259,15 @@
     private List<VideoZeile> _neueVideos = [];
     private List<KalenderZeile> _kalender = [];
     private bool _onboardingNoetig;
+    private MarkupString _qrSvg = QrErzeugen();
+
+    private static MarkupString QrErzeugen()
+    {
+        using var gen = new QRCodeGenerator();
+        using var data = gen.CreateQrCode("https://harmoniq.q-no.ch", QRCodeGenerator.ECCLevel.M);
+        var svg = new SvgQRCode(data).GetGraphic(5, "#1a0030", "#ffffff", drawQuietZones: false);
+        return (MarkupString)svg;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -260,10 +288,17 @@
         _stueckeCount = await db.Stuecke.CountAsync();
         _videosCount = await db.Videos.CountAsync(v => v.Status == VideoStatus.Genehmigt);
         _bewertungenCount = await db.Bewertungen.CountAsync();
+        // Nur Komponist:innen, deren Stücke mind. ein (genehmigtes) Video haben oder in einem
+        // Konzertprogramm vorkommen – und davon die „werkreichsten" ersten paar (Rest via „Alle").
         _komponisten = await db.Personen
-            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
-            .OrderBy(p => p.Name)
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist)
+                && p.StueckBeitraege.Any(sb =>
+                    sb.Stueck.Videos.Any(v => v.Status == VideoStatus.Genehmigt)
+                    || db.KonzertStuecke.Any(ks => ks.StueckId == sb.StueckId)))
+            .OrderByDescending(p => p.StueckBeitraege.Count)
+            .ThenBy(p => p.Name)
             .Select(p => new Zeile(p.Id, p.Name, p.BildUrl, p.Biografie, p.StueckBeitraege.Count))
+            .Take(6)
             .ToListAsync();
 
         // Bands mit den meisten Mitgliedern zuerst (max. 6 auf der Startseite).

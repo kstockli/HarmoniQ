@@ -775,8 +775,8 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 27. ✅ **PWA**: Web-Manifest, Service Worker, Install-Banner, maskable Icons (Beethoven-5-Motiv).
 
 ### Phase 8 – Vernetzung & Konzerte ⏳ *teilweise umgesetzt* — siehe Abschnitt 5
-> Stand: Konzerte/Programm/Mitwirkende/Wizard, Zuhörer:in-Rolle und Onboarding sind umgesetzt (28, 30–31, 34–36).
-> Offen: Freundschaften (29), QR-Code (32), Aktivitäts-Feed (33).
+> Stand: Konzerte/Programm/Mitwirkende/Wizard, Zuhörer:in-Rolle, Onboarding und QR-Code sind umgesetzt
+> (28, 30–32, 34–36). Offen: Freundschaften (29), Aktivitäts-Feed (33).
 > Ziel: aus dem Katalog ein **soziales** Entdeck-Werkzeug machen. Bewusst **offene** Anfangsphase
 > (wenig Zwang/Bestätigung), um früh genug Teilnehmer:innen für spannende Vernetzung zu gewinnen.
 
@@ -793,8 +793,9 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 31. ✅ *(umgesetzt)* **Konzerte** (`Konzert` + `KonzertBand` + `Video.KonzertId`, Migration): `/konzerte`,
     `/konzerte/{id}` (Videos je Band gruppiert), `/admin/konzerte`, Konzert-Auswahl im Video-Dialog,
     Konzerte-Abschnitt auf der Band-Detailseite. `Band.BildUrl` + `Konzert.BildUrl` ergänzt.
-32. **QR-Code** auf der Startseite (unten) für `https://harmoniq.q-no.ch` zur Smartphone-zu-Smartphone-Weitergabe
-    (clientseitig generiert, kein Personenbezug).
+32. ✅ *(umgesetzt)* **QR-Code** auf der Startseite (unten) für `https://harmoniq.q-no.ch` zur
+    Smartphone-zu-Smartphone-Weitergabe. Serverseitig generiert via **QRCoder** (reines C#, **kein**
+    externer Dienst, kein Personenbezug; konstante URL) als inline-SVG.
 33. **Aktivitäts-Feed** der Freund:innen/Bandkolleg:innen (Startseite eingeloggt + `/account/freunde`)
     über append-only `Aktivitaet`-Tabelle (Schreiben bei Ereignis + einmaliger Backfill); respektiert Sichtbarkeit.
     Inkl. **eigener Freitext-Beiträge** (`Typ=Beitrag`) an Freunde/Bandkollegen (schreiben/bearbeiten/löschen).
