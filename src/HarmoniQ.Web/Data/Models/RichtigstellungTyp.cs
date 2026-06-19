@@ -6,5 +6,6 @@ public enum RichtigstellungTyp
     Video = 0,
     Stueck = 1,
     Person = 2,
-    Band = 3
+    Band = 3,
+    Konzert = 4
 }

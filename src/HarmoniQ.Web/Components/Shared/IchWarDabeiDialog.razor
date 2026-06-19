@@ -1,0 +1,30 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#C4B0D8;">
+            In welcher Rolle warst du an diesem Konzert dabei?
+        </MudText>
+        <MudSelect T="PersonRolleTyp" @bind-Value="_rolle" Label="Rolle" Variant="Variant.Outlined">
+            <MudSelectItem Value="PersonRolleTyp.Zuhoerer">Zuhörer:in</MudSelectItem>
+            <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
+            <MudSelectItem Value="PersonRolleTyp.Dirigent">Dirigent:in</MudSelectItem>
+            <MudSelectItem Value="PersonRolleTyp.Komponist">Komponist:in</MudSelectItem>
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(_rolle)))">Bestätigen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    /// <summary>Vorgeschlagene Rolle (eindeutiger Person-Typ, sonst Zuhörer:in).</summary>
+    [Parameter] public PersonRolleTyp Vorschlag { get; set; } = PersonRolleTyp.Zuhoerer;
+
+    private PersonRolleTyp _rolle;
+
+    protected override void OnInitialized() => _rolle = Vorschlag;
+}

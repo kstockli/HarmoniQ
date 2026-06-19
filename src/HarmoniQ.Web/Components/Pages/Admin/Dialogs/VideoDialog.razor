@@ -32,6 +32,26 @@
         <MudTextField @bind-Value="_model.Anlass" Label="Anlass (optional)" Variant="Variant.Outlined" Class="mt-3"
                       Placeholder="z. B. Jahreskonzert 2024" />
 
+        @* ── Konzert: bestehendes wählen oder neu anlegen ───────────────────────── *@
+        <MudSwitch T="bool" @bind-Value="_neuKonzert" Color="Color.Warning" Class="mt-3"
+                   Label="Neues Konzert anlegen" />
+        @if (_neuKonzert)
+        {
+            <MudDatePicker @bind-Date="_neuDatum" Label="Konzert-Datum" Variant="Variant.Outlined" Required="true"
+                           Editable="true" DateFormat="dd.MM.yyyy" Class="mb-2" />
+            <MudTextField @bind-Value="_neuName" Label="Konzert-Name (optional)" Variant="Variant.Outlined" Class="mb-2"
+                          Placeholder="z. B. Jahreskonzert 2025" />
+            <MudTextField @bind-Value="_neuOrt" Label="Konzert-Ort (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. KKL Luzern" />
+        }
+        else
+        {
+            <MudAutocomplete T="Konzert" Label="Konzert (optional)" Variant="Variant.Outlined" Class="mt-1"
+                             Value="_konzert" ValueChanged="OnKonzertChanged"
+                             SearchFunc="SucheKonzert" ToStringFunc="@KonzertText"
+                             Clearable="true" MaxItems="20" ResetValueOnEmptyText="true" CoerceText="true" />
+        }
+
         <MudSelect T="VideoStatus" @bind-Value="_model.Status" Label="Status" Variant="Variant.Outlined" Class="mt-3">
             <MudSelectItem Value="VideoStatus.Genehmigt">Genehmigt (öffentlich sichtbar)</MudSelectItem>
             <MudSelectItem Value="VideoStatus.Ausstehend">Ausstehend</MudSelectItem>
@@ -50,14 +70,22 @@
     [Parameter] public Video? Vorhanden { get; set; }
     [Parameter] public List<Stueck> Stuecke { get; set; } = [];
     [Parameter] public List<Band> Bands { get; set; } = [];
+    [Parameter] public List<Konzert> Konzerte { get; set; } = [];
 
     private Video _model = new() { Status = VideoStatus.Genehmigt };
     private Stueck? _stueck;
+    private Konzert? _konzert;
     private string _youTubeEingabe = "";
+
+    private bool _neuKonzert;
+    private DateTime? _neuDatum;
+    private string? _neuName;
+    private string? _neuOrt;
 
     private bool IstGueltig =>
         _model.StueckId != Guid.Empty &&
-        !string.IsNullOrWhiteSpace(_model.YouTubeVideoId);
+        !string.IsNullOrWhiteSpace(_model.YouTubeVideoId) &&
+        (!_neuKonzert || _neuDatum is not null);
 
     protected override void OnInitialized()
     {
@@ -74,11 +102,34 @@
                 Ort = Vorhanden.Ort,
                 Anlass = Vorhanden.Anlass,
                 Status = Vorhanden.Status,
+                KonzertId = Vorhanden.KonzertId,
                 VorgeschlagenVonId = Vorhanden.VorgeschlagenVonId
             };
             _stueck = Stuecke.FirstOrDefault(s => s.Id == Vorhanden.StueckId);
+            _konzert = Konzerte.FirstOrDefault(k => k.Id == Vorhanden.KonzertId);
             _youTubeEingabe = Vorhanden.YouTubeVideoId;
         }
+    }
+
+    private Task<IEnumerable<Konzert>> SucheKonzert(string? value, CancellationToken ct)
+    {
+        IEnumerable<Konzert> result = string.IsNullOrWhiteSpace(value)
+            ? Konzerte
+            : Konzerte.Where(k => KonzertText(k).Contains(value, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(result.OrderByDescending(k => k.Datum).Take(20));
+    }
+
+    private void OnKonzertChanged(Konzert? k)
+    {
+        _konzert = k;
+        _model.KonzertId = k?.Id;
+    }
+
+    private static string KonzertText(Konzert? k)
+    {
+        if (k is null) return "";
+        var datum = k.Datum.ToString("dd.MM.yyyy");
+        return k.Name is { Length: > 0 } ? $"{datum} – {k.Name}" : datum;
     }
 
     private Task<IEnumerable<Stueck>> SucheStueck(string? value, CancellationToken ct)
@@ -97,5 +148,21 @@
 
     private void ExtrahiereId() => _model.YouTubeVideoId = YouTubeId.Extrahiere(_youTubeEingabe);
 
-    private void Speichern() => MudDialog.Close(DialogResult.Ok(_model));
+    private void Speichern()
+    {
+        if (_neuKonzert && _neuDatum is not null)
+        {
+            // Neues Konzert wird vom Aufrufer angelegt; KonzertId hier noch leer.
+            _model.KonzertId = null;
+            var nk = new NeuKonzert(DateOnly.FromDateTime(_neuDatum.Value),
+                string.IsNullOrWhiteSpace(_neuName) ? null : _neuName.Trim(),
+                string.IsNullOrWhiteSpace(_neuOrt) ? null : _neuOrt.Trim());
+            MudDialog.Close(DialogResult.Ok(new Ergebnis(_model, nk)));
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new Ergebnis(_model, null)));
+    }
+
+    public record Ergebnis(Video Video, NeuKonzert? NeuesKonzert);
+    public record NeuKonzert(DateOnly Datum, string? Name, string? Ort);
 }

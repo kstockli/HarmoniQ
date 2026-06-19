@@ -356,6 +356,8 @@ Konzert                             (NEU – ein Auftritt/Event, an dem eine ode
 ├── Beschreibung (string?)         ← optional
 ├── BildUrl (string?)              ← NEU: Plakat/Foto des Konzerts (optional)
 ├── Bands [n:m] → KonzertBand      ← teilnehmende Bands (eine bis mehrere)
+├── Programm [1:n] → KonzertStueck ← gespielte Stücke (welche Band welches Stück) — NEU
+├── Mitwirkende [1:n] → KonzertPerson ← beteiligte/anwesende Personen mit Rolle — NEU
 └── Videos [1:n]                   ← Videos, die auf dieses Konzert verweisen (Video.KonzertId)
 
 > **Namensentscheid:** Entität heißt **`Konzert`** (klar und gebräuchlich). „Auftritt"/„Event"
@@ -367,6 +369,33 @@ KonzertBand                         (n:m – welche Bands beim Konzert mitwirken
 ├── KonzertId (FK)
 ├── BandId (FK)
 └── PK (KonzertId, BandId)
+
+KonzertStueck                       (NEU – Programm: welches Stück wurde von welcher Band gespielt)
+├── Id (Guid)                       ← Surrogat-PK (ein Stück kann mehrfach vorkommen, z. B. zwei Bands)
+├── KonzertId (FK)
+├── StueckId (FK)
+├── BandId (FK?)                    ← welche Band das Stück spielte (optional, falls unbekannt)
+├── Reihenfolge (int?)              ← optionale Position im Programm
+└── CONSTRAINT: UNIQUE (KonzertId, StueckId, BandId)
+
+> **Bezug zu Video:** `KonzertStueck` ist das **Programm** (was gespielt wurde) – unabhängig davon,
+> ob eine Aufnahme existiert. Ein `Video` (mit `KonzertId`, `StueckId`, `BandId`) ist die konkrete
+> Aufnahme eines Programmpunkts; nicht jeder Programmpunkt hat ein Video, und das Programm bleibt
+> auch ohne Videos erfasst.
+
+KonzertPerson                       (NEU – n:m Person ↔ Konzert mit Rolle)
+├── Id (Guid)
+├── KonzertId (FK)
+├── PersonId (FK)
+├── Rolle (enum PersonRolleTyp: Komponist / Dirigent / Musikant / Zuhörer)
+├── BandId (FK?)                    ← optional: mit welcher Band die Person auftrat
+└── CONSTRAINT: UNIQUE (KonzertId, PersonId, Rolle)
+
+> **Rolle pro Konzert:** Die Rolle ist **kontextabhängig** – dieselbe Person kann an einem Konzert
+> als Musikant:in auftreten, an einem anderen als Zuhörer:in dabei sein. Bei der Erfassung wird
+> **die übliche Rolle der Person vorgeschlagen** (ihre primäre `PersonRolle`), ist aber überschreibbar
+> (z. B. Musiker:in geht als Zuhörer:in hin). Durch `UNIQUE (KonzertId, PersonId, Rolle)` kann eine
+> Person am selben Konzert auch in mehreren Rollen geführt werden (z. B. Dirigent:in *und* Komponist:in).
 
 > **Beispiel (wie vom User beschrieben):** Konzert „Jahreskonzert 2025" mit **drei** Bands
 > (3 × `KonzertBand`). Band A hat **kein** Video an diesem Konzert; Band B hat **mehrere**
@@ -383,6 +412,19 @@ KonzertBand                         (n:m – welche Bands beim Konzert mitwirken
 > **Automatische Band-Zuordnung (entschieden):** Verweist ein Video auf ein Konzert, wird die **Band
 > des Videos automatisch** als `KonzertBand`-Teilnehmerin eingetragen (idempotent, keine Dublette).
 > Zusätzliche Bands ohne Video können im `/admin/konzerte`-CRUD manuell ergänzt werden.
+>
+> **Konzert-Erfassungs-Wizard (NEU, geplant):** Ein eigenes GUI (`/admin/konzerte/erfassen`), mit dem
+> man ein **ganzes Konzert in einem Rutsch** erfasst – fehlende Stammdaten werden dabei **bei Bedarf
+> angelegt** (Find-or-create, keine Dubletten):
+> 1. **Konzert-Kopf:** Datum (Pflicht), optional Name/Ort/Bild.
+> 2. **Programm:** Liste von Zeilen, je Zeile **Stück** (Autocomplete-mit-Anlegen) + **Komponist:in**
+>    (Autocomplete-mit-Anlegen, wird beim neuen Stück als `StueckBeitrag` gesetzt) + **Band**
+>    (Autocomplete-mit-Anlegen) → erzeugt je Zeile einen `KonzertStueck`-Eintrag; die genannten Bands
+>    werden zugleich als `KonzertBand` geführt.
+> 3. **Mitwirkende (optional):** Personen + Rolle (übliche Rolle vorgeschlagen, überschreibbar; z. B.
+>    „Zuhörer:in") → `KonzertPerson`.
+> Speichern legt alles transaktional an (Konzert, neue Stücke/Komponist:innen/Bands, KonzertStueck,
+> KonzertBand, KonzertPerson). Videos können später wie gehabt am Konzert ergänzt werden.
 
 Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten Usern)
 ├── Id (Guid)
@@ -541,6 +583,8 @@ So bleibt die Tabelle sauber/normalisiert und wächst organisch mit der Nutzung.
 - Person `1—n` BandMitgliedschaft `n—1` Band (Person ↔ Band über die Zeit)
 - Person `n—m` Person über **Freundschaft** (gegenseitig, mit Status)
 - Konzert `n—m` Band über **KonzertBand**; Konzert `1—n` Video (`Video.KonzertId`, optional)
+- Konzert `n—m` Stück über **KonzertStueck** (Programm, mit optionaler Band je Programmpunkt)
+- Konzert `n—m` Person über **KonzertPerson** (mit Rolle PersonRolleTyp, optionaler Band)
 - Person `1—n` Aktivitaet (Akteur); Aktivitaet verweist lose (ZielTyp + ZielId) auf das Objekt
 - Richtigstellung verweist lose (Typ + Id) auf Video/Stück/Person/Band/Konzert
 
@@ -602,7 +646,8 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 /admin/bewertungen            → Bewertungen verwalten (bearbeiten / löschen)
 /admin/vorschlaege            → Review-Queue für User-Vorschläge
 /admin/import                 → Import-Assistent (3-Schritt-Wizard)
-/admin/konzerte               → (NEU) CRUD Konzerte (Datum/Name/Ort, Bands zuordnen)
+/admin/konzerte               → (NEU) CRUD Konzerte (Datum/Name/Ort/Bild, Bands zuordnen)
+/admin/konzerte/erfassen      → (NEU) Konzert-Erfassungs-Wizard (Programm + Mitwirkende, Find-or-create)
 
 — geplant (Phase 6, Personen-/Rollen-Modell) —
 /personen                     → Personen-Liste (Komponist:innen, Dirigent:innen, Musikant:innen)
@@ -748,6 +793,11 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     Inkl. **eigener Freitext-Beiträge** (`Typ=Beitrag`) an Freunde/Bandkollegen (schreiben/bearbeiten/löschen).
 34. **Konzert-Komfort**: Autocomplete-mit-Anlegen im Video-Dialog + automatische `KonzertBand`-Zuordnung
     der Video-Band.
+35. **Konzert-Programm & Mitwirkende**: Tabellen `KonzertStueck` (n:m Konzert↔Stück, je Programmpunkt
+    optional Band) und `KonzertPerson` (n:m Konzert↔Person mit Rolle PersonRolleTyp). Anzeige auf der
+    Konzert-Detailseite (Programm + Mitwirkende).
+36. **Konzert-Erfassungs-Wizard** (`/admin/konzerte/erfassen`): ganzes Konzert in einem Schritt erfassen,
+    fehlende Stücke/Komponist:innen/Bands per Find-or-create anlegen; Mitwirkende mit vorgeschlagener Rolle.
 
 ---
 

@@ -24,5 +24,7 @@ public class Konzert
     public string? BildUrl { get; set; }
 
     public ICollection<KonzertBand> Bands { get; set; } = [];
+    public ICollection<KonzertStueck> Programm { get; set; } = [];
+    public ICollection<KonzertPerson> Mitwirkende { get; set; } = [];
     public ICollection<Video> Videos { get; set; } = [];
 }

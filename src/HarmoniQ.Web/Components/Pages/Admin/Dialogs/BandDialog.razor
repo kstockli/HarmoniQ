@@ -4,7 +4,8 @@
     <DialogContent>
         <MudTextField @bind-Value="_model.Name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mb-3" />
         <MudTextField @bind-Value="_model.Land" Label="Land" Variant="Variant.Outlined" Class="mb-3" />
-        <MudTextField @bind-Value="_model.Webseite" Label="Webseite / Kanal-URL" Variant="Variant.Outlined" />
+        <MudTextField @bind-Value="_model.Webseite" Label="Webseite / Kanal-URL" Variant="Variant.Outlined" Class="mb-3" />
+        <MudTextField @bind-Value="_model.BildUrl" Label="Bild-URL (Logo/Foto, optional)" Variant="Variant.Outlined" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
@@ -22,7 +23,7 @@
     protected override void OnInitialized()
     {
         if (Vorhanden != null)
-            _model = new Band { Id = Vorhanden.Id, Name = Vorhanden.Name, Land = Vorhanden.Land, Webseite = Vorhanden.Webseite };
+            _model = new Band { Id = Vorhanden.Id, Name = Vorhanden.Name, Land = Vorhanden.Land, Webseite = Vorhanden.Webseite, BildUrl = Vorhanden.BildUrl };
     }
 
     private void Speichern() => MudDialog.Close(DialogResult.Ok(_model));

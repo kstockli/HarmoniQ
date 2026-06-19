@@ -62,6 +62,7 @@
     private List<Video> _gefiltert = [];
     private List<Stueck> _stuecke = [];
     private List<Band> _bands = [];
+    private List<Konzert> _konzerte = [];
     private string _suche = "";
 
     protected override async Task OnInitializedAsync() => await Laden();
@@ -71,6 +72,7 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         _stuecke = await db.Stuecke.OrderBy(s => s.Titel).ToListAsync();
         _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
+        _konzerte = await db.Konzerte.OrderByDescending(k => k.Datum).ToListAsync();
         _alle = await db.Videos.Include(v => v.Stueck).Include(v => v.Band)
             .OrderBy(v => v.Stueck.Titel).ToListAsync();
         Filtern();
@@ -87,7 +89,8 @@
         {
             { x => x.Vorhanden, v },
             { x => x.Stuecke, _stuecke },
-            { x => x.Bands, _bands }
+            { x => x.Bands, _bands },
+            { x => x.Konzerte, _konzerte }
         };
         var dialog = await DialogService.ShowAsync<VideoDialog>(
             v == null ? "Neues Video" : "Video bearbeiten", parameters,
@@ -95,7 +98,8 @@
         var result = await dialog.Result;
         if (result is null || result.Canceled) return;
 
-        var model = (Video)result.Data!;
+        var data = (VideoDialog.Ergebnis)result.Data!;
+        var model = data.Video;
         await using var db = await DbFactory.CreateDbContextAsync();
 
         // Duplikat-Prüfung: gleiche YouTube-ID am gleichen Stück nicht doppelt erfassen.
@@ -111,6 +115,14 @@
         if (string.IsNullOrWhiteSpace(model.Titel))
             model.Titel = await YouTube.HoleTitelAsync(model.YouTubeVideoId) ?? "(ohne Titel)";
 
+        // Neues Konzert (aus dem Dialog) anlegen und verknüpfen.
+        if (data.NeuesKonzert is { } nk)
+        {
+            var konzert = new Konzert { Datum = nk.Datum, Name = nk.Name, Ort = nk.Ort };
+            db.Konzerte.Add(konzert);
+            model.KonzertId = konzert.Id;
+        }
+
         if (v == null)
         {
             db.Videos.Add(model);
@@ -122,11 +134,22 @@
             entity.Titel = model.Titel;
             entity.StueckId = model.StueckId;
             entity.BandId = model.BandId;
+            entity.KonzertId = model.KonzertId;
             entity.YouTubeVideoId = model.YouTubeVideoId;
             entity.Ort = model.Ort;
             entity.Anlass = model.Anlass;
             entity.Status = model.Status;
         }
+
+        // Automatische Band-Zuordnung: hängt das Video an einem Konzert und hat eine Band,
+        // wird die Band idempotent als Konzert-Teilnehmerin eingetragen.
+        if (model.KonzertId is Guid kid && model.BandId is Guid bid)
+        {
+            var existiert = await db.KonzertBands.AnyAsync(kb => kb.KonzertId == kid && kb.BandId == bid);
+            if (!existiert)
+                db.KonzertBands.Add(new KonzertBand { KonzertId = kid, BandId = bid });
+        }
+
         await db.SaveChangesAsync();
         Snackbar.Add("Gespeichert.", Severity.Success);
         await Laden();

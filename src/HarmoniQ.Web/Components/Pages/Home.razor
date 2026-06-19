@@ -44,6 +44,42 @@
     </Authorized>
 </AuthorizeView>
 
+@if (_kalender.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-8" Elevation="4" Style="background:#1a0030; border:1px solid #D4AF37;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.Event" Style="color:#D4AF37;" />
+            <MudText Typo="Typo.h5" Style="color:#D4AF37;">Konzerte – demnächst & kürzlich</MudText>
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/konzerte"
+                       EndIcon="@Icons.Material.Filled.ArrowForward">Alle Konzerte</MudButton>
+        </MudStack>
+        <MudGrid>
+            @foreach (var k in _kalender)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Class="pa-3 cursor-pointer" Elevation="2"
+                              Style="@($"background:#241640; border-left:4px solid {(k.IstHeute ? "#D4AF37" : k.IstVergangen ? "#6f5a86" : "#1ABC9C")};")"
+                              @onclick="@(() => Nav.NavigateTo($"/konzerte/{k.Id}"))">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <div style="text-align:center;min-width:48px;">
+                                <MudText Typo="Typo.h5" Style="color:#F0E6FF;line-height:1;">@k.Datum.Day</MudText>
+                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@k.Datum.ToString("MMM")</MudText>
+                            </div>
+                            <div style="flex:1;min-width:0;">
+                                <MudText Typo="Typo.subtitle2" Style="color:#F0E6FF;">@k.Titel</MudText>
+                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                                    @k.RelativLabel@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+}
+
 <MudGrid Class="mb-8">
     @Kachel(Icons.Material.Filled.Person, _komponistenCount, "Komponist:innen", "#D4AF37", "/komponisten")
     @Kachel(Icons.Material.Filled.Groups2, _personenCount, "Personen", "#1ABC9C", "/personen")
@@ -180,6 +216,7 @@
     private List<Zeile> _komponisten = [];
     private List<BandZeile> _bands = [];
     private List<VideoZeile> _neueVideos = [];
+    private List<KalenderZeile> _kalender = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -211,9 +248,41 @@
                 v.Band != null ? v.Band.Name : null))
             .Take(4)
             .ToListAsync();
+
+        // Konzert-Kalender: ±8 Tage um heute, chronologisch.
+        var heute = DateOnly.FromDateTime(DateTime.Today);
+        var von = heute.AddDays(-8);
+        var bis = heute.AddDays(8);
+        var konzerte = await db.Konzerte
+            .Where(k => k.Datum >= von && k.Datum <= bis)
+            .OrderBy(k => k.Datum)
+            .Select(k => new { k.Id, k.Datum, k.Name, k.Ort })
+            .ToListAsync();
+        _kalender = konzerte
+            .Select(k => new KalenderZeile(k.Id, k.Datum, k.Name, k.Ort,
+                RelativLabel(k.Datum, heute), k.Datum == heute, k.Datum < heute))
+            .ToList();
+    }
+
+    private static string RelativLabel(DateOnly datum, DateOnly heute)
+    {
+        var tage = datum.DayNumber - heute.DayNumber;
+        return tage switch
+        {
+            0 => "heute",
+            1 => "morgen",
+            -1 => "gestern",
+            > 1 => $"in {tage} Tagen",
+            _ => $"vor {-tage} Tagen"
+        };
     }
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
     private record BandZeile(Guid Id, string Name, string? Land, int MitgliederCount, int VideosCount);
     private record VideoZeile(Guid Id, string YouTubeVideoId, string StueckTitel, string? BandName);
+    private record KalenderZeile(Guid Id, DateOnly Datum, string? Name, string? Ort,
+        string RelativLabel, bool IstHeute, bool IstVergangen)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
 }

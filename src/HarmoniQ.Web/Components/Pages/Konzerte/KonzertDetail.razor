@@ -1,0 +1,319 @@
+@page "/konzerte/{Id:guid}"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_konzert?.Titel ?? "Konzert") – HarmoniQ</PageTitle>
+
+@if (_konzert == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4 pa-0" />
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-2" Wrap="Wrap.Wrap">
+        <MudIcon Icon="@Icons.Material.Filled.Event" Style="color:#D4AF37;font-size:3rem;" />
+        <div>
+            <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_konzert.Titel</MudText>
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                @_konzert.Datum.ToString("dddd, dd.MM.yyyy")@(string.IsNullOrWhiteSpace(_konzert.Ort) ? "" : $" · {_konzert.Ort}")
+            </MudText>
+        </div>
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(_konzert.BildUrl))
+    {
+        <img src="@_konzert.BildUrl" style="width:100%;max-width:680px;border-radius:8px;display:block;" class="mb-4" alt="" />
+    }
+    @if (!string.IsNullOrWhiteSpace(_konzert.Beschreibung))
+    {
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color:#F0E6FF;">@_konzert.Beschreibung</MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        @if (_eigenePersonId is not null)
+        {
+            @if (_eigeneTeilnahmeRollen.Count > 0)
+            {
+                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle" Variant="Variant.Outlined">
+                    Du warst dabei (@string.Join(", ", _eigeneTeilnahmeRollen.Select(RolleLabelKurz)))
+                </MudChip>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                           StartIcon="@Icons.Material.Filled.PanTool" OnClick="IchWarDabei">Ich war dabei</MudButton>
+            }
+        }
+        <RichtigstellungMelden Typ="RichtigstellungTyp.Konzert" Id="_konzert.Id" />
+    </MudStack>
+
+    @if (_programm.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Programm (@_programm.Count)</MudText>
+        <MudList T="string" Dense="true" Class="mb-6">
+            @foreach (var p in _programm)
+            {
+                <MudListItem T="string" Href="@($"/stuecke/{p.StueckId}")" Icon="@Icons.Material.Filled.MusicNote"
+                             Style="color:#F0E6FF;">
+                    @p.StueckTitel
+                    @if (p.BandName != null)
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;"> · @p.BandName</MudText>
+                    }
+                </MudListItem>
+            }
+        </MudList>
+    }
+
+    @if (_mitwirkende.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Mitwirkende & Gäste (@_mitwirkende.Count)</MudText>
+        <MudPaper Class="pa-4 mb-6" Style="background:#1a0030; border:1px solid #3a1060;">
+            @foreach (var gruppe in _mitwirkende.GroupBy(m => m.Rolle).OrderBy(g => (int)g.Key))
+            {
+                <MudText Typo="Typo.subtitle2" Style="color:#9B59B6;">@RolleLabel(gruppe.Key)</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3" Class="mb-3">
+                    @foreach (var m in gruppe)
+                    {
+                        <MudLink Href="@($"/personen/{m.PersonId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">
+                            @m.AnzeigeName@(m.BandName != null ? $" ({m.BandName})" : "")
+                        </MudLink>
+                    }
+                </MudStack>
+            }
+        </MudPaper>
+    }
+
+    @if (_bands.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Für dieses Konzert sind noch keine Bands erfasst.</MudAlert>
+    }
+    else
+    {
+        @foreach (var band in _bands)
+        {
+            <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
+                <MudLink Href="@($"/bands/{band.Id}")" Style="color:#D4AF37;" Underline="Underline.Hover">@band.Name</MudLink>
+            </MudText>
+            @if (!VideosVon(band.Id).Any())
+            {
+                <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">(keine Videos an diesem Konzert)</MudText>
+            }
+            else
+            {
+                <MudGrid Class="mb-4">
+                    @foreach (var v in VideosVon(band.Id))
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                                <MudLink Href="@($"/videos/{v.Id}")">
+                                    <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                                         style="width:100%;display:block;" alt="@v.Titel" />
+                                </MudLink>
+                                <MudCardContent>
+                                    <MudLink Href="@($"/videos/{v.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                                             Underline="Underline.Hover">@v.StueckTitel</MudLink>
+                                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.Titel</MudText>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        }
+
+        @if (_videos.Any(v => v.BandId == null))
+        {
+            <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#9B59B6;">Weitere Aufnahmen</MudText>
+            <MudGrid class="mb-4">
+                @foreach (var v in _videos.Where(v => v.BandId == null))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                            <MudLink Href="@($"/videos/{v.Id}")">
+                                <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                                     style="width:100%;display:block;" alt="@v.Titel" />
+                            </MudLink>
+                            <MudCardContent>
+                                <MudLink Href="@($"/videos/{v.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                                         Underline="Underline.Hover">@v.StueckTitel</MudLink>
+                                <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.Titel</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private KonzertKopf? _konzert;
+    private List<BandZeile> _bands = [];
+    private List<VideoZeile> _videos = [];
+    private List<ProgrammZeile> _programm = [];
+    private List<MitwirkendeZeile> _mitwirkende = [];
+
+    private Guid? _eigenePersonId;
+    private PersonRolleTyp _vorschlagRolle = PersonRolleTyp.Zuhoerer;
+    private List<PersonRolleTyp> _eigeneTeilnahmeRollen = [];
+
+    private List<BreadcrumbItem> _breadcrumbs => _konzert == null ? [] :
+    [
+        new("Startseite", "/"),
+        new("Konzerte", "/konzerte"),
+        new(_konzert.Titel, null, disabled: true)
+    ];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var k = await db.Konzerte.FirstOrDefaultAsync(x => x.Id == Id);
+        if (k == null) { Nav.NavigateTo("/konzerte"); return; }
+        _konzert = new KonzertKopf(k.Id, k.Datum, k.Name, k.Ort, k.Beschreibung, k.BildUrl);
+
+        // Videos dieses Konzerts (genehmigt), nach Band gruppierbar.
+        var videos = await db.Videos
+            .Where(v => v.KonzertId == Id && v.Status == VideoStatus.Genehmigt)
+            .Include(v => v.Stueck)
+            .OrderBy(v => v.Stueck.Titel)
+            .ToListAsync();
+        _videos = videos
+            .Select(v => new VideoZeile(v.Id, v.BandId, v.YouTubeVideoId, v.Titel, v.Stueck.Titel))
+            .ToList();
+
+        // Teilnehmende Bands: alle aus KonzertBand (auch ohne Video), sortiert nach Name.
+        _bands = await db.KonzertBands
+            .Where(kb => kb.KonzertId == Id)
+            .OrderBy(kb => kb.Band.Name)
+            .Select(kb => new BandZeile(kb.BandId, kb.Band.Name))
+            .ToListAsync();
+
+        // Falls ein Video eine Band hat, die (noch) nicht als Teilnehmerin geführt ist, ergänzen.
+        foreach (var bid in _videos.Where(v => v.BandId != null).Select(v => v.BandId!.Value).Distinct())
+        {
+            if (_bands.All(b => b.Id != bid))
+            {
+                var name = await db.Bands.Where(b => b.Id == bid).Select(b => b.Name).FirstOrDefaultAsync();
+                if (name != null) _bands.Add(new BandZeile(bid, name));
+            }
+        }
+        _bands = _bands.OrderBy(b => b.Name).ToList();
+
+        // Programm (Konzert↔Stück, optional je Band), nach Reihenfolge dann Titel.
+        _programm = await db.KonzertStuecke
+            .Where(ks => ks.KonzertId == Id)
+            .OrderBy(ks => ks.Reihenfolge)
+            .ThenBy(ks => ks.Stueck.Titel)
+            .Select(ks => new ProgrammZeile(ks.StueckId, ks.Stueck.Titel, ks.BandId, ks.Band != null ? ks.Band.Name : null))
+            .ToListAsync();
+
+        // Mitwirkende & Gäste (Konzert↔Person mit Rolle); Namen sichtbarkeitsabhängig.
+        var mitwirkende = await db.KonzertPersonen
+            .Where(kp => kp.KonzertId == Id)
+            .Include(kp => kp.Person)
+            .Include(kp => kp.Band)
+            .ToListAsync();
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+
+        _mitwirkende = mitwirkende
+            .Select(kp =>
+            {
+                var eff = PersonenSicht.Effektiv(kp.PersonId, kp.Person.Sichtbarkeit, vollSichtbar);
+                return new MitwirkendeZeile(kp.PersonId,
+                    PersonenSicht.AnzeigeName(kp.Person.Name, eff), kp.Rolle, kp.Band?.Name);
+            })
+            .OrderBy(m => m.AnzeigeName)
+            .ToList();
+
+        // „Ich war dabei": eigene verknüpfte Person + Rollen-Vorschlag.
+        _eigenePersonId = null;
+        _eigeneTeilnahmeRollen = [];
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var eigene = await db.Personen
+                .Where(p => p.BenutzerId == userId)
+                .Select(p => new { p.Id, Rollen = p.Rollen.Select(r => r.Rolle).ToList() })
+                .FirstOrDefaultAsync();
+            if (eigene != null)
+            {
+                _eigenePersonId = eigene.Id;
+                // Eindeutiger Person-Typ → vorschlagen; sonst Zuhörer:in.
+                var distinct = eigene.Rollen.Distinct().ToList();
+                _vorschlagRolle = distinct.Count == 1 ? distinct[0] : PersonRolleTyp.Zuhoerer;
+                _eigeneTeilnahmeRollen = mitwirkende
+                    .Where(kp => kp.PersonId == eigene.Id)
+                    .Select(kp => kp.Rolle)
+                    .ToList();
+            }
+        }
+    }
+
+    private async Task IchWarDabei()
+    {
+        if (_eigenePersonId is not Guid pid) return;
+
+        var parameters = new DialogParameters<IchWarDabeiDialog> { { x => x.Vorschlag, _vorschlagRolle } };
+        var dialog = await DialogService.ShowAsync<IchWarDabeiDialog>("Ich war dabei", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        var rolle = (PersonRolleTyp)result.Data!;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var existiert = await db.KonzertPersonen.AnyAsync(kp =>
+            kp.KonzertId == Id && kp.PersonId == pid && kp.Rolle == rolle);
+        if (!existiert)
+        {
+            db.KonzertPersonen.Add(new KonzertPerson { KonzertId = Id, PersonId = pid, Rolle = rolle });
+            await db.SaveChangesAsync();
+        }
+        Snackbar.Add("Danke – als dabei eingetragen.", Severity.Success);
+        await OnParametersSetAsync();
+    }
+
+    private static string RolleLabelKurz(PersonRolleTyp r) => r switch
+    {
+        PersonRolleTyp.Komponist => "Komponist:in",
+        PersonRolleTyp.Dirigent => "Dirigent:in",
+        PersonRolleTyp.Musikant => "Musikant:in",
+        PersonRolleTyp.Zuhoerer => "Zuhörer:in",
+        _ => r.ToString()
+    };
+
+    private IEnumerable<VideoZeile> VideosVon(Guid bandId) => _videos.Where(v => v.BandId == bandId);
+
+    private static string RolleLabel(PersonRolleTyp r) => r switch
+    {
+        PersonRolleTyp.Komponist => "Komponist:innen",
+        PersonRolleTyp.Dirigent => "Dirigent:innen",
+        PersonRolleTyp.Musikant => "Musikant:innen",
+        PersonRolleTyp.Zuhoerer => "Zuhörer:innen",
+        _ => r.ToString()
+    };
+
+    private record KonzertKopf(Guid Id, DateOnly Datum, string? Name, string? Ort, string? Beschreibung, string? BildUrl)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
+    private record BandZeile(Guid Id, string Name);
+    private record VideoZeile(Guid Id, Guid? BandId, string YouTubeVideoId, string Titel, string StueckTitel);
+    private record ProgrammZeile(Guid StueckId, string StueckTitel, Guid? BandId, string? BandName);
+    private record MitwirkendeZeile(Guid PersonId, string AnzeigeName, PersonRolleTyp Rolle, string? BandName);
+}

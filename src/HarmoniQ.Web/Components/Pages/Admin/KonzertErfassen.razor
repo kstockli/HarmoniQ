@@ -1,0 +1,290 @@
+@page "/admin/konzerte/erfassen"
+@page "/admin/konzerte/{Id:guid}/bearbeiten"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IstBearbeiten ? "Konzert bearbeiten" : "Konzert erfassen") – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/konzerte"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Konzerte</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">@(IstBearbeiten ? "Konzert bearbeiten" : "Konzert erfassen")</MudText>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+    @if (IstBearbeiten)
+    {
+        @:Programm und Mitwirkende dieses Konzerts werden beim Speichern komplett aus den untenstehenden Zeilen neu gesetzt. Fehlende Stücke, Komponist:innen, Bands und Personen werden automatisch angelegt (keine Dubletten).
+    }
+    else
+    {
+        @:Erfasse ein ganzes Konzert in einem Schritt. Fehlende Stücke, Komponist:innen, Bands und Personen werden beim Speichern automatisch angelegt (keine Dubletten).
+    }
+</MudText>
+
+@* ── 1. Konzert-Kopf ─────────────────────────────────────────────────────── *@
+<MudPaper Class="pa-4 mb-4" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudText Typo="Typo.h6" GutterBottom="true" Style="color:#D4AF37;">1. Konzert</MudText>
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudDatePicker @bind-Date="_datum" Label="Datum" Variant="Variant.Outlined" Required="true"
+                           Editable="true" DateFormat="dd.MM.yyyy" />
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudTextField @bind-Value="_name" Label="Name (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. Jahreskonzert 2025" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_ort" Label="Ort / Lokal (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. KKL Luzern" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_bildUrl" Label="Bild-URL (optional)" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_beschreibung" Label="Beschreibung (optional)" Variant="Variant.Outlined" Lines="2" />
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* ── 2. Programm ─────────────────────────────────────────────────────────── *@
+<MudPaper Class="pa-4 mb-4" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;">2. Programm</MudText>
+        <MudSpacer />
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="ProgrammZeileHinzu">Stück</MudButton>
+    </MudStack>
+    @if (_programm.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">Noch keine Stücke. „Stück" hinzufügen.</MudText>
+    }
+    @foreach (var z in _programm)
+    {
+        <MudGrid Class="mb-1">
+            <MudItem xs="2" sm="1">
+                <MudNumericField T="int" @bind-Value="z.Reihenfolge" Label="Nr." Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" Min="1" HideSpinButtons="true" />
+            </MudItem>
+            <MudItem xs="10" sm="3">
+                <MudAutocomplete T="string" Label="Stück" Variant="Variant.Outlined" Dense="true"
+                                 @bind-Value="z.StueckTitel" SearchFunc="@((s, c) => Suche(_stueckNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudAutocomplete T="string" Label="Komponist:in (bei neuem Stück)" Variant="Variant.Outlined" Dense="true"
+                                 @bind-Value="z.KomponistName" SearchFunc="@((s, c) => Suche(_komponistNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
+            </MudItem>
+            <MudItem xs="11" sm="3">
+                <MudAutocomplete T="string" Label="Band" Variant="Variant.Outlined" Dense="true"
+                                 @bind-Value="z.BandName" SearchFunc="@((s, c) => Suche(_bandNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
+            </MudItem>
+            <MudItem xs="1">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => ProgrammZeileEntfernen(z))" />
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+
+@* ── 3. Mitwirkende ──────────────────────────────────────────────────────── *@
+<MudPaper Class="pa-4 mb-4" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;">3. Mitwirkende & Gäste (optional)</MudText>
+        <MudSpacer />
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="MitwirkendeZeileHinzu">Person</MudButton>
+    </MudStack>
+    @if (_mitwirkende.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Personen. „Person" hinzufügen (z. B. Dirigent:in oder Gäste).</MudText>
+    }
+    @foreach (var z in _mitwirkende)
+    {
+        <MudGrid Class="mb-1">
+            <MudItem xs="12" sm="4">
+                <MudAutocomplete T="string" Label="Person" Variant="Variant.Outlined" Dense="true"
+                                 Value="z.PersonName" ValueChanged="@(v => PersonGewaehlt(z, v))"
+                                 SearchFunc="@((s, c) => Suche(_personNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="PersonRolleTyp" @bind-Value="z.Rolle" Label="Rolle" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value="PersonRolleTyp.Dirigent">Dirigent:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Komponist">Komponist:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Zuhoerer">Zuhörer:in</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="11" sm="3">
+                <MudAutocomplete T="string" Label="Band (optional)" Variant="Variant.Outlined" Dense="true"
+                                 @bind-Value="z.BandName" SearchFunc="@((s, c) => Suche(_bandNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
+            </MudItem>
+            <MudItem xs="1">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => _mitwirkende.Remove(z))" />
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+
+<MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-8">
+    <MudButton Variant="Variant.Text" Href="/admin/konzerte">Abbrechen</MudButton>
+    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+               OnClick="Speichern" Disabled="@(_datum is null || _speichert)">
+        @(_speichert ? "Speichert…" : IstBearbeiten ? "Änderungen speichern" : "Konzert speichern")
+    </MudButton>
+</MudStack>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private bool IstBearbeiten => Id is not null;
+
+    private DateTime? _datum;
+    private string? _name, _ort, _beschreibung, _bildUrl;
+    private bool _speichert;
+
+    private readonly List<ProgrammRow> _programm = [];
+    private readonly List<MitwirkendeRow> _mitwirkende = [];
+
+    private List<string> _stueckNamen = [];
+    private List<string> _bandNamen = [];
+    private List<string> _personNamen = [];
+    private List<string> _komponistNamen = [];
+    private Dictionary<string, PersonRolleTyp> _personPrimaerRolle = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _stueckNamen = await db.Stuecke.OrderBy(s => s.Titel).Select(s => s.Titel).ToListAsync();
+        _bandNamen = await db.Bands.OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
+        _personNamen = await db.Personen.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+        // Komponist:innen-Vorschläge nur aus Personen mit Komponist-Rolle.
+        _komponistNamen = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+
+        // Übliche (kleinste) Rolle je Person für den Rollen-Vorschlag.
+        var rollen = await db.PersonRollen.Include(r => r.Person)
+            .Select(r => new { r.Person.Name, r.Rolle }).ToListAsync();
+        _personPrimaerRolle = rollen
+            .GroupBy(r => r.Name)
+            .ToDictionary(g => g.Key, g => g.Min(x => x.Rolle), StringComparer.OrdinalIgnoreCase);
+
+        if (Id is Guid kid)
+            await BestehendesLaden(db, kid);
+    }
+
+    private async Task BestehendesLaden(ApplicationDbContext db, Guid kid)
+    {
+        var k = await db.Konzerte.FirstOrDefaultAsync(x => x.Id == kid);
+        if (k == null) { Nav.NavigateTo("/admin/konzerte"); return; }
+
+        _datum = k.Datum.ToDateTime(TimeOnly.MinValue);
+        _name = k.Name;
+        _ort = k.Ort;
+        _beschreibung = k.Beschreibung;
+        _bildUrl = k.BildUrl;
+
+        var programm = await db.KonzertStuecke
+            .Where(ks => ks.KonzertId == kid)
+            .OrderBy(ks => ks.Reihenfolge).ThenBy(ks => ks.Stueck.Titel)
+            .Select(ks => new { ks.Stueck.Titel, BandName = ks.Band != null ? ks.Band.Name : null, ks.Reihenfolge })
+            .ToListAsync();
+        var i = 1;
+        foreach (var p in programm)
+            _programm.Add(new ProgrammRow { Reihenfolge = p.Reihenfolge ?? i++, StueckTitel = p.Titel, BandName = p.BandName });
+
+        var mitwirkende = await db.KonzertPersonen
+            .Where(kp => kp.KonzertId == kid)
+            .Select(kp => new { kp.Person.Name, kp.Rolle, BandName = kp.Band != null ? kp.Band.Name : null })
+            .ToListAsync();
+        foreach (var m in mitwirkende)
+            _mitwirkende.Add(new MitwirkendeRow { PersonName = m.Name, Rolle = m.Rolle, BandName = m.BandName });
+    }
+
+    private static Task<IEnumerable<string>> Suche(List<string> alle, string? wert)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? alle
+            : alle.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(15));
+    }
+
+    private void ProgrammZeileHinzu() => _programm.Add(new ProgrammRow { Reihenfolge = _programm.Count + 1 });
+
+    private void ProgrammZeileEntfernen(ProgrammRow z)
+    {
+        _programm.Remove(z);
+        // Lücken schließen: verbleibende Zeilen 1..n neu nummerieren.
+        for (var i = 0; i < _programm.Count; i++) _programm[i].Reihenfolge = i + 1;
+    }
+
+    private void MitwirkendeZeileHinzu() => _mitwirkende.Add(new MitwirkendeRow());
+
+    private void PersonGewaehlt(MitwirkendeRow z, string? name)
+    {
+        z.PersonName = name;
+        // Übliche Rolle vorschlagen, falls die Person bekannt ist.
+        if (!string.IsNullOrWhiteSpace(name) && _personPrimaerRolle.TryGetValue(name, out var rolle))
+            z.Rolle = rolle;
+    }
+
+    private async Task Speichern()
+    {
+        if (_datum is null) return;
+        _speichert = true;
+        try
+        {
+            var eingabe = new KonzertErfassungService.Eingabe(
+                DateOnly.FromDateTime(_datum.Value), _name, _ort, _beschreibung, _bildUrl,
+                _programm.Where(p => !string.IsNullOrWhiteSpace(p.StueckTitel))
+                    .Select(p => new KonzertErfassungService.ProgrammEingabe(p.StueckTitel!, p.KomponistName, p.BandName, p.Reihenfolge)).ToList(),
+                _mitwirkende.Where(m => !string.IsNullOrWhiteSpace(m.PersonName))
+                    .Select(m => new KonzertErfassungService.MitwirkendeEingabe(m.PersonName!, m.Rolle, m.BandName)).ToList());
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            Guid id;
+            if (Id is Guid kid)
+            {
+                await KonzertErfassungService.EditAsync(db, kid, eingabe);
+                id = kid;
+            }
+            else
+            {
+                id = await KonzertErfassungService.ErfasseAsync(db, eingabe);
+            }
+            Snackbar.Add("Konzert gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/konzerte/{id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Fehler beim Speichern: {ex.Message}", Severity.Error);
+            _speichert = false;
+        }
+    }
+
+    private class ProgrammRow
+    {
+        public int Reihenfolge { get; set; }
+        public string? StueckTitel { get; set; }
+        public string? KomponistName { get; set; }
+        public string? BandName { get; set; }
+    }
+
+    private class MitwirkendeRow
+    {
+        public string? PersonName { get; set; }
+        public PersonRolleTyp Rolle { get; set; } = PersonRolleTyp.Musikant;
+        public string? BandName { get; set; }
+    }
+}

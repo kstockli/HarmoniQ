@@ -33,6 +33,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     // Phase 8 – Vernetzung & Konzerte
     public DbSet<Konzert> Konzerte => Set<Konzert>();
     public DbSet<KonzertBand> KonzertBands => Set<KonzertBand>();
+    public DbSet<KonzertStueck> KonzertStuecke => Set<KonzertStueck>();
+    public DbSet<KonzertPerson> KonzertPersonen => Set<KonzertPerson>();
     public DbSet<Freundschaft> Freundschaften => Set<Freundschaft>();
     public DbSet<Aktivitaet> Aktivitaeten => Set<Aktivitaet>();
 
@@ -193,6 +195,31 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         });
 
         builder.Entity<Konzert>().HasIndex(k => k.Datum);
+
+        // KonzertStueck (Programm): n:m Konzert↔Stück, optionale Band je Programmpunkt.
+        builder.Entity<KonzertStueck>(e =>
+        {
+            e.HasOne(ks => ks.Konzert).WithMany(k => k.Programm)
+                .HasForeignKey(ks => ks.KonzertId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(ks => ks.Stueck).WithMany()
+                .HasForeignKey(ks => ks.StueckId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(ks => ks.Band).WithMany()
+                .HasForeignKey(ks => ks.BandId).OnDelete(DeleteBehavior.SetNull);
+            // Dasselbe Stück nicht doppelt für dieselbe Band am selben Konzert.
+            e.HasIndex(ks => new { ks.KonzertId, ks.StueckId, ks.BandId }).IsUnique();
+        });
+
+        // KonzertPerson: n:m Konzert↔Person mit Rolle.
+        builder.Entity<KonzertPerson>(e =>
+        {
+            e.HasOne(kp => kp.Konzert).WithMany(k => k.Mitwirkende)
+                .HasForeignKey(kp => kp.KonzertId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(kp => kp.Person).WithMany()
+                .HasForeignKey(kp => kp.PersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(kp => kp.Band).WithMany()
+                .HasForeignKey(kp => kp.BandId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(kp => new { kp.KonzertId, kp.PersonId, kp.Rolle }).IsUnique();
+        });
 
         // Freundschaft: zwei FKs auf Person. Restrict, um doppelte Kaskadenpfade auf dieselbe
         // Tabelle zu vermeiden (eine gelöschte Person wird vorher aus Freundschaften entfernt).

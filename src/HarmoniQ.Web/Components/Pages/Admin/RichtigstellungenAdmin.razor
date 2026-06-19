@@ -118,6 +118,9 @@ else
             case RichtigstellungTyp.Video:
                 var v = await db.Videos.Where(x => x.Id == id).Select(x => new { x.Titel, x.StueckId }).FirstOrDefaultAsync();
                 return (v?.Titel ?? "(gelöscht)", v != null ? $"/stuecke/{v.StueckId}" : null);
+            case RichtigstellungTyp.Konzert:
+                var k = await db.Konzerte.Where(x => x.Id == id).Select(x => new { x.Name, x.Datum }).FirstOrDefaultAsync();
+                return (k?.Name ?? k?.Datum.ToString("dd.MM.yyyy") ?? "(gelöscht)", k != null ? $"/konzerte/{id}" : null);
             default:
                 return ("?", null);
         }

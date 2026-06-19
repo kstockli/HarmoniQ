@@ -70,6 +70,7 @@
             entity.Name = model.Name;
             entity.Land = model.Land;
             entity.Webseite = model.Webseite;
+            entity.BildUrl = model.BildUrl;
         }
         await db.SaveChangesAsync();
         Snackbar.Add("Gespeichert.", Severity.Success);

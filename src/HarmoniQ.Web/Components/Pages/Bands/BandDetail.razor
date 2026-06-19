@@ -73,6 +73,25 @@ else
         </MudPaper>
     }
 
+    @if (_konzerte.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
+            Konzerte (@_konzerte.Count)
+        </MudText>
+        <MudList T="string" Dense="true" Class="mb-6">
+            @foreach (var k in _konzerte)
+            {
+                <MudListItem T="string" Href="@($"/konzerte/{k.Id}")" Icon="@Icons.Material.Filled.Event"
+                             Style="color:#F0E6FF;">
+                    @k.Titel
+                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                        @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    }
+
     @if (_videos.Count == 0)
     {
         <MudAlert Severity="Severity.Info">Für diese Band sind noch keine Videos erfasst.</MudAlert>
@@ -122,6 +141,7 @@ else
     private Band? _band;
     private List<VideoZeile> _videos = [];
     private List<StueckZeile> _stuecke = [];
+    private List<KonzertZeile> _konzerte = [];
     private List<MitgliedZeile> _mitglieder = [];
     private List<MitgliedZeile> _leitung = [];
     private List<IGrouping<string, MitgliedZeile>> _register = [];
@@ -155,6 +175,12 @@ else
             .Select(s => new StueckZeile(s.Id, s.Titel, s.Jahr))
             .ToList();
 
+        _konzerte = await db.KonzertBands
+            .Where(kb => kb.BandId == Id)
+            .OrderByDescending(kb => kb.Konzert.Datum)
+            .Select(kb => new KonzertZeile(kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Name, kb.Konzert.Ort))
+            .ToListAsync();
+
         var mitglieder = await db.BandMitgliedschaften
             .Where(m => m.BandId == Id && m.BisJahr == null)
             .Include(m => m.Person)
@@ -186,5 +212,9 @@ else
 
     private record VideoZeile(Guid Id, string YouTubeVideoId, string Titel, Guid StueckId, string StueckTitel);
     private record StueckZeile(Guid Id, string Titel, int? Jahr);
+    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
     private record MitgliedZeile(Guid PersonId, string AnzeigeName, string? Instrument, string? Funktion);
 }
