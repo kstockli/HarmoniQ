@@ -20,10 +20,12 @@
 }
 else if (_personId == null)
 {
-    <MudAlert Severity="Severity.Info">
-        Dein Konto ist noch mit keiner Person verknüpft. Öffne <MudLink Href="/personen">die Personen-Übersicht</MudLink>,
-        finde „dich“ und klicke auf <b>„Das bin ich“</b>. Nach Freigabe durch eine:n Admin kannst du hier deine Daten pflegen.
+    <MudAlert Severity="Severity.Info" Class="mb-3">
+        Dein Konto ist noch mit keiner Person verknüpft. Der <b>Onboarding-Assistent</b> hilft dir,
+        dich zu finden oder neu anzulegen.
     </MudAlert>
+    <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.PersonSearch" Href="/account/onboarding">Person verknüpfen</MudButton>
 }
 else
 {
@@ -53,6 +55,16 @@ else
                 <MudTextField @bind-Value="_m.BildUrl" Label="Bild-URL (optional)" Variant="Variant.Outlined"
                               Placeholder="https://…/foto.jpg"
                               HelperText="Wird nur bei Sichtbarkeit „Öffentlich“ angezeigt." />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="PersonRolleTyp" MultiSelection="true" @bind-SelectedValues="_rollenSel" Label="Ich bin …"
+                           Variant="Variant.Outlined" MultiSelectionTextFunc="RollenText"
+                           HelperText="Wähle, was du bist (Mehrfachauswahl möglich).">
+                    <MudSelectItem Value="PersonRolleTyp.Zuhoerer">Zuhörer:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Dirigent">Dirigent:in</MudSelectItem>
+                    <MudSelectItem Value="PersonRolleTyp.Komponist">Komponist:in</MudSelectItem>
+                </MudSelect>
             </MudItem>
             <MudItem xs="12">
                 <MudSelect T="Guid" MultiSelection="true" @bind-SelectedValues="_instrumentSel" Label="Instrumente"
@@ -133,6 +145,18 @@ else
     private Modell _m = new();
     private List<(Guid Id, string Name)> _instrumente = [];
     private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
+    private IReadOnlyCollection<PersonRolleTyp> _rollenSel = new HashSet<PersonRolleTyp>();
+
+    private static string RolleLabel(PersonRolleTyp r) => r switch
+    {
+        PersonRolleTyp.Komponist => "Komponist:in",
+        PersonRolleTyp.Dirigent => "Dirigent:in",
+        PersonRolleTyp.Musikant => "Musikant:in",
+        PersonRolleTyp.Zuhoerer => "Zuhörer:in",
+        _ => r.ToString()
+    };
+    private static string RollenText(IReadOnlyList<string> vals) =>
+        string.Join(", ", vals.Select(v => Enum.TryParse<PersonRolleTyp>(v, out var r) ? RolleLabel(r) : v));
     private List<string> _meineBands = [];
     private List<string> _offeneAntraege = [];
 
@@ -152,13 +176,14 @@ else
         _kontoEmail = await db.Users.Where(u => u.Id == _userId).Select(u => u.Email).FirstOrDefaultAsync();
         await PersonLinkSync.SyncEmailAsync(db, _userId, _kontoEmail);
 
-        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente)
+        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente).Include(p => p.Rollen)
             .FirstOrDefaultAsync(p => p.BenutzerId == _userId);
 
         if (person != null)
         {
             _personId = person.Id;
             _instrumentSel = new HashSet<Guid>(person.Instrumente.Select(pi => pi.InstrumentId));
+            _rollenSel = new HashSet<PersonRolleTyp>(person.Rollen.Select(r => r.Rolle));
             _m = new Modell
             {
                 Name = person.Name,
@@ -249,7 +274,7 @@ else
     {
         if (_personId == null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente)
+        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente).Include(p => p.Rollen)
             .FirstOrDefaultAsync(p => p.Id == _personId && p.BenutzerId == _userId);
         if (person == null) { Snackbar.Add("Person nicht gefunden oder nicht (mehr) verknüpft.", Severity.Error); return; }
 
@@ -265,6 +290,20 @@ else
         person.YouTube = _m.YouTube;
         person.Mobile = _m.Mobile;
         // E-Mail-Link bleibt automatisch ans Konto gekoppelt (nicht manuell editierbar).
+
+        // Rollen synchronisieren
+        var rollen = _rollenSel.ToHashSet();
+        foreach (var weg in person.Rollen.Where(r => !rollen.Contains(r.Rolle)).ToList())
+        {
+            person.Rollen.Remove(weg);
+            db.PersonRollen.Remove(weg);
+        }
+        foreach (var rt in rollen.Where(rt => person.Rollen.All(r => r.Rolle != rt)))
+        {
+            var pr = new PersonRolle { PersonId = person.Id, Rolle = rt };
+            person.Rollen.Add(pr);
+            db.PersonRollen.Add(pr);
+        }
 
         // Instrumente synchronisieren
         var sel = _instrumentSel.ToHashSet();

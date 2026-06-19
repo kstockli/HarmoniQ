@@ -44,13 +44,14 @@ else
         {
             @if (_eigeneTeilnahmeRollen.Count > 0)
             {
-                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle" Variant="Variant.Outlined">
+                <MudChip T="string" Icon="@Icons.Material.Filled.CheckCircle" Variant="Variant.Outlined"
+                         Style="color:#A78FC0; border-color:#3a1060;">
                     Du warst dabei (@string.Join(", ", _eigeneTeilnahmeRollen.Select(RolleLabelKurz)))
                 </MudChip>
             }
             else
             {
-                <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
                            StartIcon="@Icons.Material.Filled.PanTool" OnClick="IchWarDabei">Ich war dabei</MudButton>
             }
         }

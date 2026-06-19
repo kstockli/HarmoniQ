@@ -31,6 +31,7 @@
                 <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Komponist)">Komponist:in</MudSelectItem>
                 <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Dirigent)">Dirigent:in</MudSelectItem>
                 <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Musikant)">Musikant:in</MudSelectItem>
+                <MudSelectItem T="PersonRolleTyp?" Value="@(PersonRolleTyp.Zuhoerer)">Zuhörer:in</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="6" sm="4">
@@ -175,6 +176,7 @@ else
         PersonRolleTyp.Komponist => "Komponist:in",
         PersonRolleTyp.Dirigent => "Dirigent:in",
         PersonRolleTyp.Musikant => "Musikant:in",
+        PersonRolleTyp.Zuhoerer => "Zuhörer:in",
         _ => r.ToString()
     };
 

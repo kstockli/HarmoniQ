@@ -4,6 +4,7 @@
 @using HarmoniQ.Web.Data.Models
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>HarmoniQ – Startseite</PageTitle>
 
@@ -37,10 +38,31 @@
         </MudPaper>
     </NotAuthorized>
     <Authorized Context="auth">
-        <MudText Typo="Typo.body2" Class="mb-8" Style="color:#9fe0b0;">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
-            Angemeldet als <b>@auth.User.Identity?.Name</b> – du kannst bewerten, Videos vorschlagen und Besetzungen ergänzen.
-        </MudText>
+        @if (_onboardingNoetig)
+        {
+            <MudPaper Class="pa-4 mb-8" Elevation="4"
+                      Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                    <MudIcon Icon="@Icons.Material.Filled.Badge" Style="color:#1ABC9C;font-size:2.5rem;" />
+                    <div style="flex:1;min-width:240px;">
+                        <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Verknüpfe dich mit „deiner“ Person</MudText>
+                        <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                            Dein Konto ist noch keiner Person zugeordnet. Finde dich (oder lege dich neu an),
+                            um dein Profil zu pflegen und dich mit anderen zu vernetzen.
+                        </MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                               StartIcon="@Icons.Material.Filled.PersonSearch" Href="/account/onboarding">Los geht's</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-8" Style="color:#A78FC0;">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Style="color:#9B59B6;" />
+                Angemeldet als <b>@auth.User.Identity?.Name</b> – du kannst bewerten, Videos vorschlagen und Besetzungen ergänzen.
+            </MudText>
+        }
     </Authorized>
 </AuthorizeView>
 
@@ -217,10 +239,21 @@
     private List<BandZeile> _bands = [];
     private List<VideoZeile> _neueVideos = [];
     private List<KalenderZeile> _kalender = [];
+    private bool _onboardingNoetig;
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Onboarding-Hinweis: eingeloggt, aber (noch) keine verknüpfte Person und kein offener Antrag.
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var hatPerson = await db.Personen.AnyAsync(p => p.BenutzerId == userId);
+            var hatAntrag = await db.PersonAnsprueche.AnyAsync(a => a.BenutzerId == userId && a.Status == PersonAnspruchStatus.Offen);
+            _onboardingNoetig = !hatPerson && !hatAntrag;
+        }
         _komponistenCount = await db.Personen.CountAsync(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist));
         _personenCount = await db.Personen.CountAsync();
         _bandsCount = await db.Bands.CountAsync();

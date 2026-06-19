@@ -774,30 +774,40 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     deutsche Identity-Fehlermeldungen, alle Auth-/Profil-Seiten übersetzt & gestaltet.
 27. ✅ **PWA**: Web-Manifest, Service Worker, Install-Banner, maskable Icons (Beethoven-5-Motiv).
 
-### Phase 8 – Vernetzung & Konzerte ⏳ *geplant* — siehe Abschnitt 5
+### Phase 8 – Vernetzung & Konzerte ⏳ *teilweise umgesetzt* — siehe Abschnitt 5
+> Stand: Konzerte/Programm/Mitwirkende/Wizard, Zuhörer:in-Rolle und Onboarding sind umgesetzt (28, 30–31, 34–36).
+> Offen: Freundschaften (29), QR-Code (32), Aktivitäts-Feed (33).
 > Ziel: aus dem Katalog ein **soziales** Entdeck-Werkzeug machen. Bewusst **offene** Anfangsphase
 > (wenig Zwang/Bestätigung), um früh genug Teilnehmer:innen für spannende Vernetzung zu gewinnen.
 
-28. **Person-Typ Zuhörer:in** (`PersonRolle`-Enum + Default-Rolle beim Onboarding).
+28. ✅ *(umgesetzt)* **Person-Typ Zuhörer:in** (`PersonRolleTyp.Zuhoerer`): in den Admin-Editoren
+    (`/admin/personen`, PersonDialog) wählbar, in Listen/Filtern/Detailseiten als „Zuhörer:in" angezeigt;
+    Default-Rolle beim Onboarding (Sichtbarkeit `NurInitialen`).
 29. **Freundschaften** (`Freundschaft`-Entity + Migration): „Befreunden"-Button auf der Personenseite,
     `/account/freunde` (Anfragen/Liste), Einbindung in die viewer-abhängige Sichtbarkeit (wie Bandkolleg:innen).
-30. **Onboarding** für Konten ohne verknüpfte Person: Hinweis-Banner + Assistent (bestehende Person
-    via Band+Name vorschlagen → „Das bin ich"; sonst neu als Zuhörer:in anlegen).
-31. **Konzerte** (`Konzert` + `KonzertBand` + `Video.KonzertId`, Migration): `/konzerte`, `/konzerte/{id}`
-    (Videos je Band gruppiert), `/admin/konzerte` (CRUD), Konzert-Auswahl im Video-Dialog,
-    Konzerte-Abschnitt auf der Band-Detailseite.
+30. ✅ *(umgesetzt)* **Onboarding** (`/account/onboarding`): Hinweis-Banner auf der Startseite (eingeloggt,
+    ohne verknüpfte Person & ohne offenen Antrag) + Assistent — Band + Name eingeben, passende **bestehende
+    Personen** (noch nicht verknüpft, Bandmitglieder zuerst) werden vorgeschlagen → „Das bin ich" (`PersonAnspruch`,
+    Admin-Freigabe); sonst **neu als Zuhörer:in** anlegen und direkt verknüpfen (optional Band-Beitritt-Antrag).
+    Verlinkt auch aus „Meine Person".
+31. ✅ *(umgesetzt)* **Konzerte** (`Konzert` + `KonzertBand` + `Video.KonzertId`, Migration): `/konzerte`,
+    `/konzerte/{id}` (Videos je Band gruppiert), `/admin/konzerte`, Konzert-Auswahl im Video-Dialog,
+    Konzerte-Abschnitt auf der Band-Detailseite. `Band.BildUrl` + `Konzert.BildUrl` ergänzt.
 32. **QR-Code** auf der Startseite (unten) für `https://harmoniq.q-no.ch` zur Smartphone-zu-Smartphone-Weitergabe
     (clientseitig generiert, kein Personenbezug).
 33. **Aktivitäts-Feed** der Freund:innen/Bandkolleg:innen (Startseite eingeloggt + `/account/freunde`)
     über append-only `Aktivitaet`-Tabelle (Schreiben bei Ereignis + einmaliger Backfill); respektiert Sichtbarkeit.
     Inkl. **eigener Freitext-Beiträge** (`Typ=Beitrag`) an Freunde/Bandkollegen (schreiben/bearbeiten/löschen).
-34. **Konzert-Komfort**: Autocomplete-mit-Anlegen im Video-Dialog + automatische `KonzertBand`-Zuordnung
-    der Video-Band.
-35. **Konzert-Programm & Mitwirkende**: Tabellen `KonzertStueck` (n:m Konzert↔Stück, je Programmpunkt
-    optional Band) und `KonzertPerson` (n:m Konzert↔Person mit Rolle PersonRolleTyp). Anzeige auf der
-    Konzert-Detailseite (Programm + Mitwirkende).
-36. **Konzert-Erfassungs-Wizard** (`/admin/konzerte/erfassen`): ganzes Konzert in einem Schritt erfassen,
-    fehlende Stücke/Komponist:innen/Bands per Find-or-create anlegen; Mitwirkende mit vorgeschlagener Rolle.
+34. ✅ *(umgesetzt)* **Konzert-Komfort**: Autocomplete-mit-Anlegen im Video-Dialog + automatische
+    `KonzertBand`-Zuordnung der Video-Band; Konzert-Kalender (±8 Tage) auf der Startseite.
+35. ✅ *(umgesetzt)* **Konzert-Programm & Mitwirkende**: Tabellen `KonzertStueck` (n:m Konzert↔Stück, je
+    Programmpunkt optional Band, Reihenfolge) und `KonzertPerson` (n:m Konzert↔Person mit Rolle PersonRolleTyp).
+    Anzeige auf der Konzert-Detailseite (Programm + Mitwirkende). **„Ich war dabei"**: eingeloggte Nutzer:innen
+    mit verknüpfter Person tragen sich selbst ein (Rollen-Vorschlag = eindeutiger Person-Typ, sonst Zuhörer:in).
+36. ✅ *(umgesetzt)* **Konzert-Erfassungs-Wizard** (`/admin/konzerte/erfassen` + `/admin/konzerte/{id}/bearbeiten`):
+    ganzes Konzert in einem Schritt erfassen **und** bestehende mutieren, fehlende Stücke/Komponist:innen/Bands
+    per Find-or-create anlegen; Programm mit Reihenfolge, Mitwirkende mit vorgeschlagener Rolle. Ersetzt den
+    früheren Konzert-Dialog (Neu/Bearbeiten).
 
 ---
 
