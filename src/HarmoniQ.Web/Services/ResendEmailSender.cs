@@ -11,7 +11,7 @@ namespace HarmoniQ.Web.Services;
 /// "Email:Resend:ApiKey" und "Email:From" (verifizierte Absender-Domain bei Resend).
 /// </summary>
 public class ResendEmailSender(HttpClient http, IConfiguration config, ILogger<ResendEmailSender> logger)
-    : IEmailSender<ApplicationUser>
+    : IEmailSender<ApplicationUser>, IBenachrichtigungsMail
 {
     private readonly string _apiKey = config["Email:Resend:ApiKey"] ?? "";
     private readonly string _from = config["Email:From"] ?? config["Email:User"] ?? "";
@@ -30,7 +30,7 @@ public class ResendEmailSender(HttpClient http, IConfiguration config, ILogger<R
         SendAsync(email, "HarmoniQ – Passwort zurücksetzen",
             $"<p>Dein Code zum Zurücksetzen des Passworts lautet: <strong>{resetCode}</strong></p>");
 
-    private async Task SendAsync(string to, string subject, string htmlBody)
+    public async Task SendAsync(string to, string subject, string htmlBody)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
         {

@@ -33,8 +33,10 @@ public static class FreundschaftService
         return (f.AnfragerPersonId == meineId ? Beziehung.AnfrageVonMir : Beziehung.AnfrageAnMich, f.Id);
     }
 
-    /// <summary>Sendet eine Freundschaftsanfrage (idempotent; reaktiviert eine abgelehnte).</summary>
-    public static async Task AnfrageSendenAsync(ApplicationDbContext db, Guid anfragerId, Guid empfaengerId)
+    /// <summary>Sendet eine Freundschaftsanfrage (idempotent; reaktiviert eine abgelehnte).
+    /// Bei einer neuen/reaktivierten Anfrage wird die empfangende Person per E-Mail benachrichtigt.</summary>
+    public static async Task AnfrageSendenAsync(ApplicationDbContext db, Guid anfragerId, Guid empfaengerId,
+        IBenachrichtigungsMail? mailer = null, string? freundeUrl = null)
     {
         if (anfragerId == empfaengerId) return;
 
@@ -43,6 +45,7 @@ public static class FreundschaftService
             (x.AnfragerPersonId == anfragerId && x.EmpfaengerPersonId == empfaengerId) ||
             (x.AnfragerPersonId == empfaengerId && x.EmpfaengerPersonId == anfragerId));
 
+        var benachrichtigen = false;
         if (f == null)
         {
             db.Freundschaften.Add(new Freundschaft
@@ -52,6 +55,7 @@ public static class FreundschaftService
                 Status = FreundschaftStatus.Offen
             });
             await db.SaveChangesAsync();
+            benachrichtigen = true;
         }
         else if (f.Status == FreundschaftStatus.Abgelehnt)
         {
@@ -62,12 +66,23 @@ public static class FreundschaftService
             f.ErstelltAm = DateTime.UtcNow;
             f.EntschiedenAm = null;
             await db.SaveChangesAsync();
+            benachrichtigen = true;
         }
         // Offen/Bestätigt: nichts zu tun.
+
+        if (benachrichtigen)
+        {
+            var anfragerName = await db.Personen.Where(p => p.Id == anfragerId).Select(p => p.Name).FirstOrDefaultAsync() ?? "Jemand";
+            var body = $"<p><strong>{Enc(anfragerName)}</strong> möchte sich auf HarmoniQ mit dir vernetzen.</p>"
+                       + LinkAbsatz(freundeUrl, "Anfrage ansehen");
+            await MailAnPersonAsync(db, mailer, empfaengerId, "Neue Freundschaftsanfrage auf HarmoniQ", body);
+        }
     }
 
-    /// <summary>Bestätigt eine offene Anfrage und schreibt ein Feed-Ereignis.</summary>
-    public static async Task BestaetigenAsync(ApplicationDbContext db, Guid freundschaftId)
+    /// <summary>Bestätigt eine offene Anfrage, schreibt ein Feed-Ereignis und benachrichtigt
+    /// die anfragende Person per E-Mail.</summary>
+    public static async Task BestaetigenAsync(ApplicationDbContext db, Guid freundschaftId,
+        IBenachrichtigungsMail? mailer = null, string? freundeUrl = null)
     {
         var f = await db.Freundschaften.FindAsync(freundschaftId);
         if (f == null || f.Status != FreundschaftStatus.Offen) return;
@@ -82,7 +97,36 @@ public static class FreundschaftService
             NebenPersonId = f.AnfragerPersonId
         });
         await db.SaveChangesAsync();
+
+        var empfaengerName = await db.Personen.Where(p => p.Id == f.EmpfaengerPersonId).Select(p => p.Name).FirstOrDefaultAsync() ?? "Jemand";
+        var body = $"<p><strong>{Enc(empfaengerName)}</strong> hat deine Freundschaftsanfrage angenommen.</p>"
+                   + LinkAbsatz(freundeUrl, "Zu deinen Freunden");
+        await MailAnPersonAsync(db, mailer, f.AnfragerPersonId, "Deine Freundschaftsanfrage wurde angenommen", body);
     }
+
+    /// <summary>Sendet eine Mail an die mit der Person verknüpfte (E-Mail-bestätigte) Kontoadresse.
+    /// Fehler beim Versand brechen den Ablauf nicht ab.</summary>
+    private static async Task MailAnPersonAsync(ApplicationDbContext db, IBenachrichtigungsMail? mailer,
+        Guid personId, string subject, string htmlBody)
+    {
+        if (mailer == null) return;
+        var konto = await db.Personen.Where(p => p.Id == personId)
+            .Select(p => new
+            {
+                Email = p.Benutzer != null ? p.Benutzer.Email : null,
+                Confirmed = p.Benutzer != null && p.Benutzer.EmailConfirmed
+            })
+            .FirstOrDefaultAsync();
+        if (konto?.Email is { Length: > 0 } email && konto.Confirmed)
+        {
+            try { await mailer.SendAsync(email, subject, htmlBody); }
+            catch { /* Benachrichtigung ist Best-Effort; Freundschaft bleibt gespeichert. */ }
+        }
+    }
+
+    private static string Enc(string s) => System.Net.WebUtility.HtmlEncode(s);
+    private static string LinkAbsatz(string? url, string text) =>
+        string.IsNullOrWhiteSpace(url) ? "" : $"<p><a href=\"{url}\">{Enc(text)}</a></p>";
 
     public static async Task AblehnenAsync(ApplicationDbContext db, Guid freundschaftId)
     {

@@ -8,6 +8,8 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
+@inject IBenachrichtigungsMail Mail
+@inject NavigationManager Nav
 
 <PageTitle>Freunde – HarmoniQ</PageTitle>
 
@@ -149,7 +151,7 @@ else
     private async Task Bestaetigen(Guid id)
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        await FreundschaftService.BestaetigenAsync(db, id);
+        await FreundschaftService.BestaetigenAsync(db, id, Mail, Nav.ToAbsoluteUri("account/freunde").ToString());
         Snackbar.Add("Freundschaft bestätigt.", Severity.Success);
         await Laden();
         if (_feed != null) await _feed.Neuladen();

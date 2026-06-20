@@ -12,7 +12,7 @@ namespace HarmoniQ.Web.Services;
 /// Nutzt MailKit, da Port 465 implizites SSL (SslOnConnect) verlangt.
 /// </summary>
 public class SmtpEmailSender(IConfiguration config, ILogger<SmtpEmailSender> logger)
-    : IEmailSender<ApplicationUser>
+    : IEmailSender<ApplicationUser>, IBenachrichtigungsMail
 {
     private readonly string _host = config["Email:Host"] ?? "";
     private readonly int _port = int.TryParse(config["Email:Port"], out var p) ? p : 465;
@@ -34,7 +34,7 @@ public class SmtpEmailSender(IConfiguration config, ILogger<SmtpEmailSender> log
         SendAsync(email, "HarmoniQ – Passwort zurücksetzen",
             $"<p>Dein Code zum Zurücksetzen des Passworts lautet: <strong>{resetCode}</strong></p>");
 
-    private async Task SendAsync(string to, string subject, string htmlBody)
+    public async Task SendAsync(string to, string subject, string htmlBody)
     {
         if (string.IsNullOrWhiteSpace(_host))
         {

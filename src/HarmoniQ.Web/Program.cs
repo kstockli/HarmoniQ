@@ -97,6 +97,9 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["Email:Resend:ApiKey"]))
     builder.Services.AddHttpClient<IEmailSender<ApplicationUser>, ResendEmailSender>();
 else
     builder.Services.AddSingleton<IEmailSender<ApplicationUser>, SmtpEmailSender>();
+// Derselbe Sender dient auch für App-Benachrichtigungen (z. B. Freundschaftsanfragen).
+builder.Services.AddScoped<IBenachrichtigungsMail>(sp =>
+    (IBenachrichtigungsMail)sp.GetRequiredService<IEmailSender<ApplicationUser>>());
 
 // Befördert konfigurierte Admin-Mails sofort beim Login (ohne Neustart) zum Admin.
 builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, AdminClaimsTransformation>();

@@ -9,6 +9,7 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IBenachrichtigungsMail Mail
 
 <PageTitle>@AnzeigeName – HarmoniQ</PageTitle>
 
@@ -291,7 +292,7 @@ else
     {
         if (_meineId is not Guid me || _person == null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        await FreundschaftService.AnfrageSendenAsync(db, me, _person.Id);
+        await FreundschaftService.AnfrageSendenAsync(db, me, _person.Id, Mail, FreundeUrl());
         (_beziehung, _freundschaftId) = await FreundschaftService.BeziehungAsync(db, me, _person.Id);
         Snackbar.Add("Freundschaftsanfrage gesendet.", Severity.Success);
     }
@@ -300,10 +301,12 @@ else
     {
         if (_freundschaftId is not Guid fid || _meineId is not Guid me || _person == null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        await FreundschaftService.BestaetigenAsync(db, fid);
+        await FreundschaftService.BestaetigenAsync(db, fid, Mail, FreundeUrl());
         (_beziehung, _freundschaftId) = await FreundschaftService.BeziehungAsync(db, me, _person.Id);
         Snackbar.Add("Freundschaft bestätigt.", Severity.Success);
     }
+
+    private string FreundeUrl() => Nav.ToAbsoluteUri("account/freunde").ToString();
 
     private async Task DasBinIch()
     {
