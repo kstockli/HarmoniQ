@@ -1,0 +1,66 @@
+@using HarmoniQ.Web.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+            Konto: <b>@Email</b>
+        </MudText>
+        <MudAutocomplete T="PersonRef" Label="Verknüpfte Person" Variant="Variant.Outlined" Class="mb-3"
+                         Value="_sel" ValueChanged="@(v => _sel = v)" SearchFunc="Suche"
+                         ToStringFunc="@(p => p?.Name ?? "")" Clearable="true" ResetValueOnEmptyText="true"
+                         MaxItems="30"
+                         HelperText="Leer lassen = Verknüpfung lösen. Eine Person kann nur mit einem Konto verknüpft sein." />
+
+        <MudSwitch T="bool" @bind-Value="_confirmed" Color="Color.Success" Class="mt-2"
+                   Label="E-Mail bestätigt" />
+
+        <MudSwitch T="bool" @bind-Value="_istAdmin" Color="Color.Warning" Disabled="@(!AdminAenderbar)"
+                   Label="Admin-Rolle" />
+        @if (!AdminAenderbar)
+        {
+            <MudText Typo="Typo.caption" Style="color:#6f5a86;">
+                Du kannst dir die Admin-Rolle nicht selbst entziehen.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string Email { get; set; } = "";
+    [Parameter] public Guid? AktuellPersonId { get; set; }
+    [Parameter] public List<PersonRef> Personen { get; set; } = [];
+    [Parameter] public bool Confirmed { get; set; }
+    [Parameter] public bool IstAdmin { get; set; }
+    /// <summary>False, wenn das Konto der/die aktuell eingeloggte Admin ist (kein Selbst-Entzug).</summary>
+    [Parameter] public bool AdminAenderbar { get; set; } = true;
+
+    private PersonRef? _sel;
+    private bool _confirmed;
+    private bool _istAdmin;
+
+    protected override void OnInitialized()
+    {
+        _sel = AktuellPersonId is Guid id ? Personen.FirstOrDefault(p => p.Id == id) : null;
+        _confirmed = Confirmed;
+        _istAdmin = IstAdmin;
+    }
+
+    private Task<IEnumerable<PersonRef>> Suche(string? wert, CancellationToken ct)
+    {
+        IEnumerable<PersonRef> r = string.IsNullOrWhiteSpace(wert)
+            ? Personen
+            : Personen.Where(p => p.Name.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(30));
+    }
+
+    private void Speichern() => MudDialog.Close(DialogResult.Ok(new Ergebnis(_sel?.Id, _confirmed, _istAdmin)));
+
+    public record PersonRef(Guid Id, string Name);
+    public record Ergebnis(Guid? PersonId, bool Confirmed, bool IstAdmin);
+}

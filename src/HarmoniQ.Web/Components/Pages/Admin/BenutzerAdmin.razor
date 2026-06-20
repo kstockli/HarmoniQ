@@ -1,0 +1,212 @@
+@page "/admin/benutzer"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Benutzer verwalten – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Benutzer</MudText>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+    Registrierte Konten und ihre Verknüpfung zu einer Person. Hier lässt sich eine Verknüpfung
+    ändern oder lösen.
+</MudText>
+
+<MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (E-Mail / Person)"
+              Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+              Immediate="true" Clearable="true" Class="mb-3" Style="max-width:360px;" />
+
+<MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+    <Columns>
+        <PropertyColumn Property="z => z.Email" Title="E-Mail" />
+        <TemplateColumn Title="Bestätigt" SortBy="@(z => z.Confirmed)">
+            <CellTemplate>
+                @if (context.Item.Confirmed)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Size="Size.Small" Style="color:#6f5a86;" />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Rolle" SortBy="@(z => z.IstAdmin)">
+            <CellTemplate>
+                @if (context.Item.IstAdmin)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Admin</MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Verknüpfte Person">
+            <CellTemplate>
+                @if (context.Item.PersonId is Guid pid)
+                {
+                    <MudLink Href="@($"/personen/{pid}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@context.Item.PersonName</MudLink>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">— keine —</MudText>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Aktionen" Sortable="false">
+            <CellTemplate>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#D4AF37;"
+                           StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => Bearbeiten(context.Item))">
+                    Verknüpfung
+                </MudButton>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private List<BenutzerDialog.PersonRef> _personen = [];
+    private string _suche = "";
+    private string? _aktuellerUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _aktuellerUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        await Laden();
+    }
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var users = await db.Users
+            .OrderBy(u => u.Email)
+            .Select(u => new { u.Id, u.Email, u.EmailConfirmed })
+            .ToListAsync();
+
+        var personByUser = (await db.Personen
+                .Where(p => p.BenutzerId != null)
+                .Select(p => new { p.BenutzerId, p.Id, p.Name })
+                .ToListAsync())
+            .ToDictionary(x => x.BenutzerId!, x => (x.Id, x.Name));
+
+        var adminIds = await (
+            from ur in db.UserRoles
+            join r in db.Roles on ur.RoleId equals r.Id
+            where r.Name == "Admin"
+            select ur.UserId).ToHashSetAsync();
+
+        _alle = users.Select(u =>
+        {
+            Guid? pid = personByUser.TryGetValue(u.Id, out var pv) ? pv.Id : null;
+            var pname = pid != null ? personByUser[u.Id].Name : null;
+            return new Zeile(u.Id, u.Email, u.EmailConfirmed, adminIds.Contains(u.Id), pid, pname);
+        }).ToList();
+
+        _personen = await db.Personen.OrderBy(p => p.Name)
+            .Select(p => new BenutzerDialog.PersonRef(p.Id, p.Name)).ToListAsync();
+
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = (s == "" ? _alle
+            : _alle.Where(z => (z.Email ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)
+                            || (z.PersonName ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private async Task Bearbeiten(Zeile z)
+    {
+        var istSelbst = z.Id == _aktuellerUserId;
+        var parameters = new DialogParameters<BenutzerDialog>
+        {
+            { x => x.Email, z.Email ?? z.Id },
+            { x => x.AktuellPersonId, z.PersonId },
+            { x => x.Personen, _personen },
+            { x => x.Confirmed, z.Confirmed },
+            { x => x.IstAdmin, z.IstAdmin },
+            { x => x.AdminAenderbar, !istSelbst }
+        };
+        var dialog = await DialogService.ShowAsync<BenutzerDialog>("Benutzer bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var erg = (BenutzerDialog.Ergebnis)result.Data!;
+
+        // ── 1. Verknüpfung (über Factory-Context) ─────────────────────────────
+        if (erg.PersonId != z.PersonId)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (erg.PersonId is Guid ziel)
+            {
+                var target = await db.Personen.FindAsync(ziel);
+                if (target == null) { Snackbar.Add("Person nicht gefunden.", Severity.Error); return; }
+                if (target.BenutzerId != null && target.BenutzerId != z.Id)
+                {
+                    Snackbar.Add("Diese Person ist bereits mit einem anderen Konto verknüpft.", Severity.Error);
+                    return;
+                }
+            }
+            var bisher = await db.Personen.FirstOrDefaultAsync(p => p.BenutzerId == z.Id);
+            if (bisher != null && bisher.Id != erg.PersonId) bisher.BenutzerId = null;
+            if (erg.PersonId is Guid pid2)
+            {
+                var target = await db.Personen.FindAsync(pid2);
+                if (target != null) target.BenutzerId = z.Id;
+            }
+            await db.SaveChangesAsync();
+            await PersonLinkSync.SyncEmailAsync(db, z.Id, z.Email);
+        }
+
+        // ── 2. Bestätigung & Rolle (über UserManager) ─────────────────────────
+        var user = await UserManager.FindByIdAsync(z.Id);
+        if (user != null)
+        {
+            if (user.EmailConfirmed != erg.Confirmed)
+            {
+                user.EmailConfirmed = erg.Confirmed;
+                await UserManager.UpdateAsync(user);
+            }
+
+            var istAdmin = await UserManager.IsInRoleAsync(user, "Admin");
+            if (istAdmin != erg.IstAdmin)
+            {
+                if (!erg.IstAdmin && istSelbst)
+                {
+                    Snackbar.Add("Du kannst dir die Admin-Rolle nicht selbst entziehen.", Severity.Warning);
+                }
+                else if (erg.IstAdmin)
+                {
+                    await UserManager.AddToRoleAsync(user, "Admin");
+                }
+                else
+                {
+                    await UserManager.RemoveFromRoleAsync(user, "Admin");
+                }
+            }
+        }
+
+        Snackbar.Add("Gespeichert.", Severity.Success);
+        await Laden();
+    }
+
+    private record Zeile(string Id, string? Email, bool Confirmed, bool IstAdmin, Guid? PersonId, string? PersonName);
+}

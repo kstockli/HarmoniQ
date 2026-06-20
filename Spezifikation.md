@@ -651,6 +651,8 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 — Admin (Rolle „Admin") —
 /admin                        → Dashboard (Zähler offener Anträge)
 /admin/personen, /admin/personen/{id}  → CRUD Personen (Stammdaten, Rollen, Instrumente, Bands, Mitwirkungen)
+/admin/benutzer               → Benutzer/Login-Verwaltung: Konten (E-Mail, bestätigt, Rolle), verknüpfte Person
+                                 ändern/lösen
 /admin/konzerte, /admin/konzerte/erfassen, /admin/konzerte/{id}/bearbeiten → CRUD + Erfassungs-Wizard
 /admin/instrumente            → Instrumente & Stimmen
 /admin/stuecke, /admin/bands, /admin/videos, /admin/bewertungen → CRUD/Verwaltung
