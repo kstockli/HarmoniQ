@@ -59,10 +59,32 @@
         }
         else
         {
-            <MudText Typo="Typo.body2" Class="mb-8" Style="color:#A78FC0;">
+            <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Style="color:#9B59B6;" />
                 Angemeldet als <b>@auth.User.Identity?.Name</b> – du kannst bewerten, Videos vorschlagen und Besetzungen ergänzen.
             </MudText>
+        }
+
+        @if (_offeneAnfragen > 0)
+        {
+            <MudPaper Class="pa-4 mb-8" Elevation="4"
+                      Style="background:linear-gradient(135deg,#3a2a08,#1a0030); border:1px solid #D4AF37;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                    <MudBadge Content="_offeneAnfragen" Color="Color.Error" Overlap="true">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Style="color:#D4AF37;font-size:2.5rem;" />
+                    </MudBadge>
+                    <div style="flex:1;min-width:240px;">
+                        <MudText Typo="Typo.h6" Style="color:#F0E6FF;">
+                            @_offeneAnfragen offene Freundschaftsanfrage@(_offeneAnfragen == 1 ? "" : "n")
+                        </MudText>
+                        <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                            Jemand möchte sich mit dir vernetzen. Schau dir die Anfragen an und entscheide.
+                        </MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                               StartIcon="@Icons.Material.Filled.People" Href="/account/freunde">Anfragen ansehen</MudButton>
+                </MudStack>
+            </MudPaper>
         }
     </Authorized>
 </AuthorizeView>
@@ -111,6 +133,11 @@
     @Kachel(Icons.Material.Filled.VideoLibrary, _videosCount, "Videos", "#E67E22", "/videos")
     @Kachel(Icons.Material.Filled.Star, _bewertungenCount, "Bewertungen", "#F1C40F", null)
 </MudGrid>
+
+@* Feed der Freund:innen/Bandkolleg:innen – nur wenn nicht leer; ohne Schreibbox (die ist im Freunde-Fenster) *@
+<div class="mb-8">
+    <AktivitaetsFeed Titel="Neuigkeiten" Max="5" ZeigePostBox="false" MehrHref="/account/freunde" />
+</div>
 
 @if (_neueVideos.Count > 0)
 {
@@ -259,6 +286,7 @@
     private List<VideoZeile> _neueVideos = [];
     private List<KalenderZeile> _kalender = [];
     private bool _onboardingNoetig;
+    private int _offeneAnfragen;
     private MarkupString _qrSvg = QrErzeugen();
 
     private static MarkupString QrErzeugen()
@@ -278,9 +306,15 @@
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (!string.IsNullOrEmpty(userId))
         {
-            var hatPerson = await db.Personen.AnyAsync(p => p.BenutzerId == userId);
+            var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
+            var hatPerson = meineId != Guid.Empty;
             var hatAntrag = await db.PersonAnsprueche.AnyAsync(a => a.BenutzerId == userId && a.Status == PersonAnspruchStatus.Offen);
             _onboardingNoetig = !hatPerson && !hatAntrag;
+
+            // Offene (noch nicht entschiedene) Freundschaftsanfragen an mich.
+            if (hatPerson)
+                _offeneAnfragen = await db.Freundschaften.CountAsync(f =>
+                    f.EmpfaengerPersonId == meineId && f.Status == FreundschaftStatus.Offen);
         }
         _komponistenCount = await db.Personen.CountAsync(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist));
         _personenCount = await db.Personen.CountAsync();

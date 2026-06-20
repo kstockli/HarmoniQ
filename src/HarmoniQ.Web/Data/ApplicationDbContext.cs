@@ -90,9 +90,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(r => r.Person).WithMany(p => p.Rollen)
             .HasForeignKey(r => r.PersonId).OnDelete(DeleteBehavior.Cascade);
 
-        builder.Entity<PersonLink>()
-            .HasOne(l => l.Person).WithMany(p => p.Links)
-            .HasForeignKey(l => l.PersonId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<PersonLink>(e =>
+        {
+            e.HasOne(l => l.Person).WithMany(p => p.Links)
+                .HasForeignKey(l => l.PersonId).OnDelete(DeleteBehavior.Cascade);
+            // Schlüssel wird clientseitig vergeben (= Guid.NewGuid()). Ohne ValueGeneratedNever
+            // hält EF einen NUR über die Navigation (Person.Links.Add via Komfort-Setter) an eine
+            // bereits getrackte Person gehängten Link für „existierend" → UPDATE statt INSERT →
+            // „0 rows affected"-Concurrency-Fehler beim Speichern.
+            e.Property(l => l.Id).ValueGeneratedNever();
+        });
 
         builder.Entity<StueckBeitrag>(e =>
         {

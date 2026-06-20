@@ -278,7 +278,7 @@ else
             bandName = band?.Name;
         }
 
-        db.Videos.Add(new Video
+        var neuesVideo = new Video
         {
             StueckId = Id,
             BandId = bandId,
@@ -286,8 +286,14 @@ else
             Titel = titel,
             Status = VideoStatus.Ausstehend,
             VorgeschlagenVonId = _userId
-        });
+        };
+        db.Videos.Add(neuesVideo);
         await db.SaveChangesAsync();
+
+        // Feed-Ereignis für eingeloggte Vorschlagende mit verknüpfter Person.
+        if (_userId != null)
+            await AktivitaetService.ProtokolliereFuerBenutzerAsync(db, _userId,
+                AktivitaetTyp.VideoHinzugefuegt, AktivitaetZielTyp.Video, neuesVideo.Id);
 
         var bandHinweis = data.BandId == null && bandName != null ? $" Band erkannt: {bandName}." : "";
         Snackbar.Add($"Danke! Dein Vorschlag wird von einem Admin geprüft.{bandHinweis}", Severity.Success);
@@ -447,6 +453,7 @@ else
             ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == videoId && b.BenutzerId == _userId)
             : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == videoId && b.AnonymerCookieId == _voterId);
 
+        var istNeu = bestehend == null;
         if (bestehend == null)
         {
             bestehend = new Bewertung
@@ -467,6 +474,10 @@ else
         bestehend.ErstelltAm = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
+
+        if (istNeu && _userId != null)
+            await AktivitaetService.ProtokolliereFuerBenutzerAsync(db, _userId,
+                AktivitaetTyp.BewertungAbgegeben, AktivitaetZielTyp.Video, videoId);
 
         await LadeStatsAsync(db);
         await LadeEigeneAsync();

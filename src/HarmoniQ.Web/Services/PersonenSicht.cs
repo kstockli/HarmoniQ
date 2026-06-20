@@ -37,6 +37,15 @@ public static class PersonenSicht
             .Where(m => bandIds.Contains(m.BandId))
             .Select(m => m.PersonId)
             .ToHashSetAsync();
+
+        // Bestätigte Freundschaften (beide Richtungen) → ebenfalls voll sichtbar.
+        var freunde = await db.Freundschaften
+            .Where(f => f.Status == FreundschaftStatus.Bestaetigt
+                     && (f.AnfragerPersonId == meineId || f.EmpfaengerPersonId == meineId))
+            .Select(f => f.AnfragerPersonId == meineId ? f.EmpfaengerPersonId : f.AnfragerPersonId)
+            .ToListAsync();
+        foreach (var f in freunde) ids.Add(f);
+
         ids.Add(meineId);
         return ids;
     }

@@ -362,6 +362,7 @@ else
         var bestehend = _userId != null
             ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId)
             : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.AnonymerCookieId == _voterId);
+        var istNeu = bestehend == null;
         if (bestehend == null)
         {
             bestehend = new Bewertung { VideoId = Id, BenutzerId = _userId, AnonymerCookieId = _userId == null ? _voterId : null };
@@ -375,6 +376,11 @@ else
         bestehend.Kommentar = m.Kommentar;
         bestehend.ErstelltAm = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        // Feed-Ereignis nur bei der ersten Bewertung eines eingeloggten Nutzers mit Person.
+        if (istNeu && _userId != null)
+            await AktivitaetService.ProtokolliereFuerBenutzerAsync(db, _userId,
+                AktivitaetTyp.BewertungAbgegeben, AktivitaetZielTyp.Video, Id);
 
         await LadeStatsAsync(db);
         await LadeEigeneAsync();

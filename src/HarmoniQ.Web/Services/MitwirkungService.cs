@@ -78,6 +78,16 @@ public static class MitwirkungService
             VorgeschlagenVonId = vorgeschlagenVonId
         });
 
+        // Feed-Ereignis nur für bestätigte (öffentliche) Mitwirkungen.
+        if (status == VideoStatus.Genehmigt)
+            db.Aktivitaeten.Add(new Aktivitaet
+            {
+                AkteurPerson = person,
+                Typ = AktivitaetTyp.MitwirkungHinzugefuegt,
+                ZielTyp = AktivitaetZielTyp.Video,
+                ZielId = videoId
+            });
+
         await db.SaveChangesAsync();
     }
 }

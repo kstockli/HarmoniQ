@@ -61,8 +61,9 @@ else
         <MudText Typo="Typo.body1" Class="mb-4" Style="color:#C4B0D8;">@_person.Biografie</MudText>
     }
 
-    @* Links *@
-    @if (_person.Links.Count > 0)
+    @* Links (Telefon, E-Mail, Social Media …) – nur sichtbar, wenn du die Person voll siehst
+       (öffentlich, gemeinsame Band oder befreundet); analog zur Namens-Sichtbarkeit. *@
+    @if (_eff == Sichtbarkeit.Oeffentlich && _person.Links.Count > 0)
     {
         <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
             @foreach (var l in _person.Links)
@@ -125,6 +126,30 @@ else
             </MudButton>
         }
     </div>
+
+    @* Freundschaft *@
+    @if (_meineId is not null && _meineId != _person.Id && !_verknuepftMitMir)
+    {
+        <div class="mb-2">
+            @switch (_beziehung)
+            {
+                case FreundschaftService.Beziehung.Befreundet:
+                    <MudChip T="string" Icon="@Icons.Material.Filled.People" Style="background:#2d1657; color:#A78FC0;">Befreundet</MudChip>
+                    break;
+                case FreundschaftService.Beziehung.AnfrageVonMir:
+                    <MudChip T="string" Icon="@Icons.Material.Filled.HourglassTop" Style="background:#3a1060; color:#A78FC0;">Anfrage gesendet</MudChip>
+                    break;
+                case FreundschaftService.Beziehung.AnfrageAnMich:
+                    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                               StartIcon="@Icons.Material.Filled.Check" OnClick="AnfrageAnnehmen">Anfrage annehmen</MudButton>
+                    break;
+                default:
+                    <MudButton Variant="Variant.Outlined" Style="color:#9B59B6; border-color:#9B59B6;"
+                               StartIcon="@Icons.Material.Filled.PersonAddAlt" OnClick="Befreunden">Befreunden</MudButton>
+                    break;
+            }
+        </div>
+    }
 
     <RichtigstellungMelden Typ="RichtigstellungTyp.Person" Id="_person.Id" />
 
@@ -189,6 +214,10 @@ else
     private bool _istAdmin;
     private Sichtbarkeit _eff = Sichtbarkeit.Oeffentlich;  // effektive Sichtbarkeit für DICH
 
+    private Guid? _meineId;                 // meine verknüpfte Person
+    private FreundschaftService.Beziehung _beziehung = FreundschaftService.Beziehung.Keine;
+    private Guid? _freundschaftId;
+
     private string AnzeigeName => _person == null ? "Person" : PersonenSicht.AnzeigeName(_person.Name, _eff);
     private string? BildAnzeige => _person == null ? null : PersonenSicht.BildUrl(_person.BildUrl, _eff);
 
@@ -249,6 +278,31 @@ else
 
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, _userId);
         _eff = PersonenSicht.Effektiv(_person.Id, _person.Sichtbarkeit, vollSichtbar);
+
+        // Freundschafts-Status (nur wenn eingeloggt + eigene Person + nicht ich selbst).
+        _meineId = await FreundschaftService.MeinePersonIdAsync(db, _userId);
+        _beziehung = FreundschaftService.Beziehung.Keine;
+        _freundschaftId = null;
+        if (_meineId is Guid me && me != _person.Id)
+            (_beziehung, _freundschaftId) = await FreundschaftService.BeziehungAsync(db, me, _person.Id);
+    }
+
+    private async Task Befreunden()
+    {
+        if (_meineId is not Guid me || _person == null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await FreundschaftService.AnfrageSendenAsync(db, me, _person.Id);
+        (_beziehung, _freundschaftId) = await FreundschaftService.BeziehungAsync(db, me, _person.Id);
+        Snackbar.Add("Freundschaftsanfrage gesendet.", Severity.Success);
+    }
+
+    private async Task AnfrageAnnehmen()
+    {
+        if (_freundschaftId is not Guid fid || _meineId is not Guid me || _person == null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await FreundschaftService.BestaetigenAsync(db, fid);
+        (_beziehung, _freundschaftId) = await FreundschaftService.BeziehungAsync(db, me, _person.Id);
+        Snackbar.Add("Freundschaft bestätigt.", Severity.Success);
     }
 
     private async Task DasBinIch()

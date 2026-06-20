@@ -1,0 +1,174 @@
+@page "/account/freunde"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Freunde – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Freunde</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_meineId is null)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-3">
+        Verknüpfe zuerst dein Konto mit „deiner“ Person, dann kannst du Freundschaften knüpfen.
+    </MudAlert>
+    <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.PersonSearch" Href="/account/onboarding">Person verknüpfen</MudButton>
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            @if (_eingehend.Count > 0)
+            {
+                <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #D4AF37;">
+                    <MudText Typo="Typo.h6" Class="mb-2" Style="color:#D4AF37;">Anfragen an dich (@_eingehend.Count)</MudText>
+                    @foreach (var f in _eingehend)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Style="color:#9B59B6;" />
+                            <MudLink Href="@($"/personen/{f.PersonId}")" Style="color:#F0E6FF; flex:1;" Underline="Underline.Hover">@f.Name</MudLink>
+                            <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                                           title="Annehmen" OnClick="@(() => Bestaetigen(f.Id))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small"
+                                           title="Ablehnen" OnClick="@(() => Ablehnen(f.Id))" />
+                        </MudStack>
+                    }
+                </MudPaper>
+            }
+
+            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudText Typo="Typo.h6" Class="mb-2" Style="color:#D4AF37;">Meine Freunde (@_freunde.Count)</MudText>
+                @if (_freunde.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                        Noch keine Freund:innen. Öffne eine <MudLink Href="/personen">Personenseite</MudLink> und klicke „Befreunden“.
+                    </MudText>
+                }
+                else
+                {
+                    @foreach (var f in _freunde)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.People" Style="color:#9B59B6;" />
+                            <MudLink Href="@($"/personen/{f.PersonId}")" Style="color:#F0E6FF; flex:1;" Underline="Underline.Hover">@f.Name</MudLink>
+                            <MudIconButton Icon="@Icons.Material.Filled.PersonRemove" Color="Color.Error" Size="Size.Small"
+                                           title="Freundschaft lösen" OnClick="@(() => Entfernen(f.Id))" />
+                        </MudStack>
+                    }
+                }
+            </MudPaper>
+
+            @if (_ausgehend.Count > 0)
+            {
+                <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color:#A78FC0;">Gesendete Anfragen (@_ausgehend.Count)</MudText>
+                    @foreach (var f in _ausgehend)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                            <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Style="color:#6f5a86;" />
+                            <MudLink Href="@($"/personen/{f.PersonId}")" Style="color:#C4B0D8; flex:1;" Underline="Underline.Hover">@f.Name</MudLink>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#A78FC0;"
+                                       OnClick="@(() => Entfernen(f.Id))">Zurückziehen</MudButton>
+                        </MudStack>
+                    }
+                </MudPaper>
+            }
+        </MudItem>
+
+        <MudItem xs="12" md="7">
+            <MudText Typo="Typo.h6" Class="mb-2" Style="color:#D4AF37;">Neuigkeiten</MudText>
+            <AktivitaetsFeed @ref="_feed" Max="30" />
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _geladen;
+    private Guid? _meineId;
+    private AktivitaetsFeed? _feed;
+    private List<Zeile> _eingehend = [];
+    private List<Zeile> _ausgehend = [];
+    private List<Zeile> _freunde = [];
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _meineId = await FreundschaftService.MeinePersonIdAsync(db, userId);
+        if (_meineId is Guid me)
+        {
+            _eingehend = await db.Freundschaften
+                .Where(f => f.EmpfaengerPersonId == me && f.Status == FreundschaftStatus.Offen)
+                .OrderBy(f => f.AnfragerPerson.Name)
+                .Select(f => new Zeile(f.Id, f.AnfragerPersonId, f.AnfragerPerson.Name))
+                .ToListAsync();
+
+            _ausgehend = await db.Freundschaften
+                .Where(f => f.AnfragerPersonId == me && f.Status == FreundschaftStatus.Offen)
+                .OrderBy(f => f.EmpfaengerPerson.Name)
+                .Select(f => new Zeile(f.Id, f.EmpfaengerPersonId, f.EmpfaengerPerson.Name))
+                .ToListAsync();
+
+            // Projektion (Richtung je nach Anfrager/Empfänger) + Sortierung clientseitig:
+            // EF kann OrderBy über ein per-Konstruktor projiziertes Record nicht übersetzen.
+            var roh = await db.Freundschaften
+                .Where(f => f.Status == FreundschaftStatus.Bestaetigt
+                         && (f.AnfragerPersonId == me || f.EmpfaengerPersonId == me))
+                .Select(f => new
+                {
+                    f.Id, f.AnfragerPersonId, f.EmpfaengerPersonId,
+                    AnfragerName = f.AnfragerPerson.Name,
+                    EmpfaengerName = f.EmpfaengerPerson.Name
+                })
+                .ToListAsync();
+            _freunde = roh
+                .Select(f => f.AnfragerPersonId == me
+                    ? new Zeile(f.Id, f.EmpfaengerPersonId, f.EmpfaengerName)
+                    : new Zeile(f.Id, f.AnfragerPersonId, f.AnfragerName))
+                .OrderBy(z => z.Name)
+                .ToList();
+        }
+        _geladen = true;
+    }
+
+    private async Task Bestaetigen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await FreundschaftService.BestaetigenAsync(db, id);
+        Snackbar.Add("Freundschaft bestätigt.", Severity.Success);
+        await Laden();
+        if (_feed != null) await _feed.Neuladen();
+    }
+
+    private async Task Ablehnen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await FreundschaftService.AblehnenAsync(db, id);
+        await Laden();
+    }
+
+    private async Task Entfernen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await FreundschaftService.EntfernenAsync(db, id);
+        Snackbar.Add("Entfernt.", Severity.Success);
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, Guid PersonId, string Name);
+}

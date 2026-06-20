@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@using Microsoft.Extensions.Hosting
+@inject IWebHostEnvironment Env
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -7,12 +9,18 @@
 <PwaInstall />
 
 <MudLayout>
-    <MudAppBar Elevation="2" Style="background: linear-gradient(90deg, #1a0a2e 0%, #2d1657 100%);">
+    <MudAppBar Elevation="2" Style="@_appBarStyle">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        OnClick="@ToggleDrawer" />
         <MudLink Href="/" Class="ml-2 d-flex align-center">
             <img src="img/harmoniq-logo.svg" alt="HarmoniQ" style="height:40px;display:block;" />
         </MudLink>
+        @if (_dev)
+        {
+            <MudChip T="string" Size="Size.Small" Class="ml-3"
+                     Style="background:#ffffff; color:#a11111; font-weight:700;"
+                     Icon="@Icons.Material.Filled.Construction">DEV (localhost)</MudChip>
+        }
         <MudSpacer />
         <AuthorizeView Context="auth">
             <Authorized>
@@ -50,6 +58,16 @@
 
 @code {
     private bool _drawerOpen = true;
+    private bool _dev;
+    // Im Dev rote App-Bar, in Prod das violette Verlaufs-Design.
+    private string _appBarStyle = "background: linear-gradient(90deg, #1a0a2e 0%, #2d1657 100%);";
+
+    protected override void OnInitialized()
+    {
+        _dev = Env.IsDevelopment();
+        if (_dev)
+            _appBarStyle = "background: linear-gradient(90deg, #5a1111 0%, #a11111 100%);";
+    }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 

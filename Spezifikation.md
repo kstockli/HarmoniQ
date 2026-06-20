@@ -65,8 +65,9 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
 
 ### 4.1 Öffentliche Bereiche (ohne Login)
 
-- **Startseite:** Featured Komponist / Stück des Monats, Statistiken
-  - *(NEU, geplant)* **QR-Code ganz unten**: zeigt einen QR-Code auf `https://harmoniq.q-no.ch`,
+- **Startseite:** Statistik-Kacheln, Konzert-Kalender (±8 Tage), Komponist:innen (mit Video/Konzert), Bands, QR-Code
+  (eingeloggt zusätzlich Freund:innen-Feed + Hinweise zu Anfragen/Onboarding)
+  - *(umgesetzt)* **QR-Code ganz unten**: zeigt einen QR-Code auf `https://harmoniq.q-no.ch`,
     damit man die App **von Smartphone zu Smartphone** spontan weitergeben kann (App öffnen → unten
     zeigen → abscannen → installieren). Erzeugung serverseitig/clientseitig ohne Personenbezug;
     URL ist konstant, daher cachebar. Sinnvolle Ergänzung gerade in der offenen Anfangsphase
@@ -80,7 +81,7 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
   - Eigenen Vote abgeben (anonym via Cookie)
 - **Band-Übersicht:** Alle erfassten Bands mit ihren Videos
 - **Komponisten-Fenster bleibt bestehen** (das reine `/komponisten`) — ändert sich durch Phase 6 nicht.
-- *(geplant, Phase 6)* **Personen-Fenster** (`/personen`): Liste aller Personen (Komponist:innen,
+- *(umgesetzt)* **Personen-Fenster** (`/personen`): Liste aller Personen (Komponist:innen,
   Dirigent:innen, Musikant:innen), **flexibel filterbar**, u. a.:
   - hat dieses **Stück** schon gespielt
   - hat schon Stücke **dieses Komponisten** gespielt
@@ -95,9 +96,9 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
   → Dialog mit YouTube-Link (+ optional Band/Titel) → Vorschlag landet mit Status
   *Ausstehend* in der Review-Queue (`VorgeschlagenVon` = aktueller Benutzer)
 - Vorschlagsstatus verfolgen *(geplant: Anzeige der eigenen Vorschläge im Profil)*
-- *(geplant, Phase 6)* **Mitwirkungs-Vorschläge:** „Person XY dirigiert hier" / „Person Z
+- *(umgesetzt)* **Mitwirkungs-Vorschläge:** „Person XY dirigiert hier" / „Person Z
   spielt 1. Oboe" → Review-Queue → bei Genehmigung werden die Verknüpfungen gesetzt
-- *(geplant, Phase 6)* **Richtigstellung melden:** Freitext-Hinweis auf Fehler (Video/Stück/Person/Band)
+- *(umgesetzt)* **Richtigstellung melden:** Freitext-Hinweis auf Fehler (Video/Stück/Person/Band/Konzert)
 
 > **Hinweis Login (aktualisiert):** Implementiert sind **lokale Konten** (E-Mail/Passwort) sowie
 > **Google-** und **Microsoft-Login**. E-Mail-Bestätigung ist **aktiv** (`RequireConfirmedAccount = true`);
@@ -140,7 +141,7 @@ Schritt 3: Speichern
 - Eingehende Video-Vorschläge (Status *Ausstehend*) mit Thumbnail + Vorschlagendem anzeigen
 - **Genehmigen** (→ Status *Genehmigt*, wird öffentlich sichtbar) oder **Ablehnen** (→ *Abgelehnt*)
 
-#### Personen-/Stamm-Daten & Bewilligungen — *geplant (Phase 6)*
+#### Personen-/Stamm-Daten & Bewilligungen — *umgesetzt (Phase 6)*
 - **CRUD Personen** (`/admin/personen`): Personen + ihre Rollen + mögliche Instrumente
 - **CRUD Instrumente & Stimmen** (`/admin/instrumente`): Instrument-Tabelle und je Instrument
   die Stimmen pflegen (inkl. Autocomplete-mit-Anlegen bei der Erfassung)
@@ -413,7 +414,7 @@ KonzertPerson                       (NEU – n:m Person ↔ Konzert mit Rolle)
 > des Videos automatisch** als `KonzertBand`-Teilnehmerin eingetragen (idempotent, keine Dublette).
 > Zusätzliche Bands ohne Video können im `/admin/konzerte`-CRUD manuell ergänzt werden.
 >
-> **Konzert-Erfassungs-Wizard (NEU, geplant):** Ein eigenes GUI (`/admin/konzerte/erfassen`), mit dem
+> **Konzert-Erfassungs-Wizard (umgesetzt):** Ein eigenes GUI (`/admin/konzerte/erfassen`), mit dem
 > man ein **ganzes Konzert in einem Rutsch** erfasst – fehlende Stammdaten werden dabei **bei Bedarf
 > angelegt** (Find-or-create, keine Dubletten):
 > 1. **Konzert-Kopf:** Datum (Pflicht), optional Name/Ort/Bild.
@@ -492,7 +493,7 @@ Für alle anderen Betrachter gilt die persönliche Einstellung. Zusätzlich:
   einander **immer voll** (Name + Bild), unabhängig von der Sichtbarkeits-Einstellung. Die zentrale
   Sichtprüfung (`PersonenSicht`) prüft also: Admin → bandkollegial → befreundet → sonst Einstellung.
 
-### Freundschaften & Onboarding *(NEU – geplant)*
+### Freundschaften & Onboarding *(umgesetzt)*
 **Freundschaften.** Zwei Personen können sich verbinden (Entität `Freundschaft`): ein:e eingeloggte:r
 Benutzer:in mit verknüpfter Person stellt eine **Anfrage** an eine andere Person; diese **bestätigt**
 oder **lehnt ab** (gegenseitig). Erst nach Bestätigung sehen beide einander voll (s. o.). UI:
@@ -588,7 +589,7 @@ So bleibt die Tabelle sauber/normalisiert und wächst organisch mit der Nutzung.
 - Person `1—n` Aktivitaet (Akteur); Aktivitaet verweist lose (ZielTyp + ZielId) auf das Objekt
 - Richtigstellung verweist lose (Typ + Id) auf Video/Stück/Person/Band/Konzert
 
-### Community-Beiträge: Ergänzungen & Richtigstellungen *(geplant)*
+### Community-Beiträge: Ergänzungen & Richtigstellungen *(umgesetzt)*
 Eingeloggte User können – analog zu den Video-Vorschlägen – auch **Mitwirkungen vorschlagen**:
 
 - *„In diesem Video dirigiert **Person XY**."* → neue `VideoMitwirkung` (Dirigent) mit Status *Ausstehend*.
@@ -622,39 +623,35 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 ## 6. UI-Seitenübersicht
 
 ```
-/                             → Startseite (klickbare Statistik-Kacheln)
-/komponisten                  → Komponisten-Liste
-/komponisten/{id}             → Komponist-Detail + Stückliste (Filter: Suche, Besetzung, Schwierigkeit, Mit-Video)
-/stuecke                      → Gesamtliste aller Stücke (Filter inkl. Band & Komponist; ?band=…, ?komponist=…). Default-Filter: **Mit Video**; sortiert nach Jahr absteigend (neueste zuerst)
-/stuecke/{id}                 → Stück-Detail + Videos + Bewertungen + Voting + „Video vorschlagen"
-/videos                       → Gesamtliste aller Videos (Filter: Band, Komponist)
-/bands                        → Band-Übersicht
-/bands/{id}                   → Band-Detail (Aufnahmen + gespielte Stücke + Konzerte der Band)
-/konzerte                     → (NEU) Konzert-Übersicht (Liste, nach Datum sortiert)
-/konzerte/{id}                → (NEU) Konzert-Detail: Datum/Name/Ort, teilnehmende Bands,
-                                 Videos je Band gruppiert (Bands ohne Video trotzdem gelistet)
-/account/login                → Login (lokal + Google + Microsoft)
-/account/register             → Registrierung (lokales Konto)
+— Öffentlich —
+/                             → Startseite: Statistik-Kacheln, Konzert-Kalender (±8 Tage), Freund:innen-Feed
+                                 (max. 5, unter den Kacheln), Komponist:innen (nur mit Video/Konzert), Bands, QR-Code;
+                                 eingeloggt zusätzlich Banner für offene Freundschaftsanfragen / Onboarding
+/komponisten, /komponisten/{id}   → Komponist:innen-Liste / -Detail (leitet auf /personen/{id})
+/personen, /personen/{id}     → Personen-Liste (Filter: Name/Rolle/Instrument/Kontext) / -Detail (Werke + Auftritte,
+                                 „Befreunden", „Das bin ich"; Links nur bei voller Sichtbarkeit)
+/stuecke, /stuecke/{id}       → Stückliste (Filter) / Stück-Detail + Videos + Bewertungen + Voting + Vorschläge
+/videos, /videos/{id}         → Videoliste / Einzel-Video (Besetzung, Bewertungen)
+/bands, /bands/{id}           → Band-Übersicht / -Detail (Besetzung, Aufnahmen, gespielte Stücke, Konzerte)
+/konzerte, /konzerte/{id}     → Konzert-Übersicht (Suche + Zeitraum-Filter) / -Detail (Programm, Mitwirkende,
+                                 Videos je Band, „Ich war dabei")
+/account/login, /register     → Login (lokal + Google + Microsoft) / Registrierung
 /account/profil               → Meine Bewertungen
-/account/person               → Eigene Personendaten pflegen
-/account/freunde              → (NEU) Freundschaften: Anfragen, eigene Freundesliste
-/admin                        → Admin-Dashboard
-/admin/komponisten            → CRUD Komponisten
-/admin/stuecke                → CRUD Stücke
-/admin/bands                  → CRUD Bands
-/admin/videos                 → CRUD Videos
-/admin/bewertungen            → Bewertungen verwalten (bearbeiten / löschen)
-/admin/vorschlaege            → Review-Queue für User-Vorschläge
-/admin/import                 → Import-Assistent (3-Schritt-Wizard)
-/admin/konzerte               → (NEU) CRUD Konzerte (Datum/Name/Ort/Bild, Bands zuordnen)
-/admin/konzerte/erfassen      → (NEU) Konzert-Erfassungs-Wizard (Programm + Mitwirkende, Find-or-create)
+/account/person               → Eigene Personendaten pflegen (inkl. Rollen, Instrumente, Links, Band-Vorschlag)
+/account/onboarding           → Onboarding-Assistent (bestehende Person finden oder neu als Zuhörer:in anlegen)
+/account/freunde              → Freundschaften (Anfragen, Liste) + Neuigkeiten-Feed (mit Schreibbox)
 
-— geplant (Phase 6, Personen-/Rollen-Modell) —
-/personen                     → Personen-Liste (Komponist:innen, Dirigent:innen, Musikant:innen)
-/personen/{id}                → Personen-Detail (Werke + Auftritte, IMDb-artig)
-/admin/personen               → CRUD Personen + Rollen + Instrumente
-/admin/instrumente            → Verwaltung Instrumente & Stimmen
-(/komponisten wird langfristig durch /personen abgelöst)
+— Admin (Rolle „Admin") —
+/admin                        → Dashboard (Zähler offener Anträge)
+/admin/personen, /admin/personen/{id}  → CRUD Personen (Stammdaten, Rollen, Instrumente, Bands, Mitwirkungen)
+/admin/konzerte, /admin/konzerte/erfassen, /admin/konzerte/{id}/bearbeiten → CRUD + Erfassungs-Wizard
+/admin/instrumente            → Instrumente & Stimmen
+/admin/stuecke, /admin/bands, /admin/videos, /admin/bewertungen → CRUD/Verwaltung
+/admin/videos/{id}/besetzung  → Cast-Editor; /admin/bands/{id}/mitglieder → Band-Mitglieder
+/admin/import                 → Import-Assistent (3-Schritt-Wizard)
+/admin/vorschlaege            → Video-Vorschläge · /admin/mitwirkungen → Mitwirkungs-Vorschläge
+/admin/richtigstellungen      → Richtigstellungen · /admin/verknuepfungen → „Das bin ich"-Anträge
+/admin/bandantraege           → Band-Beitritts-Anträge
 ```
 > Zugriffsschutz: alle `/admin/*`-Seiten erfordern die Rolle **Admin** (`[Authorize(Roles="Admin")]`);
 > anonyme Zugriffe werden auf die Login-Seite umgeleitet.
@@ -729,11 +726,11 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     **Lehre:** Vor destruktiven Migrationen auf einer befüllten DB immer `app.db` sichern.
 17. ✅ *(umgesetzt)* Nachschlage-Tabellen `Instrument` + `Stimme` (+ `PersonInstrument`).
     **Autocomplete-mit-Anlegen** im Cast-Editor (Instrument/Stimme/Person werden bei Bedarf neu
-    angelegt). *Offen:* dediziertes Admin-CRUD für Instrumente/Stimmen.
+    angelegt). Dediziertes Admin-CRUD `/admin/instrumente` umgesetzt.
 18. ✅ *(umgesetzt)* `StueckBeitrag` (mehrere Autor:innen je Stück mit Rolle) – Modell + Backfill.
 19. ✅ *(umgesetzt)* `VideoMitwirkung` + **Cast-Editor** `/admin/videos/{id}/besetzung`:
     Person + Rolle (+ Instrument/Stimme bei Musikant:in) erfassen/löschen; neue Personen erhalten
-    Default-Sichtbarkeit (Musikant → NurInitialen). *Offen:* User-Vorschläge dafür (Punkt 23).
+    Default-Sichtbarkeit (Musikant → NurInitialen). User-Vorschläge dafür: umgesetzt (Punkt 23).
 20. ✅ *(umgesetzt)* Personen-Fenster `/personen` mit Filtern (Name, Rolle, Instrument, Kontext
     ?stueck/?komponist/?band) + Personen-Detailseite (Werke + Auftritte). `Person.AnzeigeName`
     (sichtbarkeitsabhängig) + Link-Komfort-Properties (Webseite/Instagram/X/Facebook/YouTube).
@@ -774,17 +771,20 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     deutsche Identity-Fehlermeldungen, alle Auth-/Profil-Seiten übersetzt & gestaltet.
 27. ✅ **PWA**: Web-Manifest, Service Worker, Install-Banner, maskable Icons (Beethoven-5-Motiv).
 
-### Phase 8 – Vernetzung & Konzerte ⏳ *teilweise umgesetzt* — siehe Abschnitt 5
-> Stand: Konzerte/Programm/Mitwirkende/Wizard, Zuhörer:in-Rolle, Onboarding und QR-Code sind umgesetzt
-> (28, 30–32, 34–36). Offen: Freundschaften (29), Aktivitäts-Feed (33).
+### Phase 8 – Vernetzung & Konzerte ✅ *umgesetzt* — siehe Abschnitt 5
+> Alle Punkte 28–36 umgesetzt: Zuhörer:in-Rolle, Freundschaften, Onboarding, Konzerte/Programm/Mitwirkende
+> inkl. Wizard, „Ich war dabei", QR-Code und Aktivitäts-Feed.
 > Ziel: aus dem Katalog ein **soziales** Entdeck-Werkzeug machen. Bewusst **offene** Anfangsphase
 > (wenig Zwang/Bestätigung), um früh genug Teilnehmer:innen für spannende Vernetzung zu gewinnen.
 
 28. ✅ *(umgesetzt)* **Person-Typ Zuhörer:in** (`PersonRolleTyp.Zuhoerer`): in den Admin-Editoren
     (`/admin/personen`, PersonDialog) wählbar, in Listen/Filtern/Detailseiten als „Zuhörer:in" angezeigt;
     Default-Rolle beim Onboarding (Sichtbarkeit `NurInitialen`).
-29. **Freundschaften** (`Freundschaft`-Entity + Migration): „Befreunden"-Button auf der Personenseite,
-    `/account/freunde` (Anfragen/Liste), Einbindung in die viewer-abhängige Sichtbarkeit (wie Bandkolleg:innen).
+29. ✅ *(umgesetzt)* **Freundschaften** (`Freundschaft`-Entity): „Befreunden"-Button auf der Personenseite
+    (mit Status-Chip „Anfrage gesendet"/„Befreundet" bzw. „Anfrage annehmen"), Seite `/account/freunde`
+    (eingehende/gesendete Anfragen, Freundesliste, lösen/zurückziehen) via `FreundschaftService`.
+    Eingebunden in die viewer-abhängige Sichtbarkeit (`PersonenSicht`): bestätigte Freund:innen sehen
+    einander voll – wie Bandkolleg:innen.
 30. ✅ *(umgesetzt)* **Onboarding** (`/account/onboarding`): Hinweis-Banner auf der Startseite (eingeloggt,
     ohne verknüpfte Person & ohne offenen Antrag) + Assistent — Band + Name eingeben, passende **bestehende
     Personen** (noch nicht verknüpft, Bandmitglieder zuerst) werden vorgeschlagen → „Das bin ich" (`PersonAnspruch`,
@@ -796,9 +796,12 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 32. ✅ *(umgesetzt)* **QR-Code** auf der Startseite (unten) für `https://harmoniq.q-no.ch` zur
     Smartphone-zu-Smartphone-Weitergabe. Serverseitig generiert via **QRCoder** (reines C#, **kein**
     externer Dienst, kein Personenbezug; konstante URL) als inline-SVG.
-33. **Aktivitäts-Feed** der Freund:innen/Bandkolleg:innen (Startseite eingeloggt + `/account/freunde`)
-    über append-only `Aktivitaet`-Tabelle (Schreiben bei Ereignis + einmaliger Backfill); respektiert Sichtbarkeit.
-    Inkl. **eigener Freitext-Beiträge** (`Typ=Beitrag`) an Freunde/Bandkollegen (schreiben/bearbeiten/löschen).
+33. ✅ *(umgesetzt)* **Aktivitäts-Feed** der Freund:innen/Bandkolleg:innen (Startseite eingeloggt +
+    `/account/freunde`) über append-only `Aktivitaet`-Tabelle. Wiederverwendbare Komponente
+    `AktivitaetsFeed`; Ereignisse werden geschrieben bei Bewertung (erste je Video), Video-Vorschlag,
+    Mitwirkung (genehmigt) und bestätigter Freundschaft (`AktivitaetService`); einmaliger `AktivitaetBackfill`
+    aus Bestandsdaten beim Start. Filtert auf `PersonenSicht` (nur sichtbare Akteur:innen). Inkl. **eigener
+    Freitext-Beiträge** (`Typ=Beitrag`) an Freunde/Bandkollegen (posten/bearbeiten/löschen).
 34. ✅ *(umgesetzt)* **Konzert-Komfort**: Autocomplete-mit-Anlegen im Video-Dialog + automatische
     `KonzertBand`-Zuordnung der Video-Band; Konzert-Kalender (±8 Tage) auf der Startseite.
 35. ✅ *(umgesetzt)* **Konzert-Programm & Mitwirkende**: Tabellen `KonzertStueck` (n:m Konzert↔Stück, je
@@ -809,6 +812,22 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     ganzes Konzert in einem Schritt erfassen **und** bestehende mutieren, fehlende Stücke/Komponist:innen/Bands
     per Find-or-create anlegen; Programm mit Reihenfolge, Mitwirkende mit vorgeschlagener Rolle. Ersetzt den
     früheren Konzert-Dialog (Neu/Bearbeiten).
+37. ✅ *(umgesetzt)* **UI-Verfeinerungen Feed/Sichtbarkeit:** Startseite – Schreibbox nur im Freunde-Fenster,
+    Feed (max. 5, „Alle Neuigkeiten" → `/account/freunde`) **unter** den Kacheln und nur wenn nicht leer;
+    prominenter Banner für offene Freundschaftsanfragen. Personen-Detail: **Links (Telefon/E-Mail/Social)
+    nur bei voller Sichtbarkeit** (öffentlich/Band/Freund), Bands immer sichtbar. **Dev-Kennzeichnung:**
+    rote App-Bar + „DEV (localhost)"-Chip, wenn `ASPNETCORE_ENVIRONMENT=Development` (Prod bleibt violett).
+
+### Offene / mögliche nächste Punkte
+- **Eigene Vorschläge im Profil:** Anzeige der von mir eingereichten Video-/Mitwirkungs-Vorschläge inkl. Status
+  (Phase 4, Punkt 12 – weiterhin offen/optional).
+- **Feed-Backfill Mitwirkungen:** beim einmaligen Backfill bewusst ausgelassen (kein verlässlicher Zeitstempel);
+  neue Mitwirkungen werden ab jetzt protokolliert.
+- *(Ideen, nicht eingeplant)* Featured „Stück/Komponist:in des Monats" auf der Startseite; Kommentare/Antworten
+  auf Feed-Beiträge; Push-Benachrichtigungen.
+
+> **Stand:** Alle spezifizierten Phasen (1–8) sind umgesetzt und live. Das Datenmodell und die Kern-Features
+> (Personen/Rollen, Konzerte, Vernetzung, Feed) sind vollständig; offen sind nur die obigen Komfort-/Ausbau-Punkte.
 
 ---
 

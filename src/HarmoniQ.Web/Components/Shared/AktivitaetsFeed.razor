@@ -1,0 +1,223 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+@* Nichts rendern, wenn kein verknüpftes Profil – oder (ohne Schreibbox) der Feed leer ist. *@
+@if (_meineId is not null && (ZeigePostBox || _items.Count > 0))
+{
+    @if (!string.IsNullOrEmpty(Titel))
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h5" Style="color:#D4AF37;">@Titel</MudText>
+            @if (!string.IsNullOrEmpty(MehrHref) && _items.Count > 0)
+            {
+                <MudSpacer />
+                <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@MehrHref"
+                           EndIcon="@Icons.Material.Filled.ArrowForward">Alle Neuigkeiten</MudButton>
+            }
+        </MudStack>
+    }
+    @if (ZeigePostBox)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+            <MudTextField @bind-Value="_neuerBeitrag" Variant="Variant.Outlined" Lines="2"
+                          Placeholder="Was möchtest du deinen Freund:innen & Bandkolleg:innen mitteilen?" />
+            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
+                <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                           StartIcon="@Icons.Material.Filled.Send" OnClick="Posten"
+                           Disabled="@(string.IsNullOrWhiteSpace(_neuerBeitrag))">Posten</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (_items.Count > 0)
+    {
+        <MudStack Spacing="2">
+            @foreach (var a in _items)
+            {
+                <MudPaper Class="pa-3" Elevation="1" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
+                        <MudIcon Icon="@Symbol(a.Typ)" Style="color:#9B59B6;" />
+                        <div style="flex:1; min-width:0;">
+                            <MudText Typo="Typo.body2" Style="color:#F0E6FF;">
+                                <MudLink Href="@($"/personen/{a.AkteurId}")" Style="color:#D4AF37;" Underline="Underline.Hover">@a.AkteurName</MudLink>
+                                @((MarkupString)a.AktionHtml)
+                            </MudText>
+
+                            @if (a.Typ == AktivitaetTyp.Beitrag && _editId == a.Id)
+                            {
+                                <MudTextField @bind-Value="_editText" Variant="Variant.Outlined" Lines="2" Class="mt-1" />
+                                <MudStack Row="true" Spacing="1" Class="mt-1">
+                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                                               OnClick="EditSpeichern" Disabled="@string.IsNullOrWhiteSpace(_editText)">Speichern</MudButton>
+                                    <MudButton Size="Size.Small" OnClick="@(() => _editId = null)">Abbrechen</MudButton>
+                                </MudStack>
+                            }
+                            else if (a.Typ == AktivitaetTyp.Beitrag && !string.IsNullOrWhiteSpace(a.Text))
+                            {
+                                <MudText Typo="Typo.body1" Class="mt-1" Style="color:#C4B0D8; white-space:pre-wrap;">@a.Text</MudText>
+                            }
+
+                            <MudText Typo="Typo.caption" Style="color:#6f5a86;">@a.RelativLabel</MudText>
+                        </div>
+
+                        @if (a.Typ == AktivitaetTyp.Beitrag && a.AkteurId == _meineId && _editId != a.Id)
+                        {
+                            <div>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#9B59B6;"
+                                               OnClick="@(() => EditStart(a))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => Loeschen(a.Id))" />
+                            </div>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    }
+}
+
+@code {
+    [Parameter] public int Max { get; set; } = 25;
+    [Parameter] public bool ZeigePostBox { get; set; } = true;
+    [Parameter] public string? Titel { get; set; }
+    /// <summary>Wenn gesetzt und Einträge vorhanden: „Alle Neuigkeiten"-Link (z. B. auf /account/freunde).</summary>
+    [Parameter] public string? MehrHref { get; set; }
+
+    private Guid? _meineId;
+    private string _neuerBeitrag = "";
+    private Guid? _editId;
+    private string _editText = "";
+    private List<Zeile> _items = [];
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    /// <summary>Von außen aufrufbar, um den Feed neu zu laden.</summary>
+    public async Task Neuladen() { await Laden(); StateHasChanged(); }
+
+    private async Task Laden()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _meineId = await AktivitaetService.PersonIdAsync(db, userId);
+        if (_meineId is null) { _items = []; return; }
+
+        var sichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+
+        var roh = await db.Aktivitaeten
+            .Where(a => sichtbar.Contains(a.AkteurPersonId))
+            .OrderByDescending(a => a.Zeitpunkt)
+            .Take(Max)
+            .Select(a => new
+            {
+                a.Id, a.AkteurPersonId, AkteurName = a.AkteurPerson.Name,
+                a.Typ, a.Text, a.ZielTyp, a.ZielId, a.Zeitpunkt,
+                NebenName = a.NebenPerson != null ? a.NebenPerson.Name : null,
+                a.NebenPersonId
+            })
+            .ToListAsync();
+
+        // Ziel-Beschriftungen (aktuell nur Videos) gebündelt auflösen.
+        var videoIds = roh.Where(r => r.ZielTyp == AktivitaetZielTyp.Video && r.ZielId != null)
+            .Select(r => r.ZielId!.Value).Distinct().ToList();
+        var videoTitel = await db.Videos.Where(v => videoIds.Contains(v.Id))
+            .Select(v => new { v.Id, Titel = v.Stueck.Titel })
+            .ToDictionaryAsync(v => v.Id, v => v.Titel);
+
+        var jetzt = DateTime.UtcNow;
+        _items = roh.Select(r => new Zeile(
+            r.Id, r.AkteurPersonId, r.AkteurName, r.Typ, r.Text,
+            AktionHtml(r.Typ, r.ZielTyp, r.ZielId, videoTitel, r.NebenPersonId, r.NebenName),
+            RelativLabel(r.Zeitpunkt, jetzt))).ToList();
+    }
+
+    private async Task Posten()
+    {
+        if (_meineId is not Guid id || string.IsNullOrWhiteSpace(_neuerBeitrag)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        AktivitaetService.Hinzufuegen(db, id, AktivitaetTyp.Beitrag, text: _neuerBeitrag.Trim());
+        await db.SaveChangesAsync();
+        _neuerBeitrag = "";
+        await Laden();
+    }
+
+    private void EditStart(Zeile a) { _editId = a.Id; _editText = a.Text ?? ""; }
+
+    private async Task EditSpeichern()
+    {
+        if (_editId is not Guid id || string.IsNullOrWhiteSpace(_editText)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var a = await db.Aktivitaeten.FindAsync(id);
+        if (a != null && a.AkteurPersonId == _meineId && a.Typ == AktivitaetTyp.Beitrag)
+        {
+            a.Text = _editText.Trim();
+            await db.SaveChangesAsync();
+        }
+        _editId = null;
+        await Laden();
+    }
+
+    private async Task Loeschen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var a = await db.Aktivitaeten.FindAsync(id);
+        if (a != null && a.AkteurPersonId == _meineId && a.Typ == AktivitaetTyp.Beitrag)
+        {
+            db.Aktivitaeten.Remove(a);
+            await db.SaveChangesAsync();
+            Snackbar.Add("Beitrag gelöscht.", Severity.Success);
+        }
+        await Laden();
+    }
+
+    private static string Symbol(AktivitaetTyp t) => t switch
+    {
+        AktivitaetTyp.Beitrag => Icons.Material.Filled.ChatBubble,
+        AktivitaetTyp.BewertungAbgegeben => Icons.Material.Filled.Star,
+        AktivitaetTyp.VideoHinzugefuegt => Icons.Material.Filled.VideoLibrary,
+        AktivitaetTyp.FreundschaftBestaetigt => Icons.Material.Filled.People,
+        AktivitaetTyp.MitwirkungHinzugefuegt => Icons.Material.Filled.Groups,
+        _ => Icons.Material.Filled.Notifications
+    };
+
+    private static string AktionHtml(AktivitaetTyp typ, AktivitaetZielTyp? zt, Guid? zid,
+        Dictionary<Guid, string> videoTitel, Guid? nebenId, string? nebenName)
+    {
+        string VideoLink()
+        {
+            if (zid is Guid vid && videoTitel.TryGetValue(vid, out var t))
+                return $"<a href=\"/videos/{vid}\" style=\"color:#9B59B6;\">{System.Net.WebUtility.HtmlEncode(t)}</a>";
+            return "ein Video";
+        }
+        return typ switch
+        {
+            AktivitaetTyp.Beitrag => " hat etwas geschrieben:",
+            AktivitaetTyp.BewertungAbgegeben => $" hat {VideoLink()} bewertet.",
+            AktivitaetTyp.VideoHinzugefuegt => $" hat {VideoLink()} hinzugefügt.",
+            AktivitaetTyp.MitwirkungHinzugefuegt => $" wirkt mit in {VideoLink()}.",
+            AktivitaetTyp.FreundschaftBestaetigt when nebenId is Guid nid =>
+                $" ist jetzt mit <a href=\"/personen/{nid}\" style=\"color:#9B59B6;\">{System.Net.WebUtility.HtmlEncode(nebenName ?? "?")}</a> befreundet.",
+            _ => ""
+        };
+    }
+
+    private static string RelativLabel(DateTime zeitpunkt, DateTime jetzt)
+    {
+        var d = jetzt - zeitpunkt;
+        if (d.TotalMinutes < 1) return "gerade eben";
+        if (d.TotalMinutes < 60) return $"vor {(int)d.TotalMinutes} Min.";
+        if (d.TotalHours < 24) return $"vor {(int)d.TotalHours} Std.";
+        if (d.TotalDays < 30) return $"vor {(int)d.TotalDays} Tg.";
+        return zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy");
+    }
+
+    private record Zeile(Guid Id, Guid AkteurId, string AkteurName, AktivitaetTyp Typ, string? Text,
+        string AktionHtml, string RelativLabel);
+}
