@@ -324,12 +324,14 @@ BandbeitrittAntrag                  (Vorschlag „Band beitreten" – UMGESETZT)
 ├── ErstelltAm (DateTime)
 └── EntschiedenAm (DateTime?)
 
-> **Warum ein Antrag?** Eine Bandmitgliedschaft macht (über die viewer-abhängige Sichtbarkeit)
-> alle Mitglieder dieser Band für die Person voll sichtbar. Damit sich niemand selbst in
-> beliebige Bands einträgt und so alle Personen „aufdeckt", darf eine verknüpfte Person über
-> `/account/person` eine Mitgliedschaft nur **vorschlagen** (`BandbeitrittAntrag`, Offen);
-> ein:e **Admin** bestätigt sie unter `/admin/bandantraege` (→ erzeugt `BandMitgliedschaft`).
-> Admins können auf der Personenseite Bands auch **direkt** hinzufügen (ohne Antrag).
+> **Auto-Bestätigung (offene Anfangsphase):** Eine Bandmitgliedschaft macht (über die viewer-abhängige
+> Sichtbarkeit) alle Mitglieder dieser Band für die Person voll sichtbar. Ursprünglich war daher eine
+> Admin-Bestätigung vorgesehen; in der offenen Anfangsphase tritt eine verknüpfte Person über
+> `/account/person` jedoch **direkt** bei: die `BandMitgliedschaft` wird sofort erzeugt und der
+> `BandbeitrittAntrag` mit Status **Genehmigt** protokolliert (Provenienz/Reversibilität). Die
+> Admin-Queue `/admin/bandantraege` bleibt bestehen (für evtl. Altbestände / Rückkehr zur manuellen
+> Prüfung), bekommt aber keine neuen offenen Anträge mehr. Admins können Bands auf der Personenseite
+> weiterhin direkt hinzufügen.
 
 Freundschaft                        (NEU – gegenseitige Verbindung zweier Personen)
 ├── Id (Guid)
@@ -630,9 +632,11 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 /komponisten, /komponisten/{id}   → Komponist:innen-Liste / -Detail (leitet auf /personen/{id})
 /personen, /personen/{id}     → Personen-Liste (Filter: Name/Rolle/Instrument/Kontext) / -Detail (Werke + Auftritte,
                                  „Befreunden", „Das bin ich"; Links nur bei voller Sichtbarkeit)
-/stuecke, /stuecke/{id}       → Stückliste (Filter) / Stück-Detail + Videos + Bewertungen + Voting + Vorschläge
+/stuecke, /stuecke/{id}       → Stückliste (Filter: Titel/Komponist/Band/Schwierigkeit/Video; Band-Filter
+                                 umfasst auch an Konzerten gespielte Stücke) / Stück-Detail + Videos + Voting + Vorschläge
 /videos, /videos/{id}         → Videoliste / Einzel-Video (Besetzung, Bewertungen)
-/bands, /bands/{id}           → Band-Übersicht / -Detail (Besetzung, Aufnahmen, gespielte Stücke, Konzerte)
+/bands, /bands/{id}           → Band-Übersicht / -Detail (Reihenfolge: Aufnahmen, Konzerte, gespielte Stücke
+                                 [aus Videos ∪ Konzertprogrammen], Besetzung)
 /konzerte, /konzerte/{id}     → Konzert-Übersicht (Suche + Zeitraum-Filter) / -Detail (Programm, Mitwirkende,
                                  Videos je Band, „Ich war dabei")
 /account/login, /register     → Login (lokal + Google + Microsoft) / Registrierung
@@ -688,7 +692,8 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 10. Admin-Rollenverwaltung + Zugriffsschutz (`/admin`, `AdminInitializer`)
 11. Admin-CRUD für alle Entitäten (Komponist, Stück, Band, Video) + Bewertungsverwaltung
 12. User-Vorschläge (Dialog auf Stück-Seite) + Review-Queue
-> *Offen/optional:* Anzeige der eigenen Vorschläge inkl. Status im Profil.
+> ✅ Anzeige der eigenen Vorschläge (Video- & Mitwirkungs-Vorschläge) inkl. Status („In Prüfung"/
+> „Genehmigt"/„Abgelehnt") unter `/account/profil` („Meine Beiträge").
 
 ### Phase 5 – Import-Assistent ✅ *umgesetzt* (`/admin/import`)
 13. **Schritt 1 – Stücke sammeln:** Komponist wählen/neu; Webseite scannen (HtmlAgilityPack
@@ -819,8 +824,8 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     rote App-Bar + „DEV (localhost)"-Chip, wenn `ASPNETCORE_ENVIRONMENT=Development` (Prod bleibt violett).
 
 ### Offene / mögliche nächste Punkte
-- **Eigene Vorschläge im Profil:** Anzeige der von mir eingereichten Video-/Mitwirkungs-Vorschläge inkl. Status
-  (Phase 4, Punkt 12 – weiterhin offen/optional).
+- ✅ *(umgesetzt)* **Eigene Vorschläge im Profil:** Video-/Mitwirkungs-Vorschläge mit Status unter
+  `/account/profil` („Meine Beiträge").
 - **Feed-Backfill Mitwirkungen:** beim einmaligen Backfill bewusst ausgelassen (kein verlässlicher Zeitstempel);
   neue Mitwirkungen werden ab jetzt protokolliert.
 - *(Ideen, nicht eingeplant)* Featured „Stück/Komponist:in des Monats" auf der Startseite; Kommentare/Antworten

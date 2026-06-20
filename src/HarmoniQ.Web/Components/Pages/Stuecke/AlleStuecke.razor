@@ -9,13 +9,6 @@
 <PageTitle>Stücke – HarmoniQ</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Stücke</MudText>
-@if (_bandName != null)
-{
-    <MudChip T="string" Class="mb-3" Color="Color.Primary" OnClose="@(() => SetzeBand(null))"
-             Icon="@Icons.Material.Filled.Groups">
-        Gespielt von: @_bandName
-    </MudChip>
-}
 
 <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
     <MudGrid Spacing="3">
@@ -26,22 +19,18 @@
                           Immediate="true" Clearable="true" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="Guid?" @bind-Value="_komponistFilter" @bind-Value:after="Filtern"
-                       Label="Komponist" Variant="Variant.Outlined" Clearable="true">
-                @foreach (var k in _komponisten)
-                {
-                    <MudSelectItem T="Guid?" Value="@k.Id">@k.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <MudAutocomplete T="string" @bind-Value="_komponistText" @bind-Value:after="Filtern"
+                             Label="Komponist" Variant="Variant.Outlined" Clearable="true"
+                             SearchFunc="SucheKomponist" CoerceValue="true" ResetValueOnEmptyText="true"
+                             MaxItems="20" Immediate="true"
+                             AdornmentIcon="@Icons.Material.Filled.Search" Adornment="Adornment.Start" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="Guid?" @bind-Value="_bandFilter" @bind-Value:after="Filtern"
-                       Label="Band" Variant="Variant.Outlined" Clearable="true">
-                @foreach (var b in _bands)
-                {
-                    <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <MudAutocomplete T="string" @bind-Value="_bandText" @bind-Value:after="BandGewaehlt"
+                             Label="Band" Variant="Variant.Outlined" Clearable="true"
+                             SearchFunc="SucheBand" CoerceValue="true" ResetValueOnEmptyText="true"
+                             MaxItems="20" Immediate="true"
+                             AdornmentIcon="@Icons.Material.Filled.Search" Adornment="Adornment.Start" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
             <MudSelect T="Schwierigkeitsgrad?" @bind-Value="_gradFilter" @bind-Value:after="Filtern"
@@ -113,11 +102,28 @@
     private List<Band> _bands = [];
 
     private string _suche = "";
-    private Guid? _komponistFilter;
-    private Guid? _bandFilter;
+    private string? _komponistText;
+    private string? _bandText;
     private Schwierigkeitsgrad? _gradFilter;
     private VideoFilter _videoFilter = VideoFilter.Mit;
-    private string? _bandName;
+
+    private Task<IEnumerable<string>> SucheKomponist(string? wert, CancellationToken ct)
+    {
+        var namen = _komponisten.Select(k => k.Name);
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? namen
+            : namen.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(20));
+    }
+
+    private Task<IEnumerable<string>> SucheBand(string? wert, CancellationToken ct)
+    {
+        var namen = _bands.Select(b => b.Name);
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? namen
+            : namen.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(20));
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,27 +141,48 @@
             .Include(s => s.Videos.Where(v => v.Status == VideoStatus.Genehmigt))
             .ToListAsync();
 
-        _alle = stuecke.Select(s => new Zeile(
-            s.Id, s.Titel, s.KomponistenText,
-            s.Komponisten.Select(p => p.Id).ToHashSet(),
-            s.Jahr, s.Schwierigkeitsgrad, s.Besetzung,
-            s.Videos.Count,
-            s.Videos.Where(v => v.BandId.HasValue).Select(v => v.BandId!.Value).Distinct().ToHashSet()
-        )).ToList();
+        // Bands, die ein Stück an einem Konzert gespielt haben (Programm), je Stück.
+        var konzertBands = (await db.KonzertStuecke
+                .Where(ks => ks.BandId != null)
+                .Select(ks => new { ks.StueckId, BandId = ks.BandId!.Value })
+                .ToListAsync())
+            .GroupBy(x => x.StueckId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.BandId).ToHashSet());
 
-        _komponistFilter = KomponistQuery;
-        _bandFilter = BandQuery;
-        _bandName = _bandFilter != null ? _bands.FirstOrDefault(b => b.Id == _bandFilter)?.Name : null;
+        var bandName = _bands.ToDictionary(b => b.Id, b => b.Name);
+
+        _alle = stuecke.Select(s =>
+        {
+            // Band-Zuordnung = aus Videos UND aus Konzertprogrammen (Union).
+            var bandIds = s.Videos.Where(v => v.BandId.HasValue).Select(v => v.BandId!.Value).ToHashSet();
+            if (konzertBands.TryGetValue(s.Id, out var kb)) bandIds.UnionWith(kb);
+            var bandNamen = bandIds.Where(bandName.ContainsKey).Select(id => bandName[id]).ToList();
+            return new Zeile(
+                s.Id, s.Titel, s.KomponistenText,
+                s.Jahr, s.Schwierigkeitsgrad, s.Besetzung,
+                s.Videos.Count, bandNamen);
+        }).ToList();
+
+        // Vorbelegung aus Query-Parametern (Guid → Name) für die Text-Filter.
+        if (KomponistQuery is { } kq)
+            _komponistText = _komponisten.FirstOrDefault(k => k.Id == kq).Name;
+        if (BandQuery is { } bq)
+        {
+            _bandText = _bands.FirstOrDefault(b => b.Id == bq)?.Name;
+            // Kommt man von einer Bandseite, alle gespielten Stücke zeigen (auch ohne Video).
+            _videoFilter = VideoFilter.Alle;
+        }
         Filtern();
     }
 
     private void Filtern()
     {
-        _bandName = _bandFilter != null ? _bands.FirstOrDefault(b => b.Id == _bandFilter)?.Name : null;
         _gefiltert = _alle
             .Where(z =>
-                (_komponistFilter == null || z.KomponistIds.Contains(_komponistFilter.Value)) &&
-                (_bandFilter == null || z.BandIds.Contains(_bandFilter.Value)) &&
+                (string.IsNullOrWhiteSpace(_komponistText)
+                    || z.Komponist.Contains(_komponistText, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(_bandText)
+                    || z.BandNamen.Any(n => n.Contains(_bandText, StringComparison.OrdinalIgnoreCase))) &&
                 (_gradFilter == null || z.Grad == _gradFilter) &&
                 (_videoFilter == VideoFilter.Alle ||
                  (_videoFilter == VideoFilter.Mit && z.VideoAnzahl > 0) ||
@@ -166,14 +193,15 @@
             .ToList();
     }
 
-    private void SetzeBand(Guid? band)
+    private void BandGewaehlt()
     {
-        _bandFilter = band;
+        // Bei aktivem Band-Filter alle gespielten Stücke zeigen (Videos + Konzerte).
+        if (!string.IsNullOrWhiteSpace(_bandText)) _videoFilter = VideoFilter.Alle;
         Filtern();
     }
 
-    private record Zeile(Guid Id, string Titel, string Komponist, HashSet<Guid> KomponistIds, int? Jahr,
-        Schwierigkeitsgrad Grad, string? Besetzung, int VideoAnzahl, HashSet<Guid> BandIds);
+    private record Zeile(Guid Id, string Titel, string Komponist, int? Jahr,
+        Schwierigkeitsgrad Grad, string? Besetzung, int VideoAnzahl, List<string> BandNamen);
 
     private enum VideoFilter { Alle, Mit, Ohne }
 }

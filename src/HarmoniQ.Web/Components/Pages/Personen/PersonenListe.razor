@@ -35,13 +35,11 @@
             </MudSelect>
         </MudItem>
         <MudItem xs="6" sm="4">
-            <MudSelect T="Guid?" @bind-Value="_instrument" @bind-Value:after="Filtern"
-                       Label="Instrument" Variant="Variant.Outlined" Clearable="true">
-                @foreach (var i in _instrumente)
-                {
-                    <MudSelectItem T="Guid?" Value="@i.Id">@i.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <MudAutocomplete T="string" @bind-Value="_instrumentText" @bind-Value:after="Filtern"
+                             Label="Instrument" Variant="Variant.Outlined" Clearable="true"
+                             SearchFunc="SucheInstrument" CoerceValue="true" ResetValueOnEmptyText="true"
+                             MaxItems="20" Immediate="true"
+                             AdornmentIcon="@Icons.Material.Filled.Search" Adornment="Adornment.Start" />
         </MudItem>
     </MudGrid>
     <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Personen</MudText>
@@ -102,8 +100,17 @@ else
     private HashSet<Guid> _vollSichtbar = [];
     private string _suche = "";
     private PersonRolleTyp? _rolle;
-    private Guid? _instrument;
+    private string? _instrumentText;
     private string? _kontext;
+
+    private Task<IEnumerable<string>> SucheInstrument(string? wert, CancellationToken ct)
+    {
+        var namen = _instrumente.Select(i => i.Name);
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? namen
+            : namen.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(20));
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -165,7 +172,8 @@ else
             .Where(z => Eff(z) != Sichtbarkeit.NichtBekannt)
             .Where(z =>
                 (_rolle == null || z.Rollen.Contains(_rolle.Value)) &&
-                (_instrument == null || z.InstrumentIds.Contains(_instrument.Value)) &&
+                (string.IsNullOrWhiteSpace(_instrumentText)
+                    || z.Instrumente.Any(n => n.Contains(_instrumentText, StringComparison.OrdinalIgnoreCase))) &&
                 (_suche == "" || Name(z).Contains(_suche, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(z => Name(z))
             .ToList();

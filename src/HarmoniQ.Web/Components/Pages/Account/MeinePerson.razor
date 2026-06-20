@@ -129,11 +129,8 @@ else
 
         <MudButton Variant="Variant.Outlined" Class="mt-3" Style="color:#D4AF37; border-color:#D4AF37;"
                    StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="BandVorschlagen">
-            Bandmitgliedschaft vorschlagen
+            Band beitreten
         </MudButton>
-        <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color:#6f5a86;">
-            Beitritte zu Bands werden von einer Admin-Person bestätigt.
-        </MudText>
     </MudPaper>
 }
 
@@ -249,24 +246,36 @@ else
         {
             { x => x.Bands, bandOptionen },
             { x => x.Instrumente, instrumentOptionen },
-            { x => x.Hinweis, "Dein Beitritt wird von einer Admin-Person bestätigt." },
-            { x => x.OkText, "Vorschlagen" }
+            { x => x.Hinweis, "Du trittst der Band direkt bei." },
+            { x => x.OkText, "Beitreten" }
         };
-        var dialog = await DialogService.ShowAsync<BandbeitrittDialog>("Bandmitgliedschaft vorschlagen", parameters,
+        var dialog = await DialogService.ShowAsync<BandbeitrittDialog>("Band beitreten", parameters,
             new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var result = await dialog.Result;
         if (result is null || result.Canceled) return;
         var wahl = (BandbeitrittDialog.Auswahl)result.Data!;
 
+        // Beitritt wird automatisch bestätigt: Mitgliedschaft direkt anlegen, Antrag als genehmigt protokollieren.
+        if (!await db.BandMitgliedschaften.AnyAsync(m => m.BandId == wahl.BandId && m.PersonId == _personId.Value))
+        {
+            db.BandMitgliedschaften.Add(new BandMitgliedschaft
+            {
+                BandId = wahl.BandId,
+                PersonId = _personId.Value,
+                InstrumentId = wahl.InstrumentId
+            });
+        }
         db.BandbeitrittAntraege.Add(new BandbeitrittAntrag
         {
             PersonId = _personId.Value,
             BandId = wahl.BandId,
             InstrumentId = wahl.InstrumentId,
-            BeantragtVonId = _userId
+            BeantragtVonId = _userId,
+            Status = PersonAnspruchStatus.Genehmigt,
+            EntschiedenAm = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
-        Snackbar.Add("Antrag gesendet – ein:e Admin prüft den Beitritt.", Severity.Success);
+        Snackbar.Add("Du bist der Band beigetreten.", Severity.Success);
         await LadeBandsAsync(db, _personId.Value);
     }
 

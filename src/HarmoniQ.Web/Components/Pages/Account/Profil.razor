@@ -9,9 +9,37 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthProvider
 
-<PageTitle>Meine Bewertungen – HarmoniQ</PageTitle>
+<PageTitle>Meine Beiträge – HarmoniQ</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Meine Bewertungen</MudText>
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Meine Beiträge</MudText>
+
+@* ── Meine Vorschläge (Status) ─────────────────────────────────────────── *@
+@if (_vorschlaege == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_vorschlaege.Count > 0)
+{
+    <MudText Typo="Typo.h5" Class="mb-2" Style="color:#D4AF37;">Meine Vorschläge (@_vorschlaege.Count)</MudText>
+    <MudList T="string" Dense="true" Class="mb-6">
+        @foreach (var v in _vorschlaege)
+        {
+            <MudListItem T="string" Href="@($"/stuecke/{v.StueckId}")" Icon="@v.Icon" Style="color:#F0E6FF;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="flex:1;min-width:0;">
+                        @v.Titel
+                        <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.Subtitel</MudText>
+                    </div>
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(v.Status)" Variant="Variant.Outlined">
+                        @StatusLabel(v.Status)
+                    </MudChip>
+                </MudStack>
+            </MudListItem>
+        }
+    </MudList>
+}
+
+<MudText Typo="Typo.h5" Class="mb-2" Style="color:#D4AF37;">Meine Bewertungen</MudText>
 
 @if (_zeilen == null)
 {
@@ -77,14 +105,49 @@ else
 
 @code {
     private List<Zeile>? _zeilen;
+    private List<VorschlagZeile>? _vorschlaege;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null) { _zeilen = []; return; }
+        if (userId == null) { _zeilen = []; _vorschlaege = []; return; }
 
         await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Eigene Video-Vorschläge.
+        var videos = await db.Videos
+            .Where(v => v.VorgeschlagenVonId == userId)
+            .OrderByDescending(v => v.ErstelltAm)
+            .Select(v => new { v.StueckId, StueckTitel = v.Stueck.Titel, v.Status })
+            .ToListAsync();
+
+        // Eigene Mitwirkungs-Vorschläge.
+        var mitwirkungen = await db.VideoMitwirkungen
+            .Where(m => m.VorgeschlagenVonId == userId)
+            .Select(m => new
+            {
+                m.Video.StueckId,
+                StueckTitel = m.Video.Stueck.Titel,
+                PersonName = m.Person.Name,
+                m.Rolle,
+                InstrumentName = m.Instrument != null ? m.Instrument.Name : null,
+                m.Status
+            })
+            .ToListAsync();
+
+        _vorschlaege =
+            videos.Select(v => new VorschlagZeile(
+                v.StueckId, v.StueckTitel, "Video-Vorschlag",
+                Icons.Material.Filled.VideoLibrary, v.Status))
+            .Concat(mitwirkungen.Select(m => new VorschlagZeile(
+                m.StueckId, m.StueckTitel,
+                $"Besetzung: {m.PersonName}" +
+                    (m.Rolle == MitwirkungRolle.Dirigent ? " (Dirigent:in)"
+                     : m.InstrumentName != null ? $" ({m.InstrumentName})" : ""),
+                Icons.Material.Filled.GroupAdd, m.Status)))
+            .ToList();
+
         _zeilen = await db.Bewertungen
             .Where(b => b.BenutzerId == userId)
             .Include(b => b.Video).ThenInclude(v => v.Stueck)
@@ -103,4 +166,22 @@ else
     private record Zeile(Guid StueckId, string StueckTitel, string YouTubeVideoId, string BandName,
         int GesamtEindruck, int Praezision, int Musikalitaet,
         int AkustischeQualitaet, int VideoQualitaet, string? Kommentar, DateTime ErstelltAm);
+
+    private record VorschlagZeile(Guid StueckId, string Titel, string Subtitel, string Icon, VideoStatus Status);
+
+    private static Color StatusColor(VideoStatus s) => s switch
+    {
+        VideoStatus.Genehmigt => Color.Success,
+        VideoStatus.Ausstehend => Color.Warning,
+        VideoStatus.Abgelehnt => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string StatusLabel(VideoStatus s) => s switch
+    {
+        VideoStatus.Genehmigt => "Genehmigt",
+        VideoStatus.Ausstehend => "In Prüfung",
+        VideoStatus.Abgelehnt => "Abgelehnt",
+        _ => s.ToString()
+    };
 }
