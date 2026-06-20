@@ -311,30 +311,16 @@ else
     private async Task DasBinIch()
     {
         if (_person == null || _userId == null) return;
-        var parameters = new DialogParameters<PersonAnspruchDialog> { { x => x.PersonName, _person.Name } };
-        var dialog = await DialogService.ShowAsync<PersonAnspruchDialog>("Mit Person verknüpfen", parameters,
-            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        var result = await dialog.Result;
-        if (result is null || result.Canceled) return;
-        var begruendung = result.Data as string;
-
         await using var db = await DbFactory.CreateDbContextAsync();
-        // Doppelte offene Anträge vermeiden.
-        if (await db.PersonAnsprueche.AnyAsync(a =>
-            a.PersonId == Id && a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen))
+        // Auto-Bestätigung (vorübergehend aktiv): direkt verknüpfen statt Admin-Antrag.
+        var (ok, meldung) = await VerknuepfungService.DirektVerknuepfenAsync(db, Id, _userId, null);
+        Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+        if (ok)
         {
-            _offenerAntrag = true;
-            return;
+            _verknuepftMitMir = true;
+            _personVerknuepft = true;
+            _offenerAntrag = false;
         }
-        db.PersonAnsprueche.Add(new PersonAnspruch
-        {
-            PersonId = Id,
-            BenutzerId = _userId,
-            Begruendung = string.IsNullOrWhiteSpace(begruendung) ? null : begruendung.Trim()
-        });
-        await db.SaveChangesAsync();
-        _offenerAntrag = true;
-        Snackbar.Add("Antrag gesendet – ein:e Admin prüft die Verknüpfung.", Severity.Success);
     }
 
     // Admin: Band direkt hinzufügen (ohne Antrag).

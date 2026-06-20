@@ -187,25 +187,18 @@ else
     private async Task DasBinIch(Guid personId, string personName)
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        if (await db.Personen.AnyAsync(p => p.BenutzerId == _userId))
+        // Auto-Bestätigung (vorübergehend aktiv): direkt verknüpfen statt Admin-Antrag.
+        var (ok, meldung) = await VerknuepfungService.DirektVerknuepfenAsync(db, personId, _userId!, "Über den Onboarding-Assistenten.");
+        if (ok)
         {
             _bereitsVerknuepft = true;
-            return;
+            Snackbar.Add($"Du bist jetzt mit {personName} verknüpft.", Severity.Success);
+            Nav.NavigateTo("/account/person");
         }
-        var schonOffen = await db.PersonAnsprueche.AnyAsync(a =>
-            a.PersonId == personId && a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen);
-        if (!schonOffen)
+        else
         {
-            db.PersonAnsprueche.Add(new PersonAnspruch
-            {
-                PersonId = personId,
-                BenutzerId = _userId!,
-                Begruendung = "Über den Onboarding-Assistenten."
-            });
-            await db.SaveChangesAsync();
+            Snackbar.Add(meldung, Severity.Error);
         }
-        _offenerAnspruch = personName;
-        Snackbar.Add("Antrag gesendet – ein:e Admin prüft die Verknüpfung.", Severity.Success);
     }
 
     private async Task NeuAnlegen()

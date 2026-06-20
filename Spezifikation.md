@@ -555,16 +555,19 @@ Konto: eine Person ist höchstens einem Benutzer zugeordnet und umgekehrt. Hat e
 eingeloggte:r Benutzer:in sich mit „ihrer" Person verknüpft, darf sie/er **die eigenen
 Personendaten selbst pflegen** (Bio, Links, Sichtbarkeit, Band-Mitgliedschaften, Instrumente
 usw.) – ohne Admin.
-> **Anti-Impersonation:** Damit niemand sich als fremde (z. B. prominente) Person ausgibt,
-> wird die Verknüpfung **vom Admin bestätigt** (Verknüpfungs-Antrag → Bewilligung),
-> analog zu den Mitwirkungs-Vorschlägen.
+> **Anti-Impersonation (vorübergehend deaktiviert):** Ursprünglich wurde die Verknüpfung **vom Admin
+> bestätigt** (Verknüpfungs-Antrag → Bewilligung). In der offenen Anfangsphase ist die Verknüpfung
+> **auto-bestätigt** (siehe unten / `VerknuepfungService`): „Das bin ich" verknüpft **sofort**, sofern
+> Konto und Person noch frei sind. Die Admin-Queue `/admin/verknuepfungen` bleibt für die spätere
+> Reaktivierung der manuellen Prüfung erhalten.
 
 **UMGESETZT:** Entität `PersonAnspruch` (PersonId, BenutzerId, Begruendung?, Status
 [Offen/Genehmigt/Abgelehnt], ErstelltAm, EntschiedenAm?). Auf der Personen-Detailseite gibt es
-für eingeloggte Benutzer:innen den Button **„Das bin ich"** (Dialog mit optionaler Begründung),
-sofern die Person noch nicht verknüpft ist und kein offener Antrag besteht; sonst Status-Chip
-(„in Prüfung" / „Mit deinem Konto verknüpft"). Admin-Queue `/admin/verknuepfungen`: Genehmigen
-(setzt `Person.BenutzerId`, prüft UNIQUE: Konto/Person noch frei) oder Ablehnen.
+für eingeloggte Benutzer:innen den Button **„Das bin ich"**, sofern die Person noch nicht verknüpft ist.
+**Vorübergehend auto-bestätigt:** der Klick verknüpft via `VerknuepfungService.DirektVerknuepfenAsync`
+**sofort** (prüft UNIQUE: Konto/Person noch frei), protokolliert den `PersonAnspruch` als *Genehmigt* und
+synchronisiert die E-Mail; ebenso im Onboarding-Assistenten. Die Admin-Queue `/admin/verknuepfungen`
+(Genehmigen/Ablehnen) bleibt für die spätere Reaktivierung der manuellen Prüfung bestehen.
 Nach Verknüpfung: **Selbst-Pflege** der eigenen Personendaten unter `/account/person`
 (Name, Bio, Bild-URL, Geburtsjahr, Sichtbarkeit, Links Webseite/Instagram/X/Facebook/YouTube) –
 verlinkt auch über „Meine Daten bearbeiten" auf der eigenen Personenseite. **UMGESETZT.**
@@ -790,6 +793,10 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
     (eingehende/gesendete Anfragen, Freundesliste, lösen/zurückziehen) via `FreundschaftService`.
     Eingebunden in die viewer-abhängige Sichtbarkeit (`PersonenSicht`): bestätigte Freund:innen sehen
     einander voll – wie Bandkolleg:innen.
+    **E-Mail-Benachrichtigung:** sofort bei neuer Anfrage (an die empfangende Person) und bei Annahme
+    (an die anfragende Person) über `IBenachrichtigungsMail` (gleicher Resend-/SMTP-Sender wie Identity);
+    nur an kontoverknüpfte, E-Mail-bestätigte Empfänger:innen, Best-Effort (Versandfehler brechen den
+    Flow nicht). Opt-out für Benachrichtigungen: bewusst auf späteren Datenmodell-Umbau verschoben.
 30. ✅ *(umgesetzt)* **Onboarding** (`/account/onboarding`): Hinweis-Banner auf der Startseite (eingeloggt,
     ohne verknüpfte Person & ohne offenen Antrag) + Assistent — Band + Name eingeben, passende **bestehende
     Personen** (noch nicht verknüpft, Bandmitglieder zuerst) werden vorgeschlagen → „Das bin ich" (`PersonAnspruch`,
