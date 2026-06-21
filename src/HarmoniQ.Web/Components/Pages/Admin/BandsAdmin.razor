@@ -7,6 +7,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>Bands verwalten – Admin</PageTitle>
 
@@ -16,7 +17,7 @@
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Bands</MudText>
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
+               StartIcon="@Icons.Material.Filled.Add" OnClick="Neu">Neu</MudButton>
 </MudStack>
 
 <MudDataGrid T="Band" Items="_items" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
@@ -26,10 +27,8 @@
         <TemplateColumn Title="Videos"><CellTemplate>@context.Item.Videos.Count</CellTemplate></TemplateColumn>
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
-                <MudIconButton Icon="@Icons.Material.Filled.Groups2" Size="Size.Small" Style="color:#9B59B6;"
-                               title="Mitglieder verwalten" Href="@($"/admin/bands/{context.Item.Id}/mitglieder")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
-                               OnClick="@(() => Bearbeiten(context.Item))" />
+                               title="Bearbeiten (Stammdaten & Mitglieder)" Href="@($"/admin/bands/{context.Item.Id}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => Loeschen(context.Item))" />
             </CellTemplate>
@@ -48,33 +47,21 @@
         _items = await db.Bands.Include(b => b.Videos).OrderBy(b => b.Name).ToListAsync();
     }
 
-    private async Task Bearbeiten(Band? b)
+    // „Neu" legt die Band per Dialog an und öffnet dann die Detailseite (Stammdaten + Mitglieder).
+    private async Task Neu()
     {
-        var parameters = new DialogParameters<BandDialog> { { x => x.Vorhanden, b } };
-        var dialog = await DialogService.ShowAsync<BandDialog>(
-            b == null ? "Neue Band" : "Band bearbeiten", parameters,
+        var parameters = new DialogParameters<BandDialog> { { x => x.Vorhanden, null } };
+        var dialog = await DialogService.ShowAsync<BandDialog>("Neue Band", parameters,
             new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var result = await dialog.Result;
         if (result is null || result.Canceled) return;
 
         var model = (Band)result.Data!;
         await using var db = await DbFactory.CreateDbContextAsync();
-        if (b == null)
-        {
-            db.Bands.Add(model);
-        }
-        else
-        {
-            var entity = await db.Bands.FindAsync(model.Id);
-            if (entity == null) return;
-            entity.Name = model.Name;
-            entity.Land = model.Land;
-            entity.Webseite = model.Webseite;
-            entity.BildUrl = model.BildUrl;
-        }
+        db.Bands.Add(model);
         await db.SaveChangesAsync();
-        Snackbar.Add("Gespeichert.", Severity.Success);
-        await Laden();
+        Snackbar.Add("Band angelegt.", Severity.Success);
+        Nav.NavigateTo($"/admin/bands/{model.Id}");
     }
 
     private async Task Loeschen(Band b)

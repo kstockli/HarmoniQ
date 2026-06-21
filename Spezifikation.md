@@ -655,8 +655,10 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
                                  ändern/lösen
 /admin/konzerte, /admin/konzerte/erfassen, /admin/konzerte/{id}/bearbeiten → CRUD + Erfassungs-Wizard
 /admin/instrumente            → Instrumente & Stimmen
-/admin/stuecke, /admin/bands, /admin/videos, /admin/bewertungen → CRUD/Verwaltung
-/admin/videos/{id}/besetzung  → Cast-Editor; /admin/bands/{id}/mitglieder → Band-Mitglieder
+/admin/stuecke, /admin/videos, /admin/bewertungen → CRUD/Verwaltung
+/admin/videos/{id}/besetzung  → Cast-Editor
+/admin/bands, /admin/bands/{id} → CRUD Bands / vereinte Band-Detailseite (Stammdaten **und** Mitglieder
+                                 inkl. inline-Bearbeitung bestehender Zeilen: Instrument/Funktion/Zeitraum)
 /admin/import                 → Import-Assistent (3-Schritt-Wizard)
 /admin/vorschlaege            → Video-Vorschläge · /admin/mitwirkungen → Mitwirkungs-Vorschläge
 /admin/richtigstellungen      → Richtigstellungen · /admin/verknuepfungen → „Das bin ich"-Anträge
