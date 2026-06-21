@@ -1,0 +1,85 @@
+using System.Text.Json;
+using HarmoniQ.Web.Data.Models;
+
+namespace HarmoniQ.Web.Services.Crawler;
+
+/// <summary>
+/// Vertrag für <see cref="HarmoniQ.Web.Data.Models.CrawlFund.DatenJson"/>: die strukturierten
+/// Vorschläge, welche die Extraktion (Heuristik in C1, LLM in C3) füllt und die Review-UI beim
+/// Übernehmen auf die bestehenden Find-or-create-Services mappt. Bewusst flexibel/optional –
+/// Teildaten sind erlaubt (Spec §4.1: „nicht raten“).
+/// </summary>
+public static class CrawlDaten
+{
+    /// <summary>Gemeinsame JSON-Optionen (DateOnly wird von System.Text.Json nativ unterstützt).</summary>
+    public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = false
+    };
+
+    public static string Serialisiere<T>(T daten) => JsonSerializer.Serialize(daten, Json);
+
+    public static T? Deserialisiere<T>(string json) =>
+        string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize<T>(json, Json);
+}
+
+/// <summary>Eine Programmzeile eines Konzert-Funds: Stück + optional Komponist:in + optional Band.</summary>
+public record ProgrammZeileDaten(
+    string StueckTitel,
+    string? KomponistName = null,
+    string? BandName = null,
+    int? Reihenfolge = null);
+
+/// <summary>
+/// Konzert-Fund (Typ <see cref="HarmoniQ.Web.Data.Models.CrawlFundTyp.Konzert"/>): mappt beim
+/// Übernehmen auf <c>KonzertErfassungService.Eingabe</c>. <see cref="Datum"/> ist beim Crawlen
+/// optional (kann unsicher sein); bei der Übernahme ist es Pflicht und ggf. im Review zu ergänzen.
+/// </summary>
+public record KonzertFundDaten(
+    DateOnly? Datum = null,
+    string? Name = null,
+    string? Ort = null,
+    string? Beschreibung = null,
+    IReadOnlyList<ProgrammZeileDaten>? Programm = null,
+    string? Notiz = null);
+
+/// <summary>
+/// Leitung-Fund (Typ <see cref="HarmoniQ.Web.Data.Models.CrawlFundTyp.Leitung"/>): mappt beim
+/// Übernehmen auf eine <c>BandMitgliedschaft</c> (Person als Dirigent:in). Fehlt <see cref="BandName"/>,
+/// wird auf die Ziel-Band der Quelle (<c>CrawlQuelle.BandId</c>) zurückgegriffen.
+/// </summary>
+public record LeitungFundDaten(
+    string PersonName,
+    string? BandName = null,
+    string Funktion = "Dirigent",
+    int? VonJahr = null,
+    int? BisJahr = null,
+    string? Notiz = null);
+
+/// <summary>
+/// Stück-Fund (Typ <see cref="CrawlFundTyp.Stueck"/>): ein einzelnes Stück aus einer Repertoire-/
+/// Werkliste (ohne Konzertbezug). Mappt beim Übernehmen auf <c>Stueck</c> (+ optional Komponist:in
+/// als <c>StueckBeitrag</c>). Die Quell-URL wird als <c>Stueck.OriginalUrl</c> mitgeführt.
+/// </summary>
+public record StueckFundDaten(
+    string Titel,
+    string? KomponistName = null,
+    int? Jahr = null,
+    Schwierigkeitsgrad? Schwierigkeit = null,
+    string? Besetzung = null,
+    string? Beschreibung = null,
+    string? Notiz = null);
+
+/// <summary>
+/// Komponist:in-Fund (Typ <see cref="CrawlFundTyp.Komponist"/>): eine Person zum Anlegen oder
+/// <b>Anreichern</b> (z. B. aus Wikipedia: Biografie, Bild, Geburtsjahr, Artikel-Link). Mappt beim
+/// Übernehmen auf <c>Person</c> (Rolle Komponist:in); bestehende, kuratierte Felder werden dabei
+/// <b>nicht</b> überschrieben – nur leere Felder gefüllt.
+/// </summary>
+public record KomponistFundDaten(
+    string Name,
+    string? Biografie = null,
+    string? BildUrl = null,
+    int? Geburtsjahr = null,
+    string? WikipediaUrl = null,
+    string? Notiz = null);

@@ -38,6 +38,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Freundschaft> Freundschaften => Set<Freundschaft>();
     public DbSet<Aktivitaet> Aktivitaeten => Set<Aktivitaet>();
 
+    // Crawler / Import-Roboter (Spezifikation-Crawler.md §5) – isoliert vom Kernmodell.
+    public DbSet<CrawlQuelle> CrawlQuellen => Set<CrawlQuelle>();
+    public DbSet<CrawlLauf> CrawlLaeufe => Set<CrawlLauf>();
+    public DbSet<CrawlFund> CrawlFunde => Set<CrawlFund>();
+    public DbSet<CrawlSeite> CrawlSeiten => Set<CrawlSeite>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -250,6 +256,40 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(a => a.NebenPersonId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(a => a.Zeitpunkt);
             e.HasIndex(a => a.AkteurPersonId);
+        });
+
+        // ─── Crawler / Import-Roboter ──────────────────────────────────────────
+
+        builder.Entity<CrawlQuelle>(e =>
+        {
+            // Optionale Ziel-Band; Band löschen lässt die Quelle bestehen (BandId → null).
+            e.HasOne(q => q.Band).WithMany()
+                .HasForeignKey(q => q.BandId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(q => q.Aktiv);
+        });
+
+        builder.Entity<CrawlLauf>(e =>
+        {
+            e.HasOne(l => l.Quelle).WithMany(q => q.Laeufe)
+                .HasForeignKey(l => l.QuelleId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(l => l.Status);
+            e.HasIndex(l => l.StartAm);
+        });
+
+        builder.Entity<CrawlFund>(e =>
+        {
+            e.HasOne(f => f.Lauf).WithMany(l => l.Funde)
+                .HasForeignKey(f => f.LaufId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(f => f.Status);
+            e.HasIndex(f => f.Typ);
+        });
+
+        builder.Entity<CrawlSeite>(e =>
+        {
+            e.HasOne(s => s.Quelle).WithMany()
+                .HasForeignKey(s => s.QuelleId).OnDelete(DeleteBehavior.Cascade);
+            // Dedup/Politeness: je Quelle jede URL nur einmal.
+            e.HasIndex(s => new { s.QuelleId, s.Url }).IsUnique();
         });
     }
 }

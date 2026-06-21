@@ -10,5 +10,6 @@ public enum LinkTyp
     YouTube = 4,
     EMail = 5,
     Mobile = 6,
+    Wikipedia = 7,
     Sonstige = 99
 }

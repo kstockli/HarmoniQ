@@ -216,7 +216,7 @@ PersonLink                          (Detail-Tabelle: beliebig viele Links je Per
 ├── Id (Guid)
 ├── PersonId (FK)
 ├── Url (string)                   ← bei EMail die Adresse, bei Mobile die Nummer
-└── Typ (enum: Webseite / Instagram / X / Facebook / YouTube / EMail / Mobile / Sonstige)
+└── Typ (enum: Webseite / Instagram / X / Facebook / YouTube / EMail / Mobile / Wikipedia / Sonstige)
 
 > **E-Mail-Sync (UMGESETZT):** Ist die Person mit einem Konto verknüpft (`BenutzerId` gesetzt),
 > wird der `EMail`-Link automatisch mit der Konto-E-Mail synchronisiert (`PersonLinkSync`):

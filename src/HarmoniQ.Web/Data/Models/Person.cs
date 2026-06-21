@@ -49,6 +49,7 @@ public class Person
     [NotMapped] public string? YouTube { get => LinkUrl(LinkTyp.YouTube); set => SetzeLink(LinkTyp.YouTube, value); }
     [NotMapped] public string? EMail { get => LinkUrl(LinkTyp.EMail); set => SetzeLink(LinkTyp.EMail, value); }
     [NotMapped] public string? Mobile { get => LinkUrl(LinkTyp.Mobile); set => SetzeLink(LinkTyp.Mobile, value); }
+    [NotMapped] public string? Wikipedia { get => LinkUrl(LinkTyp.Wikipedia); set => SetzeLink(LinkTyp.Wikipedia, value); }
 
     private string? LinkUrl(LinkTyp typ) => Links.FirstOrDefault(l => l.Typ == typ)?.Url;
 
