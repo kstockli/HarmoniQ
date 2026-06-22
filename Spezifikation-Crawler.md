@@ -6,6 +6,31 @@
 > bestehenden `/admin/import`-Assistenten nicht, sondern erweitert ihn (gleiches Ziel: saubere, dublettenfreie
 > Daten; gleiche Find-or-create-Bausteine).
 
+## 0. Umsetzungsstand & Entscheide (Stand 2026-06-22)
+
+**Umgesetzt (lauffähig, lokal getestet):**
+- Datenmodell `CrawlQuelle/CrawlLauf/CrawlFund/CrawlSeite` (+ Migrationen `CrawlerGrundgeruest`, `CrawlQuelleHinweis`).
+- Fetch-Stufe (`CrawlFetchService`): HTML **und** PDF (PdfPig), robots.txt, Rate-Limit pro Domain, Größenlimit.
+- Orchestrator: In-Memory-Queue + `IHostedService`, sequenziell, verwaiste Läufe → `Abgebrochen` beim Start;
+  `CrawlRunner` (BandDomain-BFS domain-begrenzt mit Tiefe/Seiten-Limit; Dokument/Event Einzelabruf), Seiten-Filter,
+  **Fund-Dedup innerhalb eines Laufs** (gleiche Identität → nur der vollständigste Datensatz).
+- **LLM-Extraktion live** (`IExtraktion` + `MistralExtraktion`, `mistral-large-latest`, JSON-Modus, tolerantes Parsen).
+- Admin-GUI `/admin/crawler` (Quellen als Karten mit editierbarem Zusatz-Hinweis, Lauf starten, Läufe-Log) und
+  `/admin/crawler/funde` (lesbare Aufbereitung je Fund-Typ, JSON einblendbar/editierbar, Übernehmen/Verwerfen,
+  Massen-Aktionen). Crawler-Link im Admin-Menü über dem Import-Assistenten.
+- Übernahme-Pfade (Find-or-create): Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft`;
+  Stück → `Stueck` + `StueckBeitrag`; Komponist:in → `Person`.
+
+**Entscheide:**
+- **LLM-Anbieter: Mistral „La Plateforme", Modell `mistral-large-latest`** (Interface bleibt anbieter-neutral).
+  Kosten bei der Last vernachlässigbar (~$0.01–0.02 pro PDF) → Qualität entscheidet.
+- **Heuristik wurde als *Fund-Produzent* verworfen** (zu fragil); sie dient nur noch als billiger **Seiten-Filter**
+  (Keyword-Triage vor dem LLM). Die LLM-Extraktion (ursprünglich C3) wurde **vorgezogen**.
+- **Arrangeur:in** wird getrennt von Komponist:in extrahiert (eigener `StueckBeitrag` mit `StueckRolle.Arrangeur`).
+- **Diagnose:** LLM-Calls/Antworten optional protokollierbar (`Crawler:Llm:LogCalls`).
+
+**Noch offen:** C2 (JS-Rendering/Event/Kaskade), C4 (Wikipedia-Anreicherung, Region-Filter, geplante Läufe).
+
 ## 1. Ziel & Abgrenzung
 
 **Ziel:** Den manuellen Erfassungsaufwand senken, indem öffentlich verfügbare Strukturdaten von
@@ -26,10 +51,11 @@ nichts wird automatisch publiziert.
 - **Strategie:** Pro Band domain-begrenzt. Admin gibt **Band + Start-URL** vor; der Crawler bleibt auf
   **dieser Domain** und folgt nur internen Links. Links auf andere Vereine werden **nur als Vorschlag**
   gemeldet (kein Auto-Expandieren).
-- **Extraktion:** **Hybrid** – erst günstige Heuristik (HtmlAgilityPack, Regex, bestehender `StueckParser`),
-  dann ein **LLM** nur für schwierige/unstrukturierte Seiten (Konzertprogramme im Fließtext, Tabellen).
-- **LLM-Anbieter:** **anbieter-neutral** über eine Abstraktion (`IExtraktionsLLM`). Konkreter Anbieter
-  (Mistral „La Plateforme" / Anthropic / OpenAI) wird später per Konfiguration gewählt. **Wichtig:** Es braucht
+- **Extraktion:** Die **LLM-Extraktion ist der Produzent** der Funde (Konzertprogramme, Leitung, …). Die
+  ursprünglich geplante Heuristik als Fund-Produzent war zu fragil und wurde verworfen; Heuristik dient nur
+  noch als **billiger Seiten-Filter** (Keyword-Triage), damit nur relevante Seiten ans (kostenpflichtige) LLM gehen.
+- **LLM-Anbieter:** **anbieter-neutral** über die Abstraktion `IExtraktion`. **Entschieden:** Mistral
+  „La Plateforme", Modell `mistral-large-latest` (per Konfiguration austauschbar). **Wichtig:** Es braucht
   eine **API** (kein Consumer-Chat wie `chat.mistral.ai`), also einen API-Key, pro-Token abgerechnet.
 - **Mensch im Loop:** Jeder Fund landet als **Kandidat** in einer Review-Queue; Übernahme erfolgt nur durch
   Admin-Klick und nutzt die bestehenden Find-or-create-Services (keine Dubletten).
@@ -56,11 +82,11 @@ Seed (CrawlQuelle: Band + Start-URL + Limits)
   → 1. Fetch        HttpClient, robots.txt, Rate-Limit, nur erlaubte Domain, Tiefen-/Seitenlimit
   → 2. Seiten-Filter relevante Seiten erkennen (URL/Text: „konzert*, programm, besetzung, vorstand,
                      leitung, dirigent, agenda, termine") – Irrelevantes (Footer/Nav) verwerfen
-  → 3. Extraktion    Heuristik zuerst; LLM (Structured Output → JSON) für schwierige Seiten
-  → 4. Normalisieren Datum/Titel/Namen säubern; Dedup-Abgleich gegen DB (Band/Stück/Person/Konzert)
+  → 3. Extraktion    LLM (Mistral, Structured Output → JSON); Seiten-Filter triagiert davor
+  → 4. Normalisieren Datum/Titel/Namen säubern; Dedup innerhalb des Laufs (vollständigster Datensatz gewinnt)
   → 5. CrawlFund     Kandidat mit Status „Offen", Quell-URL, strukturierten Daten, Dublett-Hinweis
-  → 6. Review        Admin prüft, korrigiert, übernimmt/verwirft
-  → 7. Import        Übernahme via KonzertErfassungService / MitwirkungService (Find-or-create)
+  → 6. Review        Admin prüft (lesbare Aufbereitung), korrigiert, übernimmt/verwirft
+  → 7. Import        Übernahme via KonzertErfassungService / BandMitgliedschaft / Stueck / Person (Find-or-create)
 ```
 
 **Wiederverwendung aus dem Hauptprojekt:** `HtmlAgilityPack`, `WebseitenScraper`, `StueckParser`,
@@ -126,7 +152,9 @@ CrawlQuelle                         (Seed: Band-Domain, Dokument/PDF oder Event)
 ├── BandId (FK → Band?)             ← Zielband (bei BandDomain; sonst optional)
 ├── StartUrl (string)               ← Domain-Start, PDF-/Dokument-Link oder Event-Seite
 ├── Domain (string?)                ← bei BandDomain; Crawler bleibt darauf
-├── BrauchtRendering (bool)         ← Event/SPA: per Headless-Browser rendern
+├── BrauchtRendering (bool)         ← Event/SPA: per Headless-Browser rendern (C2)
+├── ExtraktionsHinweis (string?)    ← Freitext-Zusatzanweisung ans LLM, vor jedem Lauf editierbar
+│                                     (z. B. „Nur Konzerte ab 2023 …"); wirkt auch als Filter
 ├── MaxTiefe (int, Default 2)       ← nur BandDomain
 ├── MaxSeiten (int, Default 100)    ← nur BandDomain
 ├── Aktiv (bool)
@@ -171,36 +199,51 @@ CrawlFund                           (Kandidat zur Übernahme)
 
 ## 7. Review & Übernahme
 
-- `/admin/crawler/funde`: Kandidaten je Lauf/Band, gefiltert nach Typ/Status. Pro Kandidat: Quell-Link,
-  extrahierte Felder **editierbar**, Dublett-Hinweis, **Übernehmen** / **Verwerfen**.
-- **Übernehmen** ruft die bestehenden Find-or-create-Services → keine Dubletten; alles bleibt nachvollziehbar
-  (Quell-URL wird z. B. als Konzert-/Personen-Notiz oder Provenienz mitgeführt).
+- `/admin/crawler/funde`: Kandidaten je Lauf/Band, gefiltert nach Typ/Status. Pro Kandidat eine
+  **benutzerfreundliche Zusammenfassung** je Typ (Dirigent:in mit Band/Zeitraum; Konzert mit Datum/Ort und
+  Programmzeilen „Stück — Komponist, arr. … · Band" in Reihenfolge; Stück; Komponist:in), Quell-Link,
+  Dublett-Hinweis, **Übernehmen** / **Verwerfen**. Das rohe **JSON** ist nur noch einblendbar und dort
+  editierbar (z. B. fehlendes Datum ergänzen) – diese Daten werden beim Übernehmen verwendet.
+- **Massen-Aktionen:** „Alle offenen verwerfen" und „Alle angezeigten löschen" (bezogen auf den aktuellen Filter).
+- **Übernehmen** ruft die Find-or-create-Services → keine Dubletten; Quell-URL bleibt als Provenienz erhalten.
+  Übernahme-Pfade: Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft` (Funktion „Dirigent",
+  optional Von/Bis-Jahr); Stück → `Stueck` (+ `StueckBeitrag` Komponist/Arrangeur); Komponist:in → `Person`.
+  Bei **BandDomain**-Funden wird das Konzert immer der Quell-Band zugeordnet.
 
-## 8. Extraktion im Detail (Hybrid)
+## 8. Extraktion im Detail
 
-1. **Heuristik (gratis):** HtmlAgilityPack extrahiert Hauptinhalt; Regex/`StueckParser` erkennen
-   Datum (19xx/20xx, dd.mm.yyyy), Schlüsselwörter („Leitung/Dirigent: …"), Listen.
-2. **LLM (nur wenn nötig):** Bereinigter Seitentext (ohne Nav/Footer) + **JSON-Schema** → strukturierter
-   Vorschlag. Anbieter-neutral über `IExtraktionsLLM.ExtrahiereAsync(text, schemaTyp)`; Implementierungen
-   pro Anbieter; Auswahl per Konfiguration (`Crawler:LLM:Provider`, `…:ApiKey`, `…:Model`).
-3. **Kostenkontrolle:** nur relevante Seiten ans Modell; kleines/günstiges Modell; Caching;
-   optional Tageslimit an LLM-Aufrufen.
+1. **Seiten-Filter (gratis):** `SeitenFilter` (Keyword-Triage in URL/Text) + `CrawlHtmlHelfer` (Hauptinhalt
+   bereinigen, interne Links ernten). Nur relevante Seiten gehen ans LLM (Kostenkontrolle).
+2. **LLM-Extraktion:** Bereinigter Seiten-/PDF-Text → `IExtraktion.ExtrahiereAsync(ExtraktionsAnfrage)`.
+   Implementierung `MistralExtraktion` (Chat-Completions, `response_format: json_object`). Auswahl per
+   Konfiguration: `Crawler:Llm:Provider` (= `mistral`), `…:ApiKey` (user-secrets/ENV, **nie** eingecheckt),
+   `…:Model`, `…:TagesLimit`, `…:LogCalls`. Liefert `ExtrahierterFund`-Liste (Typ + DatenJson + Konfidenz).
+   **Prompt-Regeln:** Fakten wörtlich, nicht raten; Komponist:in vs. **Arrangeur:in** trennen („arr. X");
+   Personennamen „Vorname Nachname"; `reihenfolge` = Startzeit als Zahl (14:40 → 1440), sonst fortlaufend;
+   Datum nicht mit Nullen auffüllen; enthält der **Admin-Hinweis** eine Einschränkung, wirkt er als **Filter**
+   (nur passende Funde). Bei BandDomain ist die Quell-Band Standard-Band, wenn keine genannt.
+3. **Robustheit:** Tolerantes Parsen der LLM-Antwort (z. B. Datum „1935-00-00" → 1935-01-01, Zahl als String) –
+   kein Crash bei unsauberen Werten.
+4. **Kostenkontrolle:** nur relevante Seiten ans Modell; Text-Obergrenze je Aufruf; optional Tageslimit.
 
 ## 9. Umsetzungs-Reihenfolge
 
-**Phase C1 – Grundgerüst (HTML + PDF, ohne LLM):** CrawlQuelle/-Lauf/-Fund-Modell + Migration; Fetch mit
-robots.txt/Rate-Limit/Domain-Grenze **und PDF-Text-Extraktion**; Seiten-Filter; **Heuristik-Extraktion für
-Konzerte & Leitung**; Quelltypen **BandDomain** + **Dokument/PDF** (z. B. Rangliste-PDF); Admin-Seiten
-(Seeds, Lauf, Funde-Review); Übernahme über bestehende Import-Services.
+> **Hinweis:** Die Reihenfolge wurde gegenüber dem ursprünglichen Plan angepasst — **GUI/Plumbing zuerst,
+> LLM früh vorgezogen** (C3 vor C2). C1 und C3 sind umgesetzt; C2 und C4 offen (siehe §0).
 
-**Phase C2 – JS-Rendering, Event-Quellen & kaskadierende Crawls:** Headless-Browser (Playwright) integrieren;
-Quelltyp **Event**; Programm-Extraktion mit Regel **„(Lokal, Datum) → ein Konzert"** (KonzertBand +
-KonzertStueck); **Join** Rangliste-PDF ↔ Spielplan über Vereinsnamen; **Vereins-Link-Ernte** (z. B.
-`emf26.ch/vereine`) → `Band.Webseite` + vorgeschlagene **BandDomain-Folgeaufträge** für den zweiten Durchgang.
-(Deckt EMF-Spielplan/-Vereine, WMC.)
+**Phase C1 – Grundgerüst (HTML + PDF) ✅ umgesetzt:** CrawlQuelle/-Lauf/-Fund-Modell + Migration; Fetch mit
+robots.txt/Rate-Limit/Domain-Grenze **und PDF-Text-Extraktion** (PdfPig); Seiten-Filter; Quelltypen
+**BandDomain** + **Dokument/PDF**; Orchestrator (Queue + IHostedService, BFS, Dedup); Admin-Seiten
+(Seeds, Lauf, Funde-Review); Übernahme über bestehende Find-or-create-Services.
 
-**Phase C3 – LLM-Extraktion (Hybrid):** `IExtraktionsLLM`-Abstraktion + ein konkreter Anbieter (Entscheid
-offen); LLM nur bei schwachen Heuristik-Treffern / unstrukturierten Seiten & PDFs; Structured Output + Konfidenz.
+**Phase C3 – LLM-Extraktion ✅ umgesetzt (vorgezogen):** `IExtraktion`-Abstraktion + `MistralExtraktion`
+(`mistral-large-latest`, JSON-Modus); ersetzt die Heuristik als Fund-Produzent. Konfidenz, tolerantes Parsen,
+Arrangeur-Trennung, Reihenfolge/Jahre, Admin-Hinweis-Filter, optionales Call-Logging.
+
+**Phase C2 – JS-Rendering, Event-Quellen & kaskadierende Crawls (offen):** Headless-Browser (Playwright);
+Quelltyp **Event**; Programm-Extraktion mit Regel **„(Lokal, Datum) → ein Konzert"**; **Join** Rangliste-PDF ↔
+Spielplan über Vereinsnamen; **Vereins-Link-Ernte** (z. B. `emf26.ch/vereine`) → `Band.Webseite` +
+vorgeschlagene **BandDomain-Folgeaufträge**. (Deckt EMF-Spielplan/-Vereine, WMC.)
 
 **Phase C4 – Ausbau (optional):** **Ort→Kanton-Anreicherung** für Regionfilter („Innerschweiz");
 Feldfilter-UI (Rang/Kategorie/Land); Discovery-Vorschläge anderer Bands; Verbands-/Verzeichnis-Quellen;
@@ -208,7 +251,8 @@ geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
 
 ## 10. Offene Punkte / Risiken
 
-- **LLM-Anbieter & Budget** (Token-Kosten, Tageslimit) – Entscheid offen.
+- **LLM-Anbieter & Budget** – **entschieden:** Mistral `mistral-large-latest`; Kosten gering
+  (~$0.01–0.02/PDF), Tageslimit konfigurierbar (`Crawler:Llm:TagesLimit`).
 - **Qualität/False Positives** der Extraktion – mitigiert durch Pflicht-Review.
 - **Rechtliches** – robots.txt, Quellen-Provenienz, kein Mitglieder-Scraping vorerst.
 - **Heterogene Seiten** – manche Vereine haben kein brauchbares HTML (PDF-Programme, Social-only) → out of scope.

@@ -17,6 +17,7 @@
     @AdminCard("Stücke", _stuecke, Icons.Material.Filled.MusicNote, "/admin/stuecke")
     @AdminCard("Bands", _bands, Icons.Material.Filled.Groups, "/admin/bands")
     @AdminCard("Videos", _videos, Icons.Material.Filled.VideoLibrary, "/admin/videos")
+    @AdminCard("Crawler (offene Funde)", _crawlerFundeOffen, Icons.Material.Filled.TravelExplore, "/admin/crawler")
 </MudGrid>
 
 <MudDivider Class="my-6" Style="border-color:#3a1060;" />
@@ -43,7 +44,7 @@
 </MudGrid>
 
 @code {
-    private int _personen, _stuecke, _bands, _videos, _konzerte, _benutzer;
+    private int _personen, _stuecke, _bands, _videos, _konzerte, _benutzer, _crawlerFundeOffen;
     private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen;
     private int _offenGesamt;
 
@@ -56,6 +57,7 @@
         _videos = await db.Videos.CountAsync();
         _konzerte = await db.Konzerte.CountAsync();
         _benutzer = await db.Users.CountAsync();
+        _crawlerFundeOffen = await db.CrawlFunde.CountAsync(f => f.Status == CrawlFundStatus.Offen);
 
         _videosOffen = await db.Videos.CountAsync(v => v.Status == VideoStatus.Ausstehend);
         _mitwirkungenOffen = await db.VideoMitwirkungen.CountAsync(m => m.Status == VideoStatus.Ausstehend);

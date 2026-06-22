@@ -7,6 +7,7 @@ using HarmoniQ.Web.Components;
 using HarmoniQ.Web.Components.Account;
 using HarmoniQ.Web.Data;
 using HarmoniQ.Web.Services;
+using HarmoniQ.Web.Services.Crawler;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,25 @@ builder.Services.AddHttpClient<WebseitenScraper>(c =>
     c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MusicRaterBot/1.0)");
     c.Timeout = TimeSpan.FromSeconds(20);
 });
+
+// Crawler / Import-Roboter (Spezifikation-Crawler.md). Optionen aus appsettings „Crawler“;
+// Fetch-Stufe (HTML + PDF, robots.txt, Rate-Limit) als typisierter HttpClient.
+builder.Services.Configure<CrawlerOptions>(builder.Configuration.GetSection(CrawlerOptions.Section));
+builder.Services.AddHttpClient<CrawlFetchService>();
+// Extraktor: Mistral „La Plateforme", wenn konfiguriert (Crawler:Llm:Provider=mistral + ApiKey);
+// sonst Stub (manuelle Erfassung im Review).
+var llmProvider = builder.Configuration["Crawler:Llm:Provider"];
+var llmKey = builder.Configuration["Crawler:Llm:ApiKey"];
+if (string.Equals(llmProvider, "mistral", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(llmKey))
+    builder.Services.AddHttpClient<IExtraktion, MistralExtraktion>(c =>
+        c.Timeout = TimeSpan.FromSeconds(240));
+else
+    builder.Services.AddScoped<IExtraktion, StubExtraktion>();
+
+// Orchestrator: In-Memory-Queue (Singleton) + Hintergrund-Dienst, der Läufe sequenziell abarbeitet.
+builder.Services.AddSingleton<CrawlLaufQueue>();
+builder.Services.AddScoped<CrawlRunner>();
+builder.Services.AddHostedService<CrawlHostedService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();

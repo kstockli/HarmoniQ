@@ -23,6 +23,10 @@ public class CrawlQuelle
     /// <summary>Event/SPA: Seite per Headless-Browser rendern (Phase C2).</summary>
     public bool BrauchtRendering { get; set; }
 
+    /// <summary>Optionaler Freitext-Hinweis, der der LLM-Extraktion zusätzlich mitgegeben wird
+    /// (z. B. „Nur die Wettspielvorträge in der Kirche, nicht in der Arche").</summary>
+    public string? ExtraktionsHinweis { get; set; }
+
     /// <summary>Maximale Linktiefe (nur BandDomain).</summary>
     public int MaxTiefe { get; set; } = 2;
 

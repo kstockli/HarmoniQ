@@ -23,12 +23,13 @@ public static class CrawlDaten
         string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize<T>(json, Json);
 }
 
-/// <summary>Eine Programmzeile eines Konzert-Funds: Stück + optional Komponist:in + optional Band.</summary>
+/// <summary>Eine Programmzeile eines Konzert-Funds: Stück + optional Komponist:in / Arrangeur:in / Band.</summary>
 public record ProgrammZeileDaten(
     string StueckTitel,
     string? KomponistName = null,
     string? BandName = null,
-    int? Reihenfolge = null);
+    int? Reihenfolge = null,
+    string? ArrangeurName = null);
 
 /// <summary>
 /// Konzert-Fund (Typ <see cref="HarmoniQ.Web.Data.Models.CrawlFundTyp.Konzert"/>): mappt beim

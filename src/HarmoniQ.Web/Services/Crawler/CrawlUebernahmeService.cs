@@ -26,7 +26,7 @@ public static class CrawlUebernahmeService
         switch (fund.Typ)
         {
             case CrawlFundTyp.Konzert:
-                await KonzertUebernehmenAsync(db, datenJson);
+                await KonzertUebernehmenAsync(db, fund, datenJson);
                 break;
             case CrawlFundTyp.Leitung:
                 await LeitungUebernehmenAsync(db, fund, datenJson);
@@ -57,7 +57,7 @@ public static class CrawlUebernahmeService
         await db.SaveChangesAsync();
     }
 
-    private static async Task KonzertUebernehmenAsync(ApplicationDbContext db, string datenJson)
+    private static async Task KonzertUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)
     {
         var d = CrawlDaten.Deserialisiere<KonzertFundDaten>(datenJson)
             ?? throw new InvalidOperationException("Konzert-Daten konnten nicht gelesen werden.");
@@ -67,7 +67,7 @@ public static class CrawlUebernahmeService
         var programm = (d.Programm ?? [])
             .Where(z => !string.IsNullOrWhiteSpace(z.StueckTitel))
             .Select(z => new KonzertErfassungService.ProgrammEingabe(
-                z.StueckTitel, z.KomponistName, z.BandName, z.Reihenfolge))
+                z.StueckTitel, z.KomponistName, z.BandName, z.Reihenfolge, z.ArrangeurName))
             .ToList();
 
         var eingabe = new KonzertErfassungService.Eingabe(
@@ -79,7 +79,15 @@ public static class CrawlUebernahmeService
             Programm: programm,
             Mitwirkende: []);
 
-        await KonzertErfassungService.ErfasseAsync(db, eingabe);
+        var konzertId = await KonzertErfassungService.ErfasseAsync(db, eingabe);
+
+        // BandDomain-Funde: Konzert immer der Quell-Band zuordnen (auch ohne Programm-Band).
+        var bandId = await db.CrawlLaeufe
+            .Where(l => l.Id == fund.LaufId)
+            .Select(l => l.Quelle.BandId)
+            .FirstOrDefaultAsync();
+        if (bandId is { } bid && !await db.KonzertBands.AnyAsync(kb => kb.KonzertId == konzertId && kb.BandId == bid))
+            db.KonzertBands.Add(new KonzertBand { KonzertId = konzertId, BandId = bid });
     }
 
     private static async Task LeitungUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)

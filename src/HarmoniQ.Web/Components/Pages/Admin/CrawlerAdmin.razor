@@ -1,0 +1,253 @@
+@page "/admin/crawler"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services.Crawler
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject CrawlLaufQueue Queue
+@inject ISnackbar Snackbar
+
+<PageTitle>Crawler – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Crawler / Import-Roboter</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/crawler/funde"
+               StartIcon="@Icons.Material.Filled.Inventory2">Funde-Review</MudButton>
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Style="color:#D4AF37;" OnClick="Laden" title="Aktualisieren" />
+</MudStack>
+
+<!-- Neue Quelle -->
+<MudPaper Class="pa-4 mb-6" Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Neue Quelle</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect T="CrawlQuelleTyp" @bind-Value="_neu.Typ" Label="Typ" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem Value="CrawlQuelleTyp.BandDomain">BandDomain (Vereinsseite)</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.Dokument">Dokument / PDF</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.Event">Event (JS – C2)</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudTextField @bind-Value="_neu.StartUrl" Label="Start-URL / Dokument-Link" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudAutocomplete T="Band" Value="_neuBand" ValueChanged="b => _neuBand = b"
+                             SearchFunc="BandSuche" ToStringFunc="@(b => b?.Name ?? "")"
+                             Label="Ziel-Band (optional)" Variant="Variant.Outlined" Dense="true" Clearable="true" />
+        </MudItem>
+        @if (_neu.Typ == CrawlQuelleTyp.BandDomain)
+        {
+            <MudItem xs="6" md="3">
+                <MudNumericField @bind-Value="_neu.MaxTiefe" Label="Max. Tiefe" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="5" />
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudNumericField @bind-Value="_neu.MaxSeiten" Label="Max. Seiten" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="1000" />
+            </MudItem>
+        }
+        @if (_neu.Typ == CrawlQuelleTyp.Event)
+        {
+            <MudItem xs="12" md="6">
+                <MudSwitch T="bool" @bind-Value="_neu.BrauchtRendering" Color="Color.Secondary"
+                           Label="JS-Rendering nötig (C2 – noch nicht aktiv)" />
+            </MudItem>
+        }
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_neu.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2"
+                          Label="Zusatz-Hinweis an die Extraktion (optional)"
+                          Placeholder="z. B. Nur die Wettspielvorträge in der Kirche, nicht in der Arche" />
+        </MudItem>
+    </MudGrid>
+    <MudButton Class="mt-2" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="QuelleAnlegen">Quelle anlegen</MudButton>
+</MudPaper>
+
+<!-- Quellen -->
+<MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Quellen</MudText>
+@if (_quellen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-6">Noch keine Quellen erfasst.</MudAlert>
+}
+else
+{
+    <MudStack Spacing="3" Class="mb-6">
+        @foreach (var q in _quellen)
+        {
+            <MudPaper Class="pa-3" Elevation="3" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@q.Typ</MudChip>
+                    <a href="@q.StartUrl" target="_blank"
+                       style="color:#9B59B6;max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@q.StartUrl</a>
+                    @if (q.Band != null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@q.Band.Name</MudChip>
+                    }
+                    @if (q.Typ == CrawlQuelleTyp.BandDomain)
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">Tiefe @q.MaxTiefe / @q.MaxSeiten Seiten</MudText>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">
+                        letzter Lauf: @(q.LetzterLaufAm?.ToLocalTime().ToString("dd.MM.yy HH:mm") ?? "nie")
+                    </MudText>
+                </MudStack>
+                <MudTextField @bind-Value="q.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2" Margin="Margin.Dense"
+                              Label="Zusatz-Hinweis an die Extraktion (vor dem Lauf editierbar)"
+                              Placeholder="z. B. Nur Konzerte ab 2023 mit Stück-Angaben; ältere ignorieren." />
+                <MudStack Row="true" Class="mt-2" Spacing="2">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="@(() => LaufStarten(q))">Lauf starten</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="@(() => HinweisSpeichern(q))">Hinweis speichern</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+<!-- Läufe -->
+<MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Letzte Läufe</MudText>
+@if (_laeufe.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Noch keine Läufe.</MudAlert>
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true" Style="background:#1a0030;">
+        <thead>
+            <tr><th>Start</th><th>Quelle</th><th>Status</th><th>Seiten</th><th>Funde</th><th>Meldung</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var l in _laeufe)
+            {
+                <tr>
+                    <td>@l.StartAm.ToLocalTime().ToString("dd.MM HH:mm")</td>
+                    <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">@l.QuelleUrl</td>
+                    <td><MudChip T="string" Size="Size.Small" Color="@StatusFarbe(l.Status)">@l.Status</MudChip></td>
+                    <td>@l.SeitenBesucht</td>
+                    <td>@l.FundeAnzahl</td>
+                    <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;color:#A78FC0;">@l.Meldung</td>
+                    <td>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#3a1060;"
+                                   Href="@($"/admin/crawler/funde?lauf={l.Id}")">Funde</MudButton>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    private List<CrawlQuelle> _quellen = [];
+    private List<LaufZeile> _laeufe = [];
+    private NeueQuelle _neu = new();
+    private Band? _neuBand;
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _quellen = await db.CrawlQuellen.Include(q => q.Band)
+            .OrderByDescending(q => q.ErstelltAm).ToListAsync();
+        _laeufe = await db.CrawlLaeufe
+            .OrderByDescending(l => l.StartAm).Take(20)
+            .Select(l => new LaufZeile(l.Id, l.Quelle.StartUrl, l.Status, l.SeitenBesucht, l.FundeAnzahl, l.StartAm, l.Meldung))
+            .ToListAsync();
+    }
+
+    private async Task<IEnumerable<Band>> BandSuche(string? wert, CancellationToken ct)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var q = db.Bands.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(wert))
+            q = q.Where(b => b.Name.Contains(wert));
+        return await q.OrderBy(b => b.Name).Take(20).ToListAsync(ct);
+    }
+
+    private async Task QuelleAnlegen()
+    {
+        if (string.IsNullOrWhiteSpace(_neu.StartUrl) || !Uri.TryCreate(_neu.StartUrl.Trim(), UriKind.Absolute, out var uri))
+        {
+            Snackbar.Add("Bitte eine gültige Start-URL (http/https) angeben.", Severity.Warning);
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.CrawlQuellen.Add(new CrawlQuelle
+        {
+            Typ = _neu.Typ,
+            StartUrl = _neu.StartUrl.Trim(),
+            Domain = _neu.Typ == CrawlQuelleTyp.BandDomain ? uri.Host : null,
+            BandId = _neuBand?.Id,
+            BrauchtRendering = _neu.BrauchtRendering,
+            MaxTiefe = _neu.MaxTiefe,
+            MaxSeiten = _neu.MaxSeiten,
+            ExtraktionsHinweis = string.IsNullOrWhiteSpace(_neu.ExtraktionsHinweis) ? null : _neu.ExtraktionsHinweis.Trim()
+        });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Quelle angelegt.", Severity.Success);
+        _neu = new();
+        _neuBand = null;
+        await Laden();
+    }
+
+    private async Task SpeichereHinweis(Guid id, string? hinweis)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var e = await db.CrawlQuellen.FindAsync(id);
+        if (e != null)
+        {
+            e.ExtraktionsHinweis = string.IsNullOrWhiteSpace(hinweis) ? null : hinweis.Trim();
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private async Task HinweisSpeichern(CrawlQuelle q)
+    {
+        await SpeichereHinweis(q.Id, q.ExtraktionsHinweis);
+        Snackbar.Add("Hinweis gespeichert.", Severity.Success);
+    }
+
+    private async Task LaufStarten(CrawlQuelle q)
+    {
+        await SpeichereHinweis(q.Id, q.ExtraktionsHinweis); // aktuell editierten Hinweis übernehmen
+        Guid laufId;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            var lauf = new CrawlLauf { QuelleId = q.Id, Status = CrawlLaufStatus.Laufend };
+            db.CrawlLaeufe.Add(lauf);
+            await db.SaveChangesAsync();
+            laufId = lauf.Id;
+        }
+        Queue.Einreihen(laufId);
+        Snackbar.Add("Lauf gestartet (läuft im Hintergrund – mit „Aktualisieren\" beobachten).", Severity.Success);
+        await Laden();
+    }
+
+    private static Color StatusFarbe(CrawlLaufStatus s) => s switch
+    {
+        CrawlLaufStatus.Laufend => Color.Info,
+        CrawlLaufStatus.Fertig => Color.Success,
+        CrawlLaufStatus.Fehler => Color.Error,
+        _ => Color.Default
+    };
+
+    private class NeueQuelle
+    {
+        public CrawlQuelleTyp Typ { get; set; } = CrawlQuelleTyp.BandDomain;
+        public string StartUrl { get; set; } = "";
+        public bool BrauchtRendering { get; set; }
+        public int MaxTiefe { get; set; } = 2;
+        public int MaxSeiten { get; set; } = 100;
+        public string? ExtraktionsHinweis { get; set; }
+    }
+
+    private record LaufZeile(Guid Id, string QuelleUrl, CrawlLaufStatus Status, int SeitenBesucht,
+        int FundeAnzahl, DateTime StartAm, string? Meldung);
+}

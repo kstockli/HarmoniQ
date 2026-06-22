@@ -13,7 +13,8 @@ namespace HarmoniQ.Web.Services;
 /// </summary>
 public static class KonzertErfassungService
 {
-    public record ProgrammEingabe(string StueckTitel, string? KomponistName, string? BandName, int? Reihenfolge);
+    public record ProgrammEingabe(string StueckTitel, string? KomponistName, string? BandName, int? Reihenfolge,
+        string? ArrangeurName = null);
     public record MitwirkendeEingabe(string PersonName, PersonRolleTyp Rolle, string? BandName);
 
     public record Eingabe(
@@ -148,6 +149,14 @@ public static class KonzertErfassungService
                         db.StueckBeitraege.Add(new StueckBeitrag
                         {
                             Stueck = stueck, Person = komponist, Rolle = StueckRolle.Komponist
+                        });
+                    }
+                    if (!string.IsNullOrWhiteSpace(row.ArrangeurName))
+                    {
+                        var arrangeur = await PersonHolen(row.ArrangeurName!, PersonRolleTyp.Komponist);
+                        db.StueckBeitraege.Add(new StueckBeitrag
+                        {
+                            Stueck = stueck, Person = arrangeur, Rolle = StueckRolle.Arrangeur
                         });
                     }
                 }
