@@ -7,6 +7,9 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IDialogService DialogService
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 
 <PageTitle>@(_band?.Name ?? "Band") – HarmoniQ Admin</PageTitle>
 
@@ -17,6 +20,8 @@
     <MudSpacer />
     @if (_band != null)
     {
+        <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#9B59B6;"
+                   StartIcon="@Icons.Material.Filled.Merge" OnClick="Zusammenfuehren">Zusammenführen</MudButton>
         <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"/bands/{BandId}")"
                    StartIcon="@Icons.Material.Filled.OpenInNew" Target="_blank">Öffentliche Ansicht</MudButton>
     }
@@ -38,16 +43,70 @@ else
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_land" Label="Land" Variant="Variant.Outlined" />
             </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="BandKategorie?" @bind-Value="_kategorie" Label="Kategorie" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var k in Enum.GetValues<BandKategorie>())
+                    {
+                        <MudSelectItem T="BandKategorie?" Value="@k">@KategorieLabel(k)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="Staerkeklasse?" @bind-Value="_klasse" Label="Stärkeklasse" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var k in Enum.GetValues<Staerkeklasse>())
+                    {
+                        <MudSelectItem T="Staerkeklasse?" Value="@k">@KlasseLabel(k)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int?" @bind-Value="_gruendung" Label="Gründungsjahr" Variant="Variant.Outlined" Min="1500" Max="2100" />
+            </MudItem>
             <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_webseite" Label="Webseite / Kanal-URL" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_webseite" Label="Webseite (Homepage)" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_bildUrl" Label="Bild-URL (Logo/Foto)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_youtube" Label="YouTube-Kanal" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_facebook" Label="Facebook" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_x" Label="X" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_wikipedia" Label="Wikipedia" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_email" Label="E-Mail" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_mobile" Label="Mobile / Telefon" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_geschichte" Label="Geschichte / Beschreibung" Variant="Variant.Outlined" Lines="4" />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-3"
                    StartIcon="@Icons.Material.Filled.Save" OnClick="StammdatenSpeichern"
                    Disabled="@string.IsNullOrWhiteSpace(_name)">Stammdaten speichern</MudButton>
+    </MudPaper>
+
+    @* ── Alternative Namen (Aliase) ───────────────────────────────── *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#F0E6FF;">Alternative Namen</MudText>
+        <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
+            Weitere Schreibweisen/Namen dieser Band (z. B. „Blasorchester Neuenkirch"). Werden beim Import
+            und Zusammenführen zur Erkennung genutzt.
+        </MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-2">
+            @foreach (var a in _aliase)
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="@(() => AliasEntfernen(a.Id))"
+                         Style="background:#2d1657; color:#F0E6FF;">@a.Name</MudChip>
+            }
+            @if (_aliase.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Style="color:#6f5a86;">Keine.</MudText>
+            }
+        </MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudTextField @bind-Value="_neuerAlias" Label="Name hinzufügen" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudButton Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                       OnClick="AliasHinzufuegen" Disabled="@string.IsNullOrWhiteSpace(_neuerAlias)">Hinzufügen</MudButton>
+        </MudStack>
     </MudPaper>
 
     @* ── Mitglieder (inline editierbar) ───────────────────────────── *@
@@ -147,6 +206,69 @@ else
                    StartIcon="@Icons.Material.Filled.Add" OnClick="Hinzufuegen"
                    Disabled="@string.IsNullOrWhiteSpace(_personName)">Hinzufügen</MudButton>
     </MudPaper>
+
+    @* ── Konzerte dieser Band ─────────────────────────────────────── *@
+    <MudPaper Class="pa-4 mt-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Konzerte (@_konzerte.Count)</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                       StartIcon="@Icons.Material.Filled.Add" Href="/admin/konzerte/erfassen">Konzert erfassen</MudButton>
+        </MudStack>
+        @if (_konzerte.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Konzerte.</MudText>
+        }
+        else
+        {
+            <MudList T="string" Dense="true">
+                @foreach (var k in _konzerte)
+                {
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Event" Style="color:#F0E6FF;">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <div style="flex:1;">
+                                @k.Titel
+                                <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
+                                    @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                                </MudText>
+                            </div>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
+                                           title="Bearbeiten (Wizard)" Href="@($"/admin/konzerte/{k.Id}/bearbeiten")" />
+                            <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Error"
+                                           title="Band aus Konzert entfernen" OnClick="@(() => KonzertEntfernen(k.Id))" />
+                        </MudStack>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </MudPaper>
+
+    @* ── Videos dieser Band ───────────────────────────────────────── *@
+    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Videos (@_videos.Count)</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                       StartIcon="@Icons.Material.Filled.VideoLibrary" Href="/admin/videos">Videos verwalten</MudButton>
+        </MudStack>
+        @if (_videos.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Videos.</MudText>
+        }
+        else
+        {
+            <MudList T="string" Dense="true">
+                @foreach (var v in _videos)
+                {
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.PlayCircle" Style="color:#F0E6FF;"
+                                 Href="@($"/videos/{v.Id}")">
+                        @v.StueckTitel
+                        <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.Titel</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </MudPaper>
 }
 
 @code {
@@ -154,7 +276,16 @@ else
 
     private Band? _band;
     private string _name = "", _land = "", _webseite = "", _bildUrl = "";
+    private string _geschichte = "", _youtube = "", _instagram = "", _x = "", _email = "";
+    private string _facebook = "", _wikipedia = "", _mobile = "";
+    private BandKategorie? _kategorie;
+    private Staerkeklasse? _klasse;
+    private int? _gruendung;
     private List<Zeile> _mitglieder = [];
+    private List<AliasZeile> _aliase = [];
+    private List<KonzertZeile> _konzerte = [];
+    private List<VideoZeile> _videos = [];
+    private string? _neuerAlias;
     private List<string> _personNamen = [];
     private List<string> _instrumentNamen = [];
 
@@ -174,10 +305,27 @@ else
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _band = await db.Bands.FirstOrDefaultAsync(b => b.Id == BandId);
+        _band = await db.Bands.Include(b => b.Links).FirstOrDefaultAsync(b => b.Id == BandId);
         if (_band == null) { Nav.NavigateTo("/admin/bands"); return; }
 
         _name = _band.Name; _land = _band.Land ?? ""; _webseite = _band.Webseite ?? ""; _bildUrl = _band.BildUrl ?? "";
+        _geschichte = _band.Geschichte ?? "";
+        _kategorie = _band.Kategorie; _klasse = _band.Staerkeklasse; _gruendung = _band.Gruendungsjahr;
+        _youtube = _band.YouTube ?? ""; _instagram = _band.Instagram ?? ""; _x = _band.X ?? ""; _email = _band.EMail ?? "";
+        _facebook = _band.Facebook ?? ""; _wikipedia = _band.Wikipedia ?? ""; _mobile = _band.Mobile ?? "";
+
+        _aliase = await db.BandAliase.Where(a => a.BandId == BandId).OrderBy(a => a.Name)
+            .Select(a => new AliasZeile(a.Id, a.Name)).ToListAsync();
+
+        _konzerte = await db.KonzertBands.Where(kb => kb.BandId == BandId)
+            .OrderByDescending(kb => kb.Konzert.Datum)
+            .Select(kb => new KonzertZeile(kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Name, kb.Konzert.Ort))
+            .ToListAsync();
+
+        _videos = await db.Videos.Where(v => v.BandId == BandId)
+            .OrderBy(v => v.Stueck.Titel)
+            .Select(v => new VideoZeile(v.Id, v.Titel, v.Stueck.Titel))
+            .ToListAsync();
 
         _mitglieder = await db.BandMitgliedschaften
             .Where(m => m.BandId == BandId)
@@ -201,16 +349,105 @@ else
     {
         if (string.IsNullOrWhiteSpace(_name)) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var band = await db.Bands.FindAsync(BandId);
+        var band = await db.Bands.Include(b => b.Links).FirstOrDefaultAsync(b => b.Id == BandId);
         if (band == null) return;
         band.Name = _name.Trim();
         band.Land = Leer(_land);
         band.Webseite = Leer(_webseite);
         band.BildUrl = Leer(_bildUrl);
+        band.Geschichte = Leer(_geschichte);
+        band.Kategorie = _kategorie;
+        band.Staerkeklasse = _klasse;
+        band.Gruendungsjahr = _gruendung;
+        band.YouTube = _youtube;       // Komfort-Setter pflegen die BandLink-Tabelle
+        band.Instagram = _instagram;
+        band.X = _x;
+        band.EMail = _email;
+        band.Facebook = _facebook;
+        band.Wikipedia = _wikipedia;
+        band.Mobile = _mobile;
         await db.SaveChangesAsync();
         Snackbar.Add("Stammdaten gespeichert.", Severity.Success);
         await Laden();
     }
+
+    private async Task AliasHinzufuegen()
+    {
+        var name = _neuerAlias?.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await db.BandAliase.AnyAsync(a => a.BandId == BandId && a.Name == name))
+        {
+            db.BandAliase.Add(new BandAlias { BandId = BandId, Name = name });
+            await db.SaveChangesAsync();
+        }
+        _neuerAlias = null;
+        await Laden();
+    }
+
+    private async Task AliasEntfernen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var a = await db.BandAliase.FindAsync(id);
+        if (a != null) { db.BandAliase.Remove(a); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private async Task KonzertEntfernen(Guid konzertId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var kb = await db.KonzertBands.FirstOrDefaultAsync(x => x.KonzertId == konzertId && x.BandId == BandId);
+        if (kb != null) { db.KonzertBands.Remove(kb); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private async Task Zusammenfuehren()
+    {
+        var parameters = new DialogParameters<BandMergeDialog> { { x => x.QuelleId, BandId }, { x => x.QuelleName, _band?.Name ?? "" } };
+        var dialog = await DialogService.ShowAsync<BandMergeDialog>("Band zusammenführen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var zielId = (Guid)result.Data!;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var (ok, meldung) = await BandMergeService.MergeAsync(db, BandId, zielId);
+        Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+        if (ok) Nav.NavigateTo($"/admin/bands/{zielId}");
+    }
+
+    private static string KategorieLabel(BandKategorie k) => k switch
+    {
+        BandKategorie.Harmonie => "Harmonie",
+        BandKategorie.Brassband => "Brassband",
+        BandKategorie.Fanfare => "Fanfare",
+        BandKategorie.Unterhaltung => "Unterhaltung",
+        BandKategorie.JugendmusikHarmonie => "Jugendmusik Harmonie",
+        BandKategorie.JugendmusikBrassband => "Jugendmusik Brassband",
+        BandKategorie.Blaeserensemble => "Bläserensemble",
+        _ => "Sonstige"
+    };
+
+    private static string KlasseLabel(Staerkeklasse k) => k switch
+    {
+        Staerkeklasse.Hoechstklasse => "Höchstklasse",
+        Staerkeklasse.Elite => "Elite",
+        Staerkeklasse.Klasse1 => "1. Klasse",
+        Staerkeklasse.Klasse2 => "2. Klasse",
+        Staerkeklasse.Klasse3 => "3. Klasse",
+        Staerkeklasse.Klasse4 => "4. Klasse",
+        Staerkeklasse.Oberstufe => "Oberstufe",
+        Staerkeklasse.Mittelstufe => "Mittelstufe",
+        Staerkeklasse.Unterstufe => "Unterstufe",
+        _ => k.ToString()
+    };
+
+    private record AliasZeile(Guid Id, string Name);
+    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
+    private record VideoZeile(Guid Id, string Titel, string StueckTitel);
 
     private void Bearbeiten(Zeile m)
     {

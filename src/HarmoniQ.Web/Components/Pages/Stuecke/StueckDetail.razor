@@ -189,6 +189,29 @@ else
             }
         </MudGrid>
     }
+
+    @if (_auffuehrungen.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Class="mt-6" Style="color:#D4AF37;">
+            An Konzerten gespielt (@_auffuehrungen.Count)
+        </MudText>
+        <MudList T="string" Dense="true">
+            @foreach (var a in _auffuehrungen)
+            {
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Event" Style="color:#F0E6FF;">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudLink Href="@($"/konzerte/{a.KonzertId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@a.KonzertTitel</MudLink>
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">@a.Datum.ToString("dd.MM.yyyy")</MudText>
+                        @if (a.BandId is Guid bid)
+                        {
+                            <MudText Typo="Typo.caption" Style="color:#A78FC0;">·</MudText>
+                            <MudLink Href="@($"/bands/{bid}")" Style="color:#9B59B6;" Underline="Underline.Hover">@a.BandName</MudLink>
+                        }
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    }
 }
 
 @code {
@@ -203,6 +226,7 @@ else
     private string? _voterId;
     private bool _bereit;  // true, sobald Identität geklärt ist (nach erstem Render)
     private List<Band> _bands = [];
+    private List<AuffuehrungZeile> _auffuehrungen = [];
 
     private IJSObjectReference? _voterModule;
 
@@ -230,8 +254,25 @@ else
 
         _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
 
+        // An welchen Konzerten (Tag) durch welche Band wurde das Stück gespielt?
+        _auffuehrungen = await db.KonzertStuecke
+            .Where(ks => ks.StueckId == Id)
+            .OrderByDescending(ks => ks.Konzert.Datum)
+            .Select(ks => new AuffuehrungZeile(
+                ks.KonzertId,
+                ks.Konzert.Name,
+                ks.Konzert.Datum,
+                ks.BandId,
+                ks.Band != null ? ks.Band.Name : null))
+            .ToListAsync();
+
         await LadeStatsAsync(db);
         SortiereVideos();
+    }
+
+    private record AuffuehrungZeile(Guid KonzertId, string? KonzertName, DateOnly Datum, Guid? BandId, string? BandName)
+    {
+        public string KonzertTitel => KonzertName ?? Datum.ToString("dd.MM.yyyy");
     }
 
     // Bestbewertete Aufnahme (höchster Gesamteindruck) zuerst; unbewertete ans Ende.

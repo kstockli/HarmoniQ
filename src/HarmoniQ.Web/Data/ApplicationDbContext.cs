@@ -18,6 +18,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     // Phase 6 – Personen-/Rollen-Modell
     public DbSet<Person> Personen => Set<Person>();
+    public DbSet<BandAlias> BandAliase => Set<BandAlias>();
+    public DbSet<BandLink> BandLinks => Set<BandLink>();
     public DbSet<PersonRolle> PersonRollen => Set<PersonRolle>();
     public DbSet<PersonLink> PersonLinks => Set<PersonLink>();
     public DbSet<StueckBeitrag> StueckBeitraege => Set<StueckBeitrag>();
@@ -95,6 +97,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<PersonRolle>()
             .HasOne(r => r.Person).WithMany(p => p.Rollen)
             .HasForeignKey(r => r.PersonId).OnDelete(DeleteBehavior.Cascade);
+
+        // Band-Aliase (alternative Namen) + Band-Links (analog PersonLink).
+        builder.Entity<BandAlias>(e =>
+        {
+            e.HasOne(a => a.Band).WithMany(b => b.Aliase)
+                .HasForeignKey(a => a.BandId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(a => new { a.BandId, a.Name }).IsUnique();
+        });
+        builder.Entity<BandLink>(e =>
+        {
+            e.HasOne(l => l.Band).WithMany(b => b.Links)
+                .HasForeignKey(l => l.BandId).OnDelete(DeleteBehavior.Cascade);
+            // Wie PersonLink: clientseitiger Guid-Key → ValueGeneratedNever, sonst UPDATE statt INSERT.
+            e.Property(l => l.Id).ValueGeneratedNever();
+        });
 
         builder.Entity<PersonLink>(e =>
         {

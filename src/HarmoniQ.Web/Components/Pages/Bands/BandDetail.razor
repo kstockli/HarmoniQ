@@ -19,21 +19,86 @@ else
     <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4 pa-0" />
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-2" Wrap="Wrap.Wrap">
-        <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;font-size:3rem;" />
+        @if (!string.IsNullOrWhiteSpace(_band.BildUrl))
+        {
+            <img src="@_band.BildUrl" style="width:64px;height:64px;object-fit:cover;border-radius:8px;" alt="@_band.Name" />
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;font-size:3rem;" />
+        }
         <div>
             <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_band.Name</MudText>
-            @if (_band.Land != null)
+            <MudStack Row="true" Spacing="1" Class="mt-1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                @if (_band.Kategorie.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#D4AF37;">@KategorieLabel(_band.Kategorie.Value)</MudChip>
+                }
+                @if (_band.Staerkeklasse.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@KlasseLabel(_band.Staerkeklasse.Value)</MudChip>
+                }
+                @if (_band.Land != null)
+                {
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">@_band.Land</MudText>
+                }
+                @if (_band.Gruendungsjahr.HasValue)
+                {
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">· gegr. @_band.Gruendungsjahr</MudText>
+                }
+            </MudStack>
+            @if (_aliase.Count > 0)
             {
-                <MudText Typo="Typo.body2" Style="color:#A78FC0;">@_band.Land</MudText>
+                <MudText Typo="Typo.caption" Style="color:#6f5a86;">auch: @string.Join(", ", _aliase)</MudText>
             }
         </div>
     </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(_band.Geschichte))
+    {
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color:#C4B0D8;">@_band.Geschichte</MudText>
+    }
 
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap">
         @if (_band.Webseite != null)
         {
             <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.Webseite" Target="_blank"
                        StartIcon="@Icons.Material.Filled.OpenInNew">Webseite</MudButton>
+        }
+        @if (_band.YouTube != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.YouTube" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.SmartDisplay">YouTube</MudButton>
+        }
+        @if (_band.Instagram != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.Instagram" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.CameraAlt">Instagram</MudButton>
+        }
+        @if (_band.X != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.X" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.AlternateEmail">X</MudButton>
+        }
+        @if (_band.Facebook != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.Facebook" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.Public">Facebook</MudButton>
+        }
+        @if (_band.Wikipedia != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.Wikipedia" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.MenuBook">Wikipedia</MudButton>
+        }
+        @if (_band.EMail != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"mailto:{_band.EMail}")"
+                       StartIcon="@Icons.Material.Filled.Email">E-Mail</MudButton>
+        }
+        @if (_band.Mobile != null)
+        {
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"tel:{_band.Mobile}")"
+                       StartIcon="@Icons.Material.Filled.Phone">Telefon</MudButton>
         }
         <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"/stuecke?band={_band.Id}")"
                    StartIcon="@Icons.Material.Filled.MusicNote">Alle Stücke dieser Band</MudButton>
@@ -140,16 +205,64 @@ else
             }
         </MudPaper>
     }
+
+    @* 5. Ehemalige Besetzung *@
+    @if (_ehemalige.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#9B59B6;">
+            Ehemalige Besetzung (@_ehemalige.Count)
+        </MudText>
+        <MudPaper Class="pa-4 mb-6" Style="background:#1a0030; border:1px solid #3a1060;">
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3">
+                @foreach (var m in _ehemalige)
+                {
+                    <MudLink Href="@($"/personen/{m.PersonId}")" Style="color:#C4B0D8;" Underline="Underline.Hover">
+                        @m.AnzeigeName
+                        <MudText Typo="Typo.caption" Style="color:#6f5a86;">
+                            @(m.Funktion ?? m.Instrument)@(string.IsNullOrEmpty(m.Zeitraum) ? "" : $" · {m.Zeitraum}")
+                        </MudText>
+                    </MudLink>
+                }
+            </MudStack>
+        </MudPaper>
+    }
 }
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
     private Band? _band;
+    private List<string> _aliase = [];
     private List<VideoZeile> _videos = [];
     private List<StueckZeile> _stuecke = [];
     private List<KonzertZeile> _konzerte = [];
+
+    private static string KategorieLabel(BandKategorie k) => k switch
+    {
+        BandKategorie.Harmonie => "Harmonie",
+        BandKategorie.Brassband => "Brassband",
+        BandKategorie.Fanfare => "Fanfare",
+        BandKategorie.Unterhaltung => "Unterhaltung",
+        BandKategorie.JugendmusikHarmonie => "Jugendmusik Harmonie",
+        BandKategorie.JugendmusikBrassband => "Jugendmusik Brassband",
+        BandKategorie.Blaeserensemble => "Bläserensemble",
+        _ => "Sonstige"
+    };
+    private static string KlasseLabel(Staerkeklasse k) => k switch
+    {
+        Staerkeklasse.Hoechstklasse => "Höchstklasse",
+        Staerkeklasse.Elite => "Elite",
+        Staerkeklasse.Klasse1 => "1. Klasse",
+        Staerkeklasse.Klasse2 => "2. Klasse",
+        Staerkeklasse.Klasse3 => "3. Klasse",
+        Staerkeklasse.Klasse4 => "4. Klasse",
+        Staerkeklasse.Oberstufe => "Oberstufe",
+        Staerkeklasse.Mittelstufe => "Mittelstufe",
+        Staerkeklasse.Unterstufe => "Unterstufe",
+        _ => k.ToString()
+    };
     private List<MitgliedZeile> _mitglieder = [];
+    private List<MitgliedZeile> _ehemalige = [];
     private List<MitgliedZeile> _leitung = [];
     private List<IGrouping<string, MitgliedZeile>> _register = [];
 
@@ -164,8 +277,11 @@ else
     {
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        _band = await db.Bands.FirstOrDefaultAsync(b => b.Id == Id);
+        _band = await db.Bands.Include(b => b.Links).FirstOrDefaultAsync(b => b.Id == Id);
         if (_band == null) { Nav.NavigateTo("/bands"); return; }
+
+        _aliase = await db.BandAliase.Where(a => a.BandId == Id).OrderBy(a => a.Name)
+            .Select(a => a.Name).ToListAsync();
 
         var videos = await db.Videos
             .Where(v => v.BandId == Id && v.Status == VideoStatus.Genehmigt)
@@ -194,7 +310,7 @@ else
             .ToListAsync();
 
         var mitglieder = await db.BandMitgliedschaften
-            .Where(m => m.BandId == Id && m.BisJahr == null)
+            .Where(m => m.BandId == Id)
             .Include(m => m.Person)
             .Include(m => m.Instrument)
             .ToListAsync();
@@ -202,16 +318,21 @@ else
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+        var heuer = DateTime.Now.Year;
 
-        _mitglieder = mitglieder
-            .Select(m =>
-            {
-                var eff = PersonenSicht.Effektiv(m.PersonId, m.Person.Sichtbarkeit, vollSichtbar);
-                return new MitgliedZeile(m.PersonId,
-                    PersonenSicht.AnzeigeName(m.Person.Name, eff), m.Instrument?.Name, m.Funktion);
-            })
-            .OrderBy(m => m.AnzeigeName)
-            .ToList();
+        // Ehemalig = Bis-Jahr gesetzt und kleiner als das aktuelle Jahr.
+        var aktiv = mitglieder.Where(m => !(m.BisJahr.HasValue && m.BisJahr < heuer)).ToList();
+        var ehemalig = mitglieder.Where(m => m.BisJahr.HasValue && m.BisJahr < heuer).ToList();
+
+        MitgliedZeile Bau(BandMitgliedschaft m)
+        {
+            var eff = PersonenSicht.Effektiv(m.PersonId, m.Person.Sichtbarkeit, vollSichtbar);
+            return new MitgliedZeile(m.PersonId, PersonenSicht.AnzeigeName(m.Person.Name, eff),
+                m.Instrument?.Name, m.Funktion, m.VonJahr, m.BisJahr);
+        }
+
+        _mitglieder = aktiv.Select(Bau).OrderBy(m => m.AnzeigeName).ToList();
+        _ehemalige = ehemalig.Select(Bau).OrderBy(m => m.AnzeigeName).ToList();
 
         // Anzeige-Gruppen: Leitung (mit Funktion) zuerst, dann nach Instrument.
         _leitung = _mitglieder.Where(m => m.Funktion != null).ToList();
@@ -228,5 +349,15 @@ else
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }
-    private record MitgliedZeile(Guid PersonId, string AnzeigeName, string? Instrument, string? Funktion);
+    private record MitgliedZeile(Guid PersonId, string AnzeigeName, string? Instrument, string? Funktion,
+        int? VonJahr, int? BisJahr)
+    {
+        public string Zeitraum => (VonJahr, BisJahr) switch
+        {
+            (null, null) => "",
+            (var v, null) => $"seit {v}",
+            (null, var b) => $"bis {b}",
+            var (v, b) => $"{v}–{b}"
+        };
+    }
 }

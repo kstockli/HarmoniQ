@@ -19,7 +19,27 @@
                StartIcon="@Icons.Material.Filled.Add" Href="/admin/konzerte/erfassen">Neu (Wizard)</MudButton>
 </MudStack>
 
-<MudDataGrid T="Konzert" Items="_items" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+<MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="5">
+            <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name / Ort)"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="8" sm="4">
+            <MudAutocomplete T="string" @bind-Value="_bandText" @bind-Value:after="Filtern" Label="Band"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" CoerceValue="true"
+                             ResetValueOnEmptyText="true" Immediate="true" SearchFunc="SucheBand" MaxItems="20" />
+        </MudItem>
+        <MudItem xs="4" sm="3">
+            <MudNumericField T="int?" @bind-Value="_jahr" @bind-Value:after="Filtern" Label="Jahr"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="1900" Max="2100" />
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_items.Count Konzerten</MudText>
+</MudPaper>
+
+<MudDataGrid T="Konzert" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
     <Columns>
         <TemplateColumn Title="Datum" SortBy="@(k => k.Datum)">
             <CellTemplate>@context.Item.Datum.ToString("dd.MM.yyyy")</CellTemplate>
@@ -43,6 +63,11 @@
 
 @code {
     private List<Konzert> _items = [];
+    private List<Konzert> _gefiltert = [];
+    private List<string> _bandNamen = [];
+    private string _suche = "";
+    private string? _bandText;
+    private int? _jahr;
 
     protected override async Task OnInitializedAsync() => await Laden();
 
@@ -50,10 +75,33 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _items = await db.Konzerte
-            .Include(k => k.Bands)
+            .Include(k => k.Bands).ThenInclude(kb => kb.Band)
             .Include(k => k.Videos)
             .OrderByDescending(k => k.Datum)
             .ToListAsync();
+        _bandNamen = await db.Bands.OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
+        Filtern();
+    }
+
+    private Task<IEnumerable<string>> SucheBand(string? v, CancellationToken ct)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(v)
+            ? _bandNamen : _bandNamen.Where(n => n.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(20));
+    }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = _items
+            .Where(k =>
+                (s == "" || (k.Name ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)
+                          || (k.Ort ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)) &&
+                (_jahr == null || k.Datum.Year == _jahr) &&
+                (string.IsNullOrWhiteSpace(_bandText)
+                    || k.Bands.Any(kb => kb.Band != null && kb.Band.Name.Contains(_bandText, StringComparison.OrdinalIgnoreCase))))
+            .OrderByDescending(k => k.Datum)
+            .ToList();
     }
 
     private async Task Loeschen(Konzert k)

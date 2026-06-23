@@ -40,6 +40,9 @@ nichts wird automatisch publiziert.
 **Im Scope (Start):**
 - **Konzerte** (Datum, Name, Ort) inkl. **Programm** (Stück + Komponist:in) und **Band**.
 - **Dirigent:innen / Leitung** einer Band.
+- **Band-Stammdaten**, soweit auffindbar: **Kategorie** (Harmonie/Brassband/Fanfare/Unterhaltung) und
+  **Stärkeklasse** (Höchstklasse/Elite/1.–4. Klasse/Ober-/Mittel-/Unterstufe). Auf Wettbewerbs-Ranglisten
+  stehen Kategorie und Klasse meist als Spalte → direkt mitnehmen und der Band zuordnen.
 
 **Bewusst (vorerst) NICHT im Scope:**
 - **Mitglieder-Namen** (personenbezogene Massendaten → Datenschutz, siehe §3). Später optional, nur mit
@@ -111,6 +114,11 @@ Eine `CrawlQuelle` hat einen **Typ**, der das Vorgehen bestimmt:
   je Lauf) → Text extrahieren → an die Extraktion geben.
 - **JS-Rendering:** Headless-Browser (Playwright) rendert die Seite, bevor extrahiert wird. Nötig für
   Wix-/SPA-Seiten (z. B. EMF-Spielplan, WMC).
+
+**Band-Felder aus Ranglisten:** Wettbewerbs-/Ranglistenzeilen liefern neben Verein/Rang auch **Kategorie**
+(Harmonie/Brassband/Fanfare/Unterhaltung) und **Stärkeklasse** – diese werden extrahiert und der Band als
+`Band.Kategorie` / `Band.Staerkeklasse` vorgeschlagen (bei der Übernahme bestätigt der Admin). Abweichende
+Vereinsschreibweisen werden als `BandAlias` geführt (Find-or-create matcht über Name **und** Aliase).
 
 **Event-Regel „(Lokal, Datum) → ein Konzert" (entscheidend):** Spielplan-Zeilen werden nach **Ort/Lokal + Datum**
 gruppiert; daraus entsteht **je Gruppe ein `Konzert`**; je teilnehmenden Verein ein `KonzertBand`; je gespieltem

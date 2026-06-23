@@ -248,12 +248,42 @@ PersonInstrument                    (n:m – mögliche Instrumente einer Musikan
 
 Band
 ├── Id (Guid)
-├── Name (string)
+├── Name (string)                   ← Hauptname
 ├── Land (string?)
-├── Webseite (string?)
-├── BildUrl (string?)               ← NEU: Band-Logo/Foto (optional)
+├── Webseite (string?)              ← Haupt-Homepage (weitere Links siehe BandLink)
+├── BildUrl (string?)               ← Band-Logo/Foto
+├── Kategorie (enum?: Harmonie / Brassband / Fanfare / Unterhaltung / Jugendmusik Harmonie /
+│             Jugendmusik Brassband / Bläserensemble / Sonstige)   — NEU
+├── Staerkeklasse (enum?: Höchstklasse / Elite / 1.–4. Klasse / Ober-/Mittel-/Unterstufe)  — NEU
+├── Gruendungsjahr (int?)           — NEU
+├── Geschichte (string?)            — NEU (analog Person.Biografie)
+├── Aliase [1:n] → BandAlias        — NEU: alternative Namen
+├── Links [1:n] → BandLink          — NEU: Instagram/X/YouTube/EMail (Homepage bleibt in Webseite)
 ├── Videos [1:n]
 └── Mitgliedschaften [1:n] → BandMitgliedschaft
+
+BandAlias                           (NEU – alternativer Name einer Band)
+├── Id (Guid) · BandId (FK) · Name (string)
+└── UNIQUE (BandId, Name)
+> Beispiele: „Blasorchester Feldmusik Neuenkirch" ↔ „Blasorchester Neuenkirch"; „Regionales Jugend-
+> blasorchester Oberer Sempachersee" ↔ „Jugendblasorchester Oberer Sempachersee". Wird beim Find-or-create
+> (Import/Crawler) und beim **Merge** zur Erkennung derselben Band genutzt.
+
+BandLink                            (NEU – Link einer Band, analog PersonLink; reuse LinkTyp)
+├── Id (Guid) · BandId (FK) · Url (string) · Typ (LinkTyp)
+> **Entscheid (separate Tabelle):** Eigene `BandLink`-Tabelle (nicht die `PersonLink`-Tabelle mitbenutzen) –
+> sauberer FK, gleiche `LinkTyp`-Aufzählung (inkl. `Wikipedia`). `BandLink` trägt Instagram / X / YouTube /
+> Facebook / Wikipedia / E-Mail / Mobile; Komfort-Properties auf `Band` (wie bei `Person`).
+>
+> **Webseite bleibt Spalte (bewusst NICHT migriert):** `Band.Webseite` (Haupt-Homepage) wird in
+> **LINQ-DB-Abgleichen** genutzt (Video-Import matcht den YouTube-Kanal: `b.Webseite == KanalUrl`).
+> Eine `[NotMapped]`-Convenience-Property kann EF nicht nach SQL übersetzen → Spalte beibehalten;
+> `BandLink` ergänzt nur die übrigen Links.
+
+> **Band zusammenführen (Merge):** `BandMergeService` schmilzt eine Quell-Band in eine Ziel-Band:
+> Videos, Mitgliedschaften, KonzertBand, KonzertStueck, KonzertPerson, Anträge und Links werden umgehängt
+> (dublettenfrei); der Quell-Name + ihre Aliase bleiben als `BandAlias` des Ziels erhalten; die Quell-Band
+> wird gelöscht. Bedienung im Band-Admin („Zusammenführen").
 
 Stück                               (kein KomponistId mehr → über StückBeitrag)
 ├── Id (Guid)
@@ -636,12 +666,15 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 /personen, /personen/{id}     → Personen-Liste (Filter: Name/Rolle/Instrument/Kontext) / -Detail (Werke + Auftritte,
                                  „Befreunden", „Das bin ich"; Links nur bei voller Sichtbarkeit)
 /stuecke, /stuecke/{id}       → Stückliste (Filter: Titel/Komponist/Band/Schwierigkeit/Video; Band-Filter
-                                 umfasst auch an Konzerten gespielte Stücke) / Stück-Detail + Videos + Voting + Vorschläge
+                                 umfasst auch an Konzerten gespielte Stücke) / Stück-Detail + Videos + Voting +
+                                 Vorschläge + **„An Konzerten gespielt"** (Konzert-Tag + Band, je verlinkt)
 /videos, /videos/{id}         → Videoliste / Einzel-Video (Besetzung, Bewertungen)
-/bands, /bands/{id}           → Band-Übersicht / -Detail (Reihenfolge: Aufnahmen, Konzerte, gespielte Stücke
-                                 [aus Videos ∪ Konzertprogrammen], Besetzung)
-/konzerte, /konzerte/{id}     → Konzert-Übersicht (Suche + Zeitraum-Filter) / -Detail (Programm, Mitwirkende,
-                                 Videos je Band, „Ich war dabei")
+/bands                        → Band-Übersicht: **filterbare Tabelle** (Name, Kategorie, Stärkeklasse) – skaliert für >100 Bands
+/bands/{id}                   → Band-Detail (Kategorie/Stärkeklasse/Gründung/Geschichte/Links/Aliase; dann
+                                 Aufnahmen, Konzerte, gespielte Stücke [Videos ∪ Konzertprogramme],
+                                 **Besetzung** und separat **Ehemalige Besetzung** [Bis-Jahr < aktuelles Jahr])
+/konzerte, /konzerte/{id}     → Konzert-Übersicht (**Tabelle**, Suche + Zeitraum-Filter; Default **„Zeitnah" ±1 Monat**)
+                                 / -Detail (Programm, Mitwirkende, Videos je Band, „Ich war dabei")
 /account/login, /register     → Login (lokal + Google + Microsoft) / Registrierung
 /account/profil               → Meine Bewertungen
 /account/person               → Eigene Personendaten pflegen (inkl. Rollen, Instrumente, Links, Band-Vorschlag)
@@ -653,12 +686,15 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 /admin/personen, /admin/personen/{id}  → CRUD Personen (Stammdaten, Rollen, Instrumente, Bands, Mitwirkungen)
 /admin/benutzer               → Benutzer/Login-Verwaltung: Konten (E-Mail, bestätigt, Rolle), verknüpfte Person
                                  ändern/lösen
-/admin/konzerte, /admin/konzerte/erfassen, /admin/konzerte/{id}/bearbeiten → CRUD + Erfassungs-Wizard
+/admin/konzerte (Filter: Suche/Band/Jahr, Datum absteigend), /admin/konzerte/erfassen,
+                /admin/konzerte/{id}/bearbeiten → Liste + Erfassungs-Wizard
 /admin/instrumente            → Instrumente & Stimmen
 /admin/stuecke, /admin/videos, /admin/bewertungen → CRUD/Verwaltung
 /admin/videos/{id}/besetzung  → Cast-Editor
-/admin/bands, /admin/bands/{id} → CRUD Bands / vereinte Band-Detailseite (Stammdaten **und** Mitglieder
-                                 inkl. inline-Bearbeitung bestehender Zeilen: Instrument/Funktion/Zeitraum)
+/admin/bands, /admin/bands/{id} → CRUD Bands / vereinte Band-Detailseite: Stammdaten (inkl. Kategorie,
+                                 Stärkeklasse, Gründungsjahr, Geschichte, Links), alternative Namen (Aliase),
+                                 Mitglieder (inline-Bearbeitung), Konzerte (Wizard-Link/entfernen), Videos,
+                                 sowie „Zusammenführen" (Merge in andere Band)
 /admin/import                 → Import-Assistent (3-Schritt-Wizard)
 /admin/vorschlaege            → Video-Vorschläge · /admin/mitwirkungen → Mitwirkungs-Vorschläge
 /admin/richtigstellungen      → Richtigstellungen · /admin/verknuepfungen → „Das bin ich"-Anträge

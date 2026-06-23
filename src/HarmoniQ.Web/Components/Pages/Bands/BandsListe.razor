@@ -6,61 +6,123 @@
 
 <PageTitle>Bands – HarmoniQ</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">Bands & Ensembles</MudText>
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Bands & Ensembles</MudText>
 
-@if (_bands == null)
+@if (_alle == null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
+else if (_alle.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Noch keine Bands erfasst.</MudAlert>
+}
 else
 {
-    <MudGrid>
-        @foreach (var band in _bands)
-        {
-            var videoCount = band.Videos.Count(v => v.Status == VideoStatus.Genehmigt);
-            <MudItem xs="12" sm="6" md="4">
-                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-                    <MudCardContent>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;" />
-                            <MudLink Href="@($"/bands/{band.Id}")" Typo="Typo.h6" Style="color:#F0E6FF;"
-                                     Underline="Underline.Hover">@band.Name</MudLink>
-                        </MudStack>
-                        @if (band.Land != null)
-                        {
-                            <MudText Typo="Typo.body2" Class="mt-1" Style="color:#A78FC0;">@band.Land</MudText>
-                        }
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.VideoLibrary" Class="mt-2"
-                                 Style="background:#2d1657; color:#D4AF37;">
-                            @videoCount Video@(videoCount == 1 ? "" : "s")
-                        </MudChip>
-                    </MudCardContent>
-                    <MudCardActions>
-                        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
-                                   Href="@($"/bands/{band.Id}")">Ansehen</MudButton>
-                        @if (band.Webseite != null)
-                        {
-                            <MudButton Variant="Variant.Text" Style="color:#9B59B6;"
-                                       Href="@band.Webseite" Target="_blank"
-                                       StartIcon="@Icons.Material.Filled.OpenInNew">Kanal</MudButton>
-                        }
-                    </MudCardActions>
-                </MudCard>
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="5">
+                <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name)"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
             </MudItem>
-        }
-    </MudGrid>
+            <MudItem xs="6" sm="3">
+                <MudSelect T="BandKategorie?" @bind-Value="_kategorie" @bind-Value:after="Filtern"
+                           Label="Kategorie" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    @foreach (var k in Enum.GetValues<BandKategorie>())
+                    {
+                        <MudSelectItem T="BandKategorie?" Value="@k">@KategorieLabel(k)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6" sm="4">
+                <MudSelect T="Staerkeklasse?" @bind-Value="_klasse" @bind-Value:after="Filtern"
+                           Label="Stärkeklasse" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    @foreach (var s in Enum.GetValues<Staerkeklasse>())
+                    {
+                        <MudSelectItem T="Staerkeklasse?" Value="@s">@KlasseLabel(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Bands</MudText>
+    </MudPaper>
+
+    <MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+        <Columns>
+            <TemplateColumn Title="Name" SortBy="@(z => z.Name)">
+                <CellTemplate>
+                    <MudLink Href="@($"/bands/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                             Underline="Underline.Hover">@context.Item.Name</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Kategorie" SortBy="@(z => z.Kategorie.HasValue ? (int)z.Kategorie : 99)">
+                <CellTemplate>@(context.Item.Kategorie.HasValue ? KategorieLabel(context.Item.Kategorie.Value) : "—")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Stärkeklasse" SortBy="@(z => z.Klasse.HasValue ? (int)z.Klasse : 99)">
+                <CellTemplate>@(context.Item.Klasse.HasValue ? KlasseLabel(context.Item.Klasse.Value) : "—")</CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="z => z.Land" Title="Land" />
+            <PropertyColumn Property="z => z.Mitglieder" Title="Mitglieder" />
+            <PropertyColumn Property="z => z.Videos" Title="Videos" />
+        </Columns>
+    </MudDataGrid>
 }
 
 @code {
-    private List<Band>? _bands;
+    private List<Zeile>? _alle;
+    private List<Zeile> _gefiltert = [];
+    private string _suche = "";
+    private BandKategorie? _kategorie;
+    private Staerkeklasse? _klasse;
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _bands = await db.Bands
-            .Include(b => b.Videos)
-            .OrderBy(b => b.Land)
-            .ThenBy(b => b.Name)
+        _alle = await db.Bands
+            .OrderBy(b => b.Name)
+            .Select(b => new Zeile(b.Id, b.Name, b.Kategorie, b.Staerkeklasse, b.Land,
+                b.Mitgliedschaften.Count, b.Videos.Count(v => v.Status == VideoStatus.Genehmigt)))
             .ToListAsync();
+        Filtern();
     }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = _alle!
+            .Where(z =>
+                (s == "" || z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)) &&
+                (_kategorie == null || z.Kategorie == _kategorie) &&
+                (_klasse == null || z.Klasse == _klasse))
+            .ToList();
+    }
+
+    private static string KategorieLabel(BandKategorie k) => k switch
+    {
+        BandKategorie.Harmonie => "Harmonie",
+        BandKategorie.Brassband => "Brassband",
+        BandKategorie.Fanfare => "Fanfare",
+        BandKategorie.Unterhaltung => "Unterhaltung",
+        BandKategorie.JugendmusikHarmonie => "Jugendmusik Harmonie",
+        BandKategorie.JugendmusikBrassband => "Jugendmusik Brassband",
+        BandKategorie.Blaeserensemble => "Bläserensemble",
+        _ => "Sonstige"
+    };
+
+    private static string KlasseLabel(Staerkeklasse k) => k switch
+    {
+        Staerkeklasse.Hoechstklasse => "Höchstklasse",
+        Staerkeklasse.Elite => "Elite",
+        Staerkeklasse.Klasse1 => "1. Klasse",
+        Staerkeklasse.Klasse2 => "2. Klasse",
+        Staerkeklasse.Klasse3 => "3. Klasse",
+        Staerkeklasse.Klasse4 => "4. Klasse",
+        Staerkeklasse.Oberstufe => "Oberstufe",
+        Staerkeklasse.Mittelstufe => "Mittelstufe",
+        Staerkeklasse.Unterstufe => "Unterstufe",
+        _ => k.ToString()
+    };
+
+    private record Zeile(Guid Id, string Name, BandKategorie? Kategorie, Staerkeklasse? Klasse,
+        string? Land, int Mitglieder, int Videos);
 }

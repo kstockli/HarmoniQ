@@ -1,0 +1,53 @@
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            „<b>@QuelleName</b>" wird in die gewählte Band <b>hineingeschmolzen</b>: alle Konzerte, Stücke,
+            Mitglieder, Videos und Links werden übernommen (ohne Dubletten), der Name bleibt als Alias erhalten,
+            danach wird „@QuelleName" gelöscht. <b>Nicht umkehrbar.</b>
+        </MudAlert>
+        <MudAutocomplete T="BandRef" Label="Ziel-Band" Variant="Variant.Outlined" Required="true"
+                         Value="_ziel" ValueChanged="@(v => _ziel = v)" SearchFunc="Suche"
+                         ToStringFunc="@(b => b?.Name ?? "")" MaxItems="30" ResetValueOnEmptyText="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   OnClick="Bestaetigen" Disabled="@(_ziel is null)">Zusammenführen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid QuelleId { get; set; }
+    [Parameter] public string QuelleName { get; set; } = "";
+
+    private BandRef? _ziel;
+    private List<BandRef> _bands = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _bands = await db.Bands.Where(b => b.Id != QuelleId).OrderBy(b => b.Name)
+            .Select(b => new BandRef(b.Id, b.Name)).ToListAsync();
+    }
+
+    private Task<IEnumerable<BandRef>> Suche(string? v, CancellationToken ct)
+    {
+        IEnumerable<BandRef> r = string.IsNullOrWhiteSpace(v)
+            ? _bands : _bands.Where(b => b.Name.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(30));
+    }
+
+    private void Bestaetigen()
+    {
+        if (_ziel is null) return;
+        MudDialog.Close(DialogResult.Ok(_ziel.Id));
+    }
+
+    public record BandRef(Guid Id, string Name);
+}

@@ -98,6 +98,7 @@ public static class KonzertErfassungService
             if (string.IsNullOrWhiteSpace(name)) return null;
             if (bandCache.TryGetValue(name, out var b)) return b;
             b = await db.Bands.FirstOrDefaultAsync(x => x.Name == name)
+                ?? await db.Bands.FirstOrDefaultAsync(x => x.Aliase.Any(a => a.Name == name))
                 ?? db.Bands.Local.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             if (b == null)
             {

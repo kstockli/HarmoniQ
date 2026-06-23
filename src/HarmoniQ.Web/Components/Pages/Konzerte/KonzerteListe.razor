@@ -3,6 +3,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
 
 <PageTitle>Konzerte – HarmoniQ</PageTitle>
 
@@ -18,24 +19,27 @@ else if (_alle.Count == 0)
 }
 else
 {
-    <MudGrid Class="mb-4" Spacing="2">
-        <MudItem xs="12" sm="6" md="5">
-            <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Immediate="true" Clearable="true"
-                          Label="Suchen (Name / Ort)" Variant="Variant.Outlined" Margin="Margin.Dense"
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
-        </MudItem>
-        <MudItem xs="8" sm="4" md="3">
-            <MudSelect T="Zeitraum" @bind-Value="_zeitraum" @bind-Value:after="Filtern" Label="Zeitraum"
-                       Variant="Variant.Outlined" Margin="Margin.Dense">
-                <MudSelectItem Value="Zeitraum.Alle">Alle</MudSelectItem>
-                <MudSelectItem Value="Zeitraum.Kommende">Kommende</MudSelectItem>
-                <MudSelectItem Value="Zeitraum.Vergangene">Vergangene</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="4" sm="2" md="4" Class="d-flex align-center">
-            <MudText Typo="Typo.body2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count</MudText>
-        </MudItem>
-    </MudGrid>
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="5">
+                <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name / Ort)"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="Zeitraum" @bind-Value="_zeitraum" @bind-Value:after="Filtern" Label="Zeitraum"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem Value="Zeitraum.Zeitnah">Zeitnah (±1 Monat)</MudSelectItem>
+                    <MudSelectItem Value="Zeitraum.Kommende">Kommende</MudSelectItem>
+                    <MudSelectItem Value="Zeitraum.Vergangene">Vergangene</MudSelectItem>
+                    <MudSelectItem Value="Zeitraum.Alle">Alle</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3" Class="d-flex align-center">
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
     @if (_gefiltert.Count == 0)
     {
@@ -43,45 +47,23 @@ else
     }
     else
     {
-        <MudGrid>
-            @foreach (var k in _gefiltert)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-                        @if (!string.IsNullOrWhiteSpace(k.BildUrl))
-                        {
-                            <MudLink Href="@($"/konzerte/{k.Id}")">
-                                <img src="@k.BildUrl" style="width:100%;display:block;max-height:160px;object-fit:cover;" alt="" />
-                            </MudLink>
-                        }
-                        <MudCardContent>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@Icons.Material.Filled.Event" Style="color:#D4AF37;" />
-                                <MudLink Href="@($"/konzerte/{k.Id}")" Typo="Typo.h6" Style="color:#F0E6FF;"
-                                         Underline="Underline.Hover">@(k.Name ?? k.Datum.ToString("dd.MM.yyyy"))</MudLink>
-                            </MudStack>
-                            <MudText Typo="Typo.body2" Class="mt-1" Style="color:#A78FC0;">
-                                @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
-                            </MudText>
-                            <MudStack Row="true" Spacing="2" Class="mt-2">
-                                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Groups"
-                                         Style="background:#2d1657; color:#D4AF37;">
-                                    @k.Bands Band@(k.Bands == 1 ? "" : "s")
-                                </MudChip>
-                                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.VideoLibrary"
-                                         Style="background:#2d1657; color:#D4AF37;">
-                                    @k.VideoAnzahl Video@(k.VideoAnzahl == 1 ? "" : "s")
-                                </MudChip>
-                            </MudStack>
-                        </MudCardContent>
-                        <MudCardActions>
-                            <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
-                                       Href="@($"/konzerte/{k.Id}")">Ansehen</MudButton>
-                        </MudCardActions>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
+        <MudDataGrid T="KonzertZeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single"
+                     Style="background:#1a0030;" RowClick="@(args => Nav.NavigateTo($"/konzerte/{args.Item.Id}"))">
+            <Columns>
+                <TemplateColumn Title="Datum" SortBy="@(k => k.Datum)">
+                    <CellTemplate>@context.Item.Datum.ToString("dd.MM.yyyy")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Konzert" SortBy="@(k => k.Titel)">
+                    <CellTemplate>
+                        <MudLink Href="@($"/konzerte/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                                 Underline="Underline.Hover">@context.Item.Titel</MudLink>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="k => k.Ort" Title="Ort" />
+                <PropertyColumn Property="k => k.Bands" Title="Bands" />
+                <PropertyColumn Property="k => k.VideoAnzahl" Title="Videos" />
+            </Columns>
+        </MudDataGrid>
     }
 }
 
@@ -89,9 +71,9 @@ else
     private List<KonzertZeile>? _alle;
     private List<KonzertZeile> _gefiltert = [];
     private string _suche = "";
-    private Zeitraum _zeitraum = Zeitraum.Alle;
+    private Zeitraum _zeitraum = Zeitraum.Zeitnah;   // Default: zeitnah (±1 Monat)
 
-    private enum Zeitraum { Alle, Kommende, Vergangene }
+    private enum Zeitraum { Zeitnah, Kommende, Vergangene, Alle }
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,7 +81,7 @@ else
         _alle = await db.Konzerte
             .OrderByDescending(k => k.Datum)
             .Select(k => new KonzertZeile(
-                k.Id, k.Datum, k.Name, k.Ort, k.BildUrl,
+                k.Id, k.Datum, k.Name, k.Ort,
                 k.Bands.Count,
                 k.Videos.Count(v => v.Status == VideoStatus.Genehmigt)))
             .ToListAsync();
@@ -114,6 +96,7 @@ else
 
         q = _zeitraum switch
         {
+            Zeitraum.Zeitnah => q.Where(k => k.Datum >= heute.AddMonths(-1) && k.Datum <= heute.AddMonths(1)).OrderBy(k => k.Datum),
             Zeitraum.Kommende => q.Where(k => k.Datum >= heute).OrderBy(k => k.Datum),
             Zeitraum.Vergangene => q.Where(k => k.Datum < heute).OrderByDescending(k => k.Datum),
             _ => q.OrderByDescending(k => k.Datum)
@@ -127,6 +110,8 @@ else
         _gefiltert = q.ToList();
     }
 
-    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort, string? BildUrl,
-        int Bands, int VideoAnzahl);
+    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort, int Bands, int VideoAnzahl)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
 }
