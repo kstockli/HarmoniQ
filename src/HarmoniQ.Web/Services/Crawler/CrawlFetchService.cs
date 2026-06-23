@@ -18,17 +18,20 @@ public class CrawlFetchService
     private readonly HttpClient _http;
     private readonly CrawlerOptions _opt;
     private readonly ILogger<CrawlFetchService> _logger;
+    private readonly ISeitenRenderer _renderer;
     private readonly string _botToken;
 
     private readonly ConcurrentDictionary<string, RobotsRegeln> _robotsCache = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _hostLocks = new();
     private readonly ConcurrentDictionary<string, DateTime> _letzterAbruf = new();
 
-    public CrawlFetchService(HttpClient http, IOptions<CrawlerOptions> opt, ILogger<CrawlFetchService> logger)
+    public CrawlFetchService(HttpClient http, IOptions<CrawlerOptions> opt, ILogger<CrawlFetchService> logger,
+        ISeitenRenderer renderer)
     {
         _http = http;
         _opt = opt.Value;
         _logger = logger;
+        _renderer = renderer;
         _http.Timeout = TimeSpan.FromSeconds(_opt.RequestTimeoutSekunden);
         // Bot-Token = Produktname vor dem „/“ (z. B. „HarmoniQBot/1.0 …“ → „harmoniqbot“).
         _botToken = (_opt.UserAgent.Split('/', 2)[0]).Trim().ToLowerInvariant();
@@ -42,7 +45,8 @@ public class CrawlFetchService
         string? Text,
         string? InhaltsHash,
         bool DurchRobotsGesperrt,
-        string? Fehler)
+        string? Fehler,
+        bool Gerendert = false)
     {
         public static FetchErgebnis Gesperrt(string url) =>
             new(false, url, null, false, null, null, true, "Durch robots.txt gesperrt.");
@@ -50,8 +54,9 @@ public class CrawlFetchService
             new(false, url, null, false, null, null, false, fehler);
     }
 
-    /// <summary>Lädt eine URL höflich und gibt den extrahierten Text zurück.</summary>
-    public async Task<FetchErgebnis> HoleAsync(string url, CancellationToken ct = default)
+    /// <summary>Lädt eine URL höflich und gibt den extrahierten Text zurück. <paramref name="rendern"/>
+    /// rendert die Seite per Headless-Browser (für SPA/Event), sofern Rendering aktiv ist.</summary>
+    public async Task<FetchErgebnis> HoleAsync(string url, bool rendern = false, CancellationToken ct = default)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -77,6 +82,19 @@ public class CrawlFetchService
             await RateLimitAbwartenAsync(host, robots.CrawlDelay, ct);
             try
             {
+                // JS-Rendering (falls gewünscht & aktiv); bei Fehler Fallback auf HTTP.
+                if (rendern && _opt.RenderingAktiv)
+                {
+                    var html = await _renderer.RenderAsync(url, ct);
+                    if (html != null)
+                        return new FetchErgebnis(true, url, "text/html", false, html, Hash(html), false, null, Gerendert: true);
+                    _logger.LogWarning("Rendern lieferte nichts – Fallback HTTP für {Url}", url);
+                }
+                else if (rendern)
+                {
+                    _logger.LogWarning("Rendering für {Url} gewünscht, aber Crawler:RenderingAktiv=false " +
+                        "– es kommt nur die (evtl. leere) HTML-Hülle. RenderingAktiv aktivieren.", url);
+                }
                 return await AbrufenAsync(uri, ct);
             }
             finally

@@ -44,7 +44,12 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "\"programm\":[{\"stueckTitel\":\"\",\"komponistName\":\"|null\",\"arrangeurName\":\"|null\"," +
         "\"bandName\":\"|null\",\"reihenfolge\":null}]}]," +
         "\"leitungen\":[{\"personName\":\"\",\"bandName\":\"|null\",\"funktion\":\"Dirigent\"," +
-        "\"vonJahr\":null,\"bisJahr\":null}]}\n" +
+        "\"vonJahr\":null,\"bisJahr\":null}]," +
+        "\"verein\":{\"name\":\"\",\"aliase\":[],\"land\":\"|null\",\"webseite\":\"|null\"," +
+        "\"gruendungsjahr\":null,\"kategorie\":\"Harmonie|Brassband|Fanfare|Unterhaltung|Jugendmusik|" +
+        "Bläserensemble|null\",\"staerkeklasse\":\"|null\",\"geschichte\":\"|null\",\"instagram\":\"|null\"," +
+        "\"facebook\":\"|null\",\"youtube\":\"|null\",\"x\":\"|null\",\"wikipedia\":\"|null\"," +
+        "\"email\":\"|null\",\"mobile\":\"|null\"}}\n" +
         "Regeln:\n" +
         "- Jedes gespielte Stück gehört als Programmzeile in sein Konzert: Komponist:in in komponistName, " +
         "spielende Band/Verein in bandName.\n" +
@@ -66,7 +71,11 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "Nullen auffüllen – fehlende Teile weglassen (also \"2024\" oder \"2024-06\", nicht \"2024-00-00\").\n" +
         "- Enthält die Admin-Anweisung eine EINSCHRÄNKUNG (z. B. nur Konzerte ab einem Jahr, nur ein " +
         "bestimmter Ort/Lokal, nur mit Stück-Angaben), dann gib AUSSCHLIESSLICH dazu passende Funde " +
-        "zurück und lass alle anderen weg – auch wenn sie im Text stehen.";
+        "zurück und lass alle anderen weg – auch wenn sie im Text stehen.\n" +
+        "- verein: NUR ausfüllen, wenn die Seite die EIGENE Seite eines Vereins ist (Vereins-Domain). Dann " +
+        "die Daten DIESES Vereins: offizieller name, alternative Namen als aliase[], land, webseite, " +
+        "gruendungsjahr, kategorie (Besetzungsart), staerkeklasse, kurze geschichte/Beschreibung, " +
+        "Social-Media-Links. Bei Fest-/Ranglisten-/Fremdseiten verein WEGLASSEN (null).";
 
     public async Task<ExtraktionsErgebnis> ExtrahiereAsync(ExtraktionsAnfrage anfrage, CancellationToken ct = default)
     {
@@ -175,6 +184,50 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
             var daten = new KomponistFundDaten(k.Name!.Trim(), Leer(k.Biografie), null, k.Geburtsjahr, Leer(k.WikipediaUrl));
             yield return new ExtrahierterFund(CrawlFundTyp.Komponist, CrawlDaten.Serialisiere(daten));
         }
+
+        // Vereins-Stammdaten nur bei der eigenen Vereinsseite (BandDomain).
+        if (anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain && a.Verein is { } v && !string.IsNullOrWhiteSpace(v.Name))
+        {
+            var aliase = (v.Aliase ?? []).Select(Leer).Where(x => x != null).Select(x => x!).Distinct().ToList();
+            var daten = new BandFundDaten(
+                v.Name!.Trim(), Leer(v.Land), Leer(v.Webseite), Leer(anfrage.LogoUrl),
+                MapKategorie(v.Kategorie), MapStaerke(v.Staerkeklasse), v.Gruendungsjahr, Leer(v.Geschichte),
+                Leer(v.Instagram), Leer(v.Facebook), Leer(v.YouTube), Leer(v.X), Leer(v.Wikipedia),
+                Leer(v.EMail), Leer(v.Mobile), aliase);
+            yield return new ExtrahierterFund(CrawlFundTyp.Band, CrawlDaten.Serialisiere(daten));
+        }
+    }
+
+    private static BandKategorie? MapKategorie(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var t = s.ToLowerInvariant();
+        var jugend = t.Contains("jugend");
+        if (t.Contains("brass")) return jugend ? BandKategorie.JugendmusikBrassband : BandKategorie.Brassband;
+        if (t.Contains("harmonie")) return jugend ? BandKategorie.JugendmusikHarmonie : BandKategorie.Harmonie;
+        if (t.Contains("fanfare")) return BandKategorie.Fanfare;
+        if (t.Contains("unterhaltung")) return BandKategorie.Unterhaltung;
+        if (t.Contains("ensemble") || t.Contains("bläser") || t.Contains("blaeser")) return BandKategorie.Blaeserensemble;
+        return null;
+    }
+
+    private static Staerkeklasse? MapStaerke(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var t = s.ToLowerInvariant();
+        if (t.Contains("höchst") || t.Contains("hoechst")) return Staerkeklasse.Hoechstklasse;
+        if (t.Contains("elite")) return Staerkeklasse.Elite;
+        if (t.Contains("ober")) return Staerkeklasse.Oberstufe;
+        if (t.Contains("mittel")) return Staerkeklasse.Mittelstufe;
+        if (t.Contains("unter")) return Staerkeklasse.Unterstufe;
+        var m = Regex.Match(t, "[1-4]");
+        return m.Success ? m.Value switch
+        {
+            "1" => Staerkeklasse.Klasse1,
+            "2" => Staerkeklasse.Klasse2,
+            "3" => Staerkeklasse.Klasse3,
+            _ => Staerkeklasse.Klasse4
+        } : null;
     }
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -187,7 +240,12 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record MistralAntwort(
         List<KonzertDto>? Konzerte, List<LeitungDto>? Leitungen,
-        List<StueckDto>? Stuecke, List<KomponistDto>? Komponisten);
+        List<StueckDto>? Stuecke, List<KomponistDto>? Komponisten, VereinDto? Verein);
+    private record VereinDto(
+        string? Name, List<string>? Aliase, string? Land, string? Webseite, int? Gruendungsjahr,
+        string? Kategorie, string? Staerkeklasse, string? Geschichte,
+        string? Instagram, string? Facebook, string? YouTube, string? X, string? Wikipedia,
+        string? EMail, string? Mobile);
     private record KonzertDto(DateOnly? Datum, string? Name, string? Ort, List<ProgrammDto>? Programm);
     private record ProgrammDto(string? StueckTitel, string? KomponistName, string? BandName, int? Reihenfolge, string? ArrangeurName);
     private record LeitungDto(string? PersonName, string? BandName, string? Funktion, int? VonJahr, int? BisJahr);

@@ -4,8 +4,10 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services.Crawler
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject CrawlLaufQueue Queue
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Crawler – Admin</PageTitle>
@@ -50,9 +52,11 @@
         }
         @if (_neu.Typ == CrawlQuelleTyp.Event)
         {
-            <MudItem xs="12" md="6">
-                <MudSwitch T="bool" @bind-Value="_neu.BrauchtRendering" Color="Color.Secondary"
-                           Label="JS-Rendering nötig (C2 – noch nicht aktiv)" />
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Event-Seiten werden automatisch per JS gerendert (für SPA/Wix). Erfordert
+                    <code>Crawler:RenderingAktiv=true</code> – lokal aktiv, in Produktion siehe DEPLOY.md.
+                </MudAlert>
             </MudItem>
         }
         <MudItem xs="12">
@@ -66,7 +70,16 @@
 </MudPaper>
 
 <!-- Quellen -->
-<MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Quellen</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudText Typo="Typo.h6" Style="color:#D4AF37;">Quellen</MudText>
+    <MudSpacer />
+    @if (_quellen.Any(q => !q.Aktiv))
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.DeleteSweep"
+                   OnClick="VorschlaegeLoeschen">Alle Vorschläge löschen</MudButton>
+    }
+</MudStack>
 @if (_quellen.Count == 0)
 {
     <MudAlert Severity="Severity.Info" Class="mb-6">Noch keine Quellen erfasst.</MudAlert>
@@ -79,6 +92,10 @@ else
             <MudPaper Class="pa-3" Elevation="3" Style="background:#1a0030; border:1px solid #3a1060;">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1" Wrap="Wrap.Wrap">
                     <MudChip T="string" Size="Size.Small" Color="Color.Primary">@q.Typ</MudChip>
+                    @if (!q.Aktiv)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Vorschlag</MudChip>
+                    }
                     <a href="@q.StartUrl" target="_blank"
                        style="color:#9B59B6;max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@q.StartUrl</a>
                     @if (q.Band != null)
@@ -97,13 +114,29 @@ else
                 <MudTextField @bind-Value="q.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2" Margin="Margin.Dense"
                               Label="Zusatz-Hinweis an die Extraktion (vor dem Lauf editierbar)"
                               Placeholder="z. B. Nur Konzerte ab 2023 mit Stück-Angaben; ältere ignorieren." />
-                <MudStack Row="true" Class="mt-2" Spacing="2">
+                <MudStack Row="true" Class="mt-2" Spacing="2" Wrap="Wrap.Wrap">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
                                StartIcon="@Icons.Material.Filled.PlayArrow"
                                OnClick="@(() => LaufStarten(q))">Lauf starten</MudButton>
                     <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;"
                                StartIcon="@Icons.Material.Filled.Save"
                                OnClick="@(() => HinweisSpeichern(q))">Hinweis speichern</MudButton>
+                    @if (!q.Aktiv)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.CheckCircle"
+                                   OnClick="@(() => AktivSetzen(q, true))">Aktivieren</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#A78FC0;"
+                                   StartIcon="@Icons.Material.Filled.PauseCircle"
+                                   OnClick="@(() => AktivSetzen(q, false))">Deaktivieren</MudButton>
+                    }
+                    <MudSpacer />
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Delete"
+                               OnClick="@(() => QuelleLoeschen(q))">Löschen</MudButton>
                 </MudStack>
             </MudPaper>
         }
@@ -154,7 +187,7 @@ else
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _quellen = await db.CrawlQuellen.Include(q => q.Band)
-            .OrderByDescending(q => q.ErstelltAm).ToListAsync();
+            .OrderByDescending(q => q.Aktiv).ThenByDescending(q => q.ErstelltAm).ToListAsync();
         _laeufe = await db.CrawlLaeufe
             .OrderByDescending(l => l.StartAm).Take(20)
             .Select(l => new LaufZeile(l.Id, l.Quelle.StartUrl, l.Status, l.SeitenBesucht, l.FundeAnzahl, l.StartAm, l.Meldung))
@@ -227,6 +260,48 @@ else
         }
         Queue.Einreihen(laufId);
         Snackbar.Add("Lauf gestartet (läuft im Hintergrund – mit „Aktualisieren\" beobachten).", Severity.Success);
+        await Laden();
+    }
+
+    private async Task AktivSetzen(CrawlQuelle q, bool aktiv)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var e = await db.CrawlQuellen.FindAsync(q.Id);
+        if (e != null) { e.Aktiv = aktiv; await db.SaveChangesAsync(); }
+        Snackbar.Add(aktiv ? "Quelle aktiviert." : "Quelle deaktiviert.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task VorschlaegeLoeschen()
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, "Alle inaktiven Quellen (Vorschläge) inkl. ihrer Läufe/Funde löschen?" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Vorschläge löschen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var n = await db.CrawlQuellen.Where(q => !q.Aktiv).ExecuteDeleteAsync();
+        Snackbar.Add($"{n} Vorschläge gelöscht.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task QuelleLoeschen(CrawlQuelle q)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"Quelle \"{q.StartUrl}\" inkl. ihrer Läufe und Funde löschen?" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var e = await db.CrawlQuellen.FindAsync(q.Id);
+        if (e != null) { db.CrawlQuellen.Remove(e); await db.SaveChangesAsync(); }
+        Snackbar.Add("Quelle gelöscht.", Severity.Info);
         await Laden();
     }
 

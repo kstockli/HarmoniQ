@@ -19,7 +19,8 @@
   `/admin/crawler/funde` (lesbare Aufbereitung je Fund-Typ, JSON einblendbar/editierbar, Übernehmen/Verwerfen,
   Massen-Aktionen). Crawler-Link im Admin-Menü über dem Import-Assistenten.
 - Übernahme-Pfade (Find-or-create): Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft`;
-  Stück → `Stueck` + `StueckBeitrag`; Komponist:in → `Person`.
+  Stück → `Stueck` + `StueckBeitrag`; Komponist:in → `Person`; **Verein → `Band`** (Name/Alias-Abgleich,
+  leere Felder füllen, Aliase + Social-Links ergänzen).
 
 **Entscheide:**
 - **LLM-Anbieter: Mistral „La Plateforme", Modell `mistral-large-latest`** (Interface bleibt anbieter-neutral).
@@ -29,7 +30,19 @@
 - **Arrangeur:in** wird getrennt von Komponist:in extrahiert (eigener `StueckBeitrag` mit `StueckRolle.Arrangeur`).
 - **Diagnose:** LLM-Calls/Antworten optional protokollierbar (`Crawler:Llm:LogCalls`).
 
-**Noch offen:** C2 (JS-Rendering/Event/Kaskade), C4 (Wikipedia-Anreicherung, Region-Filter, geplante Läufe).
+**C2 (teilweise umgesetzt):** JS-Rendering via Playwright/Chromium (`ISeitenRenderer`/`PlaywrightRenderer`,
+config-gesteuert `Crawler:RenderingAktiv`, Default aus, HTTP-Fallback) – verifiziert an `emf26.ch/vereine`
+(7,4 MB gerendert, 484 Vereins-Domains). **Event-Quellen rendern automatisch** (kein Extra-Flag nötig);
+der Renderer wartet, bis die **Link-Anzahl stabil** ist (lazy-geladene SPA-Inhalte) – nicht auf NetworkIdle
+(flaky) und ohne Scrollen (würde virtualisierte Listen ausdünnen). **Vereins-Link-Ernte:** Event-Quellen ernten
+fremde Domains und legen je einen **Webseiten-Fund** (`CrawlFundTyp.Webseite`) mit Mini-Vorschau (Seitentitel/
+Beschreibung, **ohne LLM**, parallel geladen) an. Beim **Übernehmen** entsteht eine **inaktive BandDomain-Quelle
+(Vorschlag)** – so entscheidet der Admin je Verein in der Funde-Review (statt dass direkt Quellen entstehen).
+Noch offen in C2:
+**Join Rangliste-PDF ↔ Spielplan** über Vereinsnamen und automatische **Rück-Zuordnung** der Folge-Crawl-Stücke
+ans (Lokal,Datum)-Konzert.
+
+**Noch offen:** C2-Rest (Join/Rück-Zuordnung), C4 (Wikipedia-Anreicherung, Region-Filter, geplante Läufe).
 
 ## 1. Ziel & Abgrenzung
 
@@ -180,7 +193,7 @@ CrawlLauf                           (ein Durchlauf einer Quelle)
 CrawlFund                           (Kandidat zur Übernahme)
 ├── Id (Guid)
 ├── LaufId (FK)
-├── Typ (enum: Konzert / Leitung / Stück / Komponist / Sonstiges)
+├── Typ (enum: Konzert / Leitung / Stück / Komponist / Band / Sonstiges)
 ├── QuellUrl (string)               ← Provenienz
 ├── AbgerufenAm (DateTime)
 ├── DatenJson (string)              ← strukturierter Vorschlag (Konzert+Programm bzw. Person+Rolle)
@@ -215,7 +228,10 @@ CrawlFund                           (Kandidat zur Übernahme)
 - **Massen-Aktionen:** „Alle offenen verwerfen" und „Alle angezeigten löschen" (bezogen auf den aktuellen Filter).
 - **Übernehmen** ruft die Find-or-create-Services → keine Dubletten; Quell-URL bleibt als Provenienz erhalten.
   Übernahme-Pfade: Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft` (Funktion „Dirigent",
-  optional Von/Bis-Jahr); Stück → `Stueck` (+ `StueckBeitrag` Komponist/Arrangeur); Komponist:in → `Person`.
+  optional Von/Bis-Jahr); Stück → `Stueck` (+ `StueckBeitrag` Komponist/Arrangeur); Komponist:in → `Person`;
+  **Verein → `Band`** (Abgleich über Name/Alias; füllt leere Stammdaten – Land, Webseite, Kategorie,
+  Stärkeklasse, Gründungsjahr, Geschichte – und ergänzt `BandAlias` + `BandLink`-Social-Links);
+  **Webseite → inaktive BandDomain-Quelle (Vorschlag)**.
   Bei **BandDomain**-Funden wird das Konzert immer der Quell-Band zugeordnet.
 
 ## 8. Extraktion im Detail
@@ -229,7 +245,11 @@ CrawlFund                           (Kandidat zur Übernahme)
    **Prompt-Regeln:** Fakten wörtlich, nicht raten; Komponist:in vs. **Arrangeur:in** trennen („arr. X");
    Personennamen „Vorname Nachname"; `reihenfolge` = Startzeit als Zahl (14:40 → 1440), sonst fortlaufend;
    Datum nicht mit Nullen auffüllen; enthält der **Admin-Hinweis** eine Einschränkung, wirkt er als **Filter**
-   (nur passende Funde). Bei BandDomain ist die Quell-Band Standard-Band, wenn keine genannt.
+   (nur passende Funde). Bei BandDomain ist die Quell-Band Standard-Band, wenn keine genannt. Auf der eigenen
+   Vereinsseite wird zusätzlich ein **Vereins-Block** extrahiert (`verein`: Name, Aliase, Land, Webseite,
+   Gründungsjahr, Kategorie, Stärkeklasse, Geschichte, Social-Links) → Band-Fund. Das **Logo** (`BildUrl`)
+   kommt nicht vom LLM (der sieht nur Text), sondern **heuristisch aus dem HTML** (`og:image` →
+   `<img>` mit „logo" → `apple-touch-icon`).
 3. **Robustheit:** Tolerantes Parsen der LLM-Antwort (z. B. Datum „1935-00-00" → 1935-01-01, Zahl als String) –
    kein Crash bei unsauberen Werten.
 4. **Kostenkontrolle:** nur relevante Seiten ans Modell; Text-Obergrenze je Aufruf; optional Tageslimit.
@@ -248,10 +268,11 @@ robots.txt/Rate-Limit/Domain-Grenze **und PDF-Text-Extraktion** (PdfPig); Seiten
 (`mistral-large-latest`, JSON-Modus); ersetzt die Heuristik als Fund-Produzent. Konfidenz, tolerantes Parsen,
 Arrangeur-Trennung, Reihenfolge/Jahre, Admin-Hinweis-Filter, optionales Call-Logging.
 
-**Phase C2 – JS-Rendering, Event-Quellen & kaskadierende Crawls (offen):** Headless-Browser (Playwright);
-Quelltyp **Event**; Programm-Extraktion mit Regel **„(Lokal, Datum) → ein Konzert"**; **Join** Rangliste-PDF ↔
-Spielplan über Vereinsnamen; **Vereins-Link-Ernte** (z. B. `emf26.ch/vereine`) → `Band.Webseite` +
-vorgeschlagene **BandDomain-Folgeaufträge**. (Deckt EMF-Spielplan/-Vereine, WMC.)
+**Phase C2 – JS-Rendering, Event-Quellen & kaskadierende Crawls (teilweise ✅):** Headless-Browser
+(Playwright) ✅; Quelltyp **Event** mit Rendering ✅; Programm-Extraktion „(Lokal, Datum) → ein Konzert"
+übernimmt das LLM (gruppiert nach Datum+Ort) ✅; **Vereins-Link-Ernte** → inaktive **BandDomain-Folgeaufträge**
+als Vorschlag ✅. **Offen:** **Join** Rangliste-PDF ↔ Spielplan über Vereinsnamen; **Rück-Zuordnung** der im
+zweiten Durchgang gefundenen Stücke ans passende (Lokal,Datum)-Konzert; automatisches Füllen von `Band.Webseite`.
 
 **Phase C4 – Ausbau (optional):** **Ort→Kanton-Anreicherung** für Regionfilter („Innerschweiz");
 Feldfilter-UI (Rang/Kategorie/Land); Discovery-Vorschläge anderer Bands; Verbands-/Verzeichnis-Quellen;

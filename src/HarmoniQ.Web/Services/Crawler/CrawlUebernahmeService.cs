@@ -37,6 +37,12 @@ public static class CrawlUebernahmeService
             case CrawlFundTyp.Komponist:
                 await KomponistUebernehmenAsync(db, datenJson);
                 break;
+            case CrawlFundTyp.Band:
+                await BandUebernehmenAsync(db, fund, datenJson);
+                break;
+            case CrawlFundTyp.Webseite:
+                await WebseiteUebernehmenAsync(db, datenJson);
+                break;
             default:
                 throw new InvalidOperationException(
                     "Funde vom Typ „Sonstiges“ werden manuell bearbeitet, nicht automatisch übernommen.");
@@ -125,6 +131,80 @@ public static class CrawlUebernahmeService
                 VonJahr = d.VonJahr,
                 BisJahr = d.BisJahr
             });
+    }
+
+    private static async Task BandUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)
+    {
+        var d = CrawlDaten.Deserialisiere<BandFundDaten>(datenJson)
+            ?? throw new InvalidOperationException("Band-Daten konnten nicht gelesen werden.");
+        var name = d.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("Bandname fehlt.");
+
+        // Ziel-Band: vorrangig die Quell-Band der Quelle, sonst find-or-create über Name/Alias.
+        Band? band = null;
+        var bandId = await db.CrawlLaeufe.Where(l => l.Id == fund.LaufId)
+            .Select(l => l.Quelle.BandId).FirstOrDefaultAsync();
+        if (bandId is { } bid)
+            band = await db.Bands.Include(b => b.Links).Include(b => b.Aliase).FirstOrDefaultAsync(b => b.Id == bid);
+        band ??= await db.Bands.Include(b => b.Links).Include(b => b.Aliase)
+            .FirstOrDefaultAsync(b => b.Name == name || b.Aliase.Any(a => a.Name == name));
+        if (band == null)
+        {
+            band = new Band { Name = name };
+            db.Bands.Add(band);
+        }
+
+        // Nur leere Felder füllen – kuratierte Daten nicht überschreiben.
+        if (string.IsNullOrWhiteSpace(band.Land)) band.Land = Leer(d.Land) ?? band.Land;
+        if (string.IsNullOrWhiteSpace(band.Webseite)) band.Webseite = Leer(d.Webseite) ?? band.Webseite;
+        if (string.IsNullOrWhiteSpace(band.BildUrl)) band.BildUrl = Leer(d.BildUrl) ?? band.BildUrl;
+        if (string.IsNullOrWhiteSpace(band.Geschichte)) band.Geschichte = Leer(d.Geschichte) ?? band.Geschichte;
+        band.Kategorie ??= d.Kategorie;
+        band.Staerkeklasse ??= d.Staerkeklasse;
+        band.Gruendungsjahr ??= d.Gruendungsjahr;
+
+        // Social-Links (Komfort-Setter; nur setzen, wenn noch leer).
+        if (band.Instagram is null) band.Instagram = Leer(d.Instagram);
+        if (band.Facebook is null) band.Facebook = Leer(d.Facebook);
+        if (band.YouTube is null) band.YouTube = Leer(d.YouTube);
+        if (band.X is null) band.X = Leer(d.X);
+        if (band.Wikipedia is null) band.Wikipedia = Leer(d.Wikipedia);
+        if (band.EMail is null) band.EMail = Leer(d.EMail);
+        if (band.Mobile is null) band.Mobile = Leer(d.Mobile);
+
+        // Aliase ergänzen (inkl. abweichendem Fund-Namen), ohne Dubletten.
+        AliasErgaenzen(band, name);
+        foreach (var a in d.Aliase ?? []) AliasErgaenzen(band, a);
+    }
+
+    private static async Task WebseiteUebernehmenAsync(ApplicationDbContext db, string datenJson)
+    {
+        var d = CrawlDaten.Deserialisiere<WebseiteFundDaten>(datenJson)
+            ?? throw new InvalidOperationException("Webseiten-Daten konnten nicht gelesen werden.");
+        if (string.IsNullOrWhiteSpace(d.Url) || !Uri.TryCreate(d.Url.Trim(), UriKind.Absolute, out var uri))
+            throw new InvalidOperationException("Ungültige Webseiten-URL.");
+
+        var host = uri.Host;
+        // Schon als Quelle vorhanden? dann nichts tun (idempotent).
+        if (await db.CrawlQuellen.AnyAsync(q => q.Domain == host)) return;
+
+        db.CrawlQuellen.Add(new CrawlQuelle
+        {
+            Typ = CrawlQuelleTyp.BandDomain,
+            StartUrl = uri.ToString(),
+            Domain = host,
+            Aktiv = false // Vorschlag – Admin aktiviert und startet den Lauf
+        });
+    }
+
+    private static void AliasErgaenzen(Band band, string? alias)
+    {
+        alias = alias?.Trim();
+        if (string.IsNullOrWhiteSpace(alias)) return;
+        if (string.Equals(alias, band.Name, StringComparison.OrdinalIgnoreCase)) return;
+        if (band.Aliase.Any(a => string.Equals(a.Name, alias, StringComparison.OrdinalIgnoreCase))) return;
+        band.Aliase.Add(new BandAlias { BandId = band.Id, Name = alias });
     }
 
     private static async Task StueckUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)

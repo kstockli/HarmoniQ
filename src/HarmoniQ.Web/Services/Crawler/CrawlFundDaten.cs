@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using HarmoniQ.Web.Data.Models;
 
 namespace HarmoniQ.Web.Services.Crawler;
@@ -14,7 +15,9 @@ public static class CrawlDaten
     /// <summary>Gemeinsame JSON-Optionen (DateOnly wird von System.Text.Json nativ unterstützt).</summary>
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
-        WriteIndented = false
+        WriteIndented = false,
+        // Enums (z. B. BandKategorie/Staerkeklasse) als lesbare Namen statt Zahlen serialisieren.
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public static string Serialisiere<T>(T daten) => JsonSerializer.Serialize(daten, Json);
@@ -84,3 +87,37 @@ public record KomponistFundDaten(
     int? Geburtsjahr = null,
     string? WikipediaUrl = null,
     string? Notiz = null);
+
+/// <summary>
+/// Band-/Vereins-Fund (Typ <see cref="CrawlFundTyp.Band"/>): Stammdaten eines Vereins, meist von dessen
+/// eigener Webseite. Mappt beim Übernehmen auf eine <c>Band</c> (find-or-create über Name/Alias) und füllt
+/// nur leere Felder; <see cref="Aliase"/> und Social-Links werden ergänzt.
+/// </summary>
+public record BandFundDaten(
+    string Name,
+    string? Land = null,
+    string? Webseite = null,
+    string? BildUrl = null,
+    BandKategorie? Kategorie = null,
+    Staerkeklasse? Staerkeklasse = null,
+    int? Gruendungsjahr = null,
+    string? Geschichte = null,
+    string? Instagram = null,
+    string? Facebook = null,
+    string? YouTube = null,
+    string? X = null,
+    string? Wikipedia = null,
+    string? EMail = null,
+    string? Mobile = null,
+    IReadOnlyList<string>? Aliase = null);
+
+/// <summary>
+/// Entdeckte Vereins-Webseite (Typ <see cref="CrawlFundTyp.Webseite"/>) aus der Link-Ernte einer
+/// Event-Seite, mit kleiner Vorschau (Seitentitel/Beschreibung, ohne LLM) zur Entscheidung. Übernahme
+/// legt eine inaktive <c>CrawlQuelle</c> Typ BandDomain (Vorschlag) an.
+/// </summary>
+public record WebseiteFundDaten(
+    string Url,
+    string? VereinName = null,
+    string? Titel = null,
+    string? Beschreibung = null);

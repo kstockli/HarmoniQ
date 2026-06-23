@@ -20,7 +20,8 @@ public record ExtraktionsAnfrage(
     string Text,
     bool IstPdf,
     string? BandName = null,
-    string? Hinweis = null);
+    string? Hinweis = null,
+    string? LogoUrl = null);
 
 /// <summary>Ein vom Extraktor vorgeschlagener Fund (Typ + serialisierter <c>DatenJson</c>-Vertrag).</summary>
 public record ExtrahierterFund(

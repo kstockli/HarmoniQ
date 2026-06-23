@@ -45,6 +45,11 @@ public class CrawlRunner(
             ? await db.Bands.Where(b => b.Id == bid).Select(b => b.Name).FirstOrDefaultAsync(ct)
             : null;
 
+        logger.LogInformation("▶ Crawl-Lauf {LaufId} gestartet: Typ={Typ}, Start={Url}{Band}{Hinweis}",
+            lauf.Id, quelle.Typ, quelle.StartUrl,
+            _bandName != null ? $", Band={_bandName}" : "",
+            string.IsNullOrWhiteSpace(_hinweis) ? "" : $", Hinweis=\"{_hinweis}\"");
+
         try
         {
             if (quelle.Typ == CrawlQuelleTyp.BandDomain)
@@ -54,6 +59,8 @@ public class CrawlRunner(
 
             lauf.Status = CrawlLaufStatus.Fertig;
             lauf.Meldung = $"{lauf.SeitenBesucht} Seiten, {lauf.FundeAnzahl} Funde.";
+            logger.LogInformation("■ Crawl-Lauf {LaufId} fertig: {Seiten} Seiten, {Funde} Funde.",
+                lauf.Id, lauf.SeitenBesucht, lauf.FundeAnzahl);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -95,21 +102,25 @@ public class CrawlRunner(
     private async Task<List<string>> EinzelAbrufAsync(
         CrawlLauf lauf, CrawlQuelle quelle, string url, bool einzelseiteImmerRelevant, CancellationToken ct)
     {
-        var res = await fetch.HoleAsync(url, ct);
+        // Event-Quellen sind i. d. R. SPAs → immer rendern (sofern global aktiv); sonst nach Flag.
+        var rendern = quelle.BrauchtRendering || quelle.Typ == CrawlQuelleTyp.Event;
+        var fundeVorher = lauf.FundeAnzahl;
+        var res = await fetch.HoleAsync(url, rendern, ct);
         lauf.SeitenBesucht++;
 
         if (!res.Erfolg)
         {
             await SeiteMerkenAsync(quelle.Id, url, null, relevant: false, ct);
             await db.SaveChangesAsync(ct);
-            logger.LogDebug("Fetch fehlgeschlagen {Url}: {Fehler}", url, res.Fehler);
+            logger.LogInformation("✗ {Url}: Abruf fehlgeschlagen – {Fehler}", url, res.Fehler);
             return [];
         }
 
         var text = res.IstPdf ? (res.Text ?? "") : CrawlHtmlHelfer.TextBereinigen(res.Text ?? "");
-        var links = res.IstPdf || string.IsNullOrEmpty(res.Text)
-            ? new List<string>()
-            : CrawlHtmlHelfer.InterneLinks(res.Text!, new Uri(url));
+        var istHtml = !res.IstPdf && !string.IsNullOrEmpty(res.Text);
+        var links = istHtml ? CrawlHtmlHelfer.InterneLinks(res.Text!, new Uri(url)) : new List<string>();
+        // Logo-Kandidat aus dem HTML (für Band-Funde) – aus dem Text allein nicht ableitbar.
+        var logo = istHtml ? CrawlHtmlHelfer.LogoUrl(res.Text!, new Uri(url)) : null;
 
         var relevant = einzelseiteImmerRelevant || SeitenFilter.IstRelevant(url, text);
 
@@ -118,7 +129,7 @@ public class CrawlRunner(
         if (relevant && !unveraendert && text.Trim().Length > 0)
         {
             var erg = await extraktion.ExtrahiereAsync(
-                new ExtraktionsAnfrage(quelle.Typ, url, text, res.IstPdf, _bandName, _hinweis), ct);
+                new ExtraktionsAnfrage(quelle.Typ, url, text, res.IstPdf, _bandName, _hinweis, logo), ct);
 
             foreach (var f in erg.Funde)
             {
@@ -154,8 +165,78 @@ public class CrawlRunner(
             }
         }
 
+        logger.LogInformation("• {Url}: {Render}, {Zeichen} Zeichen, relevant={Relevant}, {Funde} neue Funde, {Links} interne Links",
+            url, res.Gerendert ? "gerendert" : "HTTP", text.Length, relevant, lauf.FundeAnzahl - fundeVorher, links.Count);
+
+        // Vereins-Link-Ernte: bei Event-Quellen ausgehende Links zu fremden Domains als
+        // Webseiten-FUNDE (mit Mini-Vorschau) anlegen – der Admin entscheidet je Fund; beim Übernehmen
+        // entsteht eine inaktive BandDomain-Quelle (Vorschlag). Spec §4.1 C2.
+        if (quelle.Typ == CrawlQuelleTyp.Event && istHtml)
+            await VereinsLinksErntenAsync(lauf, res.Text!, url, ct);
+
         await db.SaveChangesAsync(ct);
         return links;
+    }
+
+    /// <summary>Erntet fremde Domains einer Event-Seite, lädt je eine kleine Vorschau (Titel/Beschreibung,
+    /// ohne LLM, parallel) und legt je neue Domain einen <see cref="CrawlFundTyp.Webseite"/>-Fund an.
+    /// Schon bekannte Domains (bestehende Quellen) werden übersprungen.</summary>
+    private async Task VereinsLinksErntenAsync(CrawlLauf lauf, string html, string url, CancellationToken ct)
+    {
+        const int maxVorschlaege = 500;
+        var externe = CrawlHtmlHelfer.ExterneLinks(html, new Uri(url));
+        if (externe.Count > maxVorschlaege)
+            logger.LogWarning("Event {Url}: {Total} fremde Domains, max. {Max} werden als Fund angelegt.",
+                url, externe.Count, maxVorschlaege);
+        externe = externe.Take(maxVorschlaege).ToList();
+
+        // Domains, die der Crawler schon als Quelle kennt, überspringen.
+        var bekannt = (await db.CrawlQuellen.Where(q => q.Domain != null).Select(q => q.Domain!).ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ziele = externe.Where(l => !bekannt.Contains(new Uri(l).Host)).ToList();
+        logger.LogInformation("Vereins-Link-Ernte {Url}: {Gesamt} fremde Domains, {Bekannt} bereits als Quelle " +
+            "(übersprungen), {Neu} neu → lade Vorschauen …", url, externe.Count, externe.Count - ziele.Count, ziele.Count);
+        if (ziele.Count == 0)
+        {
+            logger.LogInformation("Keine neuen Domains. Tipp: alte Quellen-Vorschläge löschen, dann werden sie " +
+                "als Funde neu aufbereitet.");
+            return;
+        }
+
+        // Vorschau parallel laden (verschiedene Domains; DB-frei – EF ist nicht thread-safe).
+        var drossel = new SemaphoreSlim(8);
+        var previews = await Task.WhenAll(ziele.Select(async link =>
+        {
+            await drossel.WaitAsync(ct);
+            try
+            {
+                var host = new Uri(link).Host;
+                var r = await fetch.HoleAsync(link, false, ct);
+                string? titel = null, besch = null;
+                if (r.Erfolg && !string.IsNullOrEmpty(r.Text))
+                    (titel, besch) = CrawlHtmlHelfer.SeitenInfo(r.Text!);
+                return new WebseiteFundDaten(link, titel ?? host, titel, besch);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch { return new WebseiteFundDaten(link, new Uri(link).Host); }
+            finally { drossel.Release(); }
+        }));
+
+        // Funde sequenziell schreiben (ein DbContext).
+        foreach (var p in previews)
+        {
+            db.CrawlFunde.Add(new CrawlFund
+            {
+                LaufId = lauf.Id,
+                Typ = CrawlFundTyp.Webseite,
+                QuellUrl = p.Url,
+                AbgerufenAm = DateTime.UtcNow,
+                DatenJson = CrawlDaten.Serialisiere(p),
+                Status = CrawlFundStatus.Offen
+            });
+            lauf.FundeAnzahl++;
+        }
+        logger.LogInformation("{Count} Webseiten-Funde (Vereins-Vorschläge) aus {Url} angelegt.", previews.Length, url);
     }
 
     /// <summary>Legt die CrawlSeite an oder aktualisiert sie. Gibt true zurück, wenn der Inhalt
@@ -213,6 +294,17 @@ public class CrawlRunner(
                 var score = (d.Biografie != null ? 1 : 0) + (d.Geburtsjahr != null ? 1 : 0)
                           + (d.WikipediaUrl != null ? 1 : 0) + (d.BildUrl != null ? 1 : 0);
                 return ($"C|{Norm(d.Name)}", score);
+            }
+            case CrawlFundTyp.Band:
+            {
+                var d = CrawlDaten.Deserialisiere<BandFundDaten>(f.DatenJson);
+                if (d == null || string.IsNullOrWhiteSpace(d.Name)) return (null, 0);
+                var score = (d.Land != null ? 1 : 0) + (d.Webseite != null ? 1 : 0)
+                          + (d.BildUrl != null ? 1 : 0)
+                          + (d.Kategorie != null ? 1 : 0) + (d.Staerkeklasse != null ? 1 : 0)
+                          + (d.Gruendungsjahr != null ? 1 : 0) + (d.Geschichte != null ? 1 : 0)
+                          + (d.Aliase?.Count ?? 0);
+                return ($"B|{Norm(d.Name)}", score);
             }
             default:
                 return (null, 0);

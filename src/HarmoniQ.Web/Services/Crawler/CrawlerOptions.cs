@@ -25,6 +25,10 @@ public class CrawlerOptions
     /// <summary>robots.txt respektieren. Nur zu Testzwecken abschaltbar.</summary>
     public bool RobotsBeachten { get; set; } = true;
 
+    /// <summary>JS-Rendering (Playwright/Chromium) erlauben – nur wirksam für Quellen mit
+    /// <c>BrauchtRendering=true</c>. Default aus: Prod braucht installierte Browser (siehe DEPLOY.md).</summary>
+    public bool RenderingAktiv { get; set; } = false;
+
     /// <summary>LLM-Extraktion (anbieter-neutral). Ohne konfigurierten Anbieter läuft der Stub.</summary>
     public LlmOptions Llm { get; set; } = new();
 }

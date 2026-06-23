@@ -30,6 +30,9 @@ builder.Services.AddHttpClient<WebseitenScraper>(c =>
 // Crawler / Import-Roboter (Spezifikation-Crawler.md). Optionen aus appsettings „Crawler“;
 // Fetch-Stufe (HTML + PDF, robots.txt, Rate-Limit) als typisierter HttpClient.
 builder.Services.Configure<CrawlerOptions>(builder.Configuration.GetSection(CrawlerOptions.Section));
+// JS-Rendering (Playwright) als Singleton – Browser wird lazy gestartet, bei Nichtverfügbarkeit
+// fällt der Fetch automatisch auf HTTP zurück. Nur wirksam bei Crawler:RenderingAktiv=true.
+builder.Services.AddSingleton<ISeitenRenderer, PlaywrightRenderer>();
 builder.Services.AddHttpClient<CrawlFetchService>();
 // Extraktor: Mistral „La Plateforme", wenn konfiguriert (Crawler:Llm:Provider=mistral + ApiKey);
 // sonst Stub (manuelle Erfassung im Review).
@@ -198,6 +201,8 @@ using (var scope = app.Services.CreateScope())
     await DbSeeder.SeedAsync(db);
 
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    logger.LogInformation("Crawler JS-Rendering: {Status} (Crawler:RenderingAktiv).",
+        app.Configuration.GetValue<bool>("Crawler:RenderingAktiv") ? "AKTIV" : "inaktiv");
     await AdminInitializer.EnsureAdminsAsync(scope.ServiceProvider, app.Configuration, logger);
     // Aktivitäts-Feed einmalig aus Bestandsdaten befüllen (nur wenn leer).
     await AktivitaetBackfill.RunAsync(db);

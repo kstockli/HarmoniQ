@@ -30,6 +30,8 @@
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Leitung)">Leitung</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Stueck)">Stück</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Komponist)">Komponist</MudSelectItem>
+        <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Band)">Verein/Band</MudSelectItem>
+        <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Webseite)">Webseiten-Vorschlag</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Sonstiges)">Sonstiges</MudSelectItem>
     </MudSelect>
     <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#3a1060;" OnClick="Laden">Filtern</MudButton>
@@ -195,6 +197,38 @@ else
                         fe.FriendlyTitel = $"Komponist:in: {c.Name}";
                         if (c.Geburtsjahr is { } g) fe.FriendlySub = $"* {g}";
                         if (!string.IsNullOrWhiteSpace(c.Biografie)) fe.FriendlyZeilen = [c.Biografie!];
+                    }
+                    break;
+                case CrawlFundTyp.Band:
+                    var b = CrawlDaten.Deserialisiere<BandFundDaten>(fe.Json);
+                    if (b != null)
+                    {
+                        fe.FriendlyTitel = $"Verein: {b.Name}";
+                        var t = new List<string>();
+                        if (b.Kategorie is { } kat) t.Add(kat.ToString());
+                        if (b.Staerkeklasse is { } sk) t.Add(sk.ToString());
+                        if (b.Gruendungsjahr is { } gj) t.Add($"gegr. {gj}");
+                        if (!string.IsNullOrWhiteSpace(b.Land)) t.Add(b.Land!);
+                        fe.FriendlySub = string.Join(" · ", t);
+                        var z = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(b.Webseite)) z.Add($"Web: {b.Webseite}");
+                        if (b.Aliase is { Count: > 0 }) z.Add("auch: " + string.Join(", ", b.Aliase));
+                        if (!string.IsNullOrWhiteSpace(b.Geschichte))
+                            z.Add(b.Geschichte!.Length > 200 ? b.Geschichte![..200] + "…" : b.Geschichte!);
+                        fe.FriendlyZeilen = z;
+                    }
+                    break;
+                case CrawlFundTyp.Webseite:
+                    var w = CrawlDaten.Deserialisiere<WebseiteFundDaten>(fe.Json);
+                    if (w != null)
+                    {
+                        fe.FriendlyTitel = $"Webseite: {w.VereinName ?? w.Url}";
+                        fe.FriendlySub = w.Titel;
+                        var z = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(w.Beschreibung))
+                            z.Add(w.Beschreibung!.Length > 200 ? w.Beschreibung![..200] + "…" : w.Beschreibung!);
+                        z.Add(w.Url);
+                        fe.FriendlyZeilen = z;
                     }
                     break;
             }

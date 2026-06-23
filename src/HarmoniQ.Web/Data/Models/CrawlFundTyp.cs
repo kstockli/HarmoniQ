@@ -15,6 +15,14 @@ public enum CrawlFundTyp
     /// <summary>Komponist:in zum Anlegen/Anreichern (z. B. Wikipedia: Bio/Bild/Geburtsjahr) → Person.</summary>
     Komponist = 3,
 
+    /// <summary>Vereins-/Band-Stammdaten (Name, Aliase, Kategorie, Stärkeklasse, Gründungsjahr,
+    /// Geschichte, Links) – meist von der eigenen Vereinsseite → Band (find-or-create, leere Felder füllen).</summary>
+    Band = 4,
+
+    /// <summary>Entdeckte Vereins-Webseite (aus der Link-Ernte einer Event-Seite) mit Mini-Vorschau.
+    /// Übernahme legt eine inaktive BandDomain-Quelle (Vorschlag) an.</summary>
+    Webseite = 5,
+
     /// <summary>Sonstiger Fund (z. B. Webseiten-Vorschlag, noch nicht zugeordnet).</summary>
     Sonstiges = 99
 }
