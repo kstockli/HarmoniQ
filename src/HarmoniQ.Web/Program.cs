@@ -34,6 +34,13 @@ builder.Services.Configure<CrawlerOptions>(builder.Configuration.GetSection(Craw
 // fällt der Fetch automatisch auf HTTP zurück. Nur wirksam bei Crawler:RenderingAktiv=true.
 builder.Services.AddSingleton<ISeitenRenderer, PlaywrightRenderer>();
 builder.Services.AddHttpClient<CrawlFetchService>();
+// Wikipedia-Anreicherung (kein Key; Wikipedia verlangt einen erkennbaren User-Agent).
+builder.Services.AddHttpClient<WikipediaService>(c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd(
+        builder.Configuration["Crawler:UserAgent"] ?? "HarmoniQBot/1.0 (+https://harmoniq.q-no.ch)");
+    c.Timeout = TimeSpan.FromSeconds(20);
+});
 // Extraktor: Mistral „La Plateforme", wenn konfiguriert (Crawler:Llm:Provider=mistral + ApiKey);
 // sonst Stub (manuelle Erfassung im Review).
 var llmProvider = builder.Configuration["Crawler:Llm:Provider"];

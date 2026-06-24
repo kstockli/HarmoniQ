@@ -10,8 +10,9 @@ public class CrawlFund
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid LaufId { get; set; }
-    public CrawlLauf Lauf { get; set; } = null!;
+    /// <summary>Zugehöriger Crawl-Lauf; <c>null</c> bei Funden ohne Lauf (z. B. Wikipedia-Anreicherung).</summary>
+    public Guid? LaufId { get; set; }
+    public CrawlLauf? Lauf { get; set; }
 
     public CrawlFundTyp Typ { get; set; } = CrawlFundTyp.Konzert;
 

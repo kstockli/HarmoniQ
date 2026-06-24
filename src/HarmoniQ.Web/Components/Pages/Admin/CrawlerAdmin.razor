@@ -8,6 +8,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject CrawlLaufQueue Queue
 @inject IDialogService DialogService
+@inject WikipediaService Wiki
 @inject ISnackbar Snackbar
 
 <PageTitle>Crawler – Admin</PageTitle>
@@ -19,6 +20,9 @@
     <MudSpacer />
     <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/crawler/funde"
                StartIcon="@Icons.Material.Filled.Inventory2">Funde-Review</MudButton>
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" StartIcon="@Icons.Material.Filled.AutoStories"
+               OnClick="KomponistenAnreichern" Disabled="_anreicherungLaeuft">
+        @(_anreicherungLaeuft ? "Lädt …" : "Wikipedia-Anreicherung")</MudButton>
     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Style="color:#D4AF37;" OnClick="Laden" title="Aktualisieren" />
 </MudStack>
 
@@ -270,6 +274,66 @@ else
         if (e != null) { e.Aktiv = aktiv; await db.SaveChangesAsync(); }
         Snackbar.Add(aktiv ? "Quelle aktiviert." : "Quelle deaktiviert.", Severity.Success);
         await Laden();
+    }
+
+    private bool _anreicherungLaeuft;
+
+    private async Task KomponistenAnreichern()
+    {
+        _anreicherungLaeuft = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            // Komponist:innen ohne Biografie, die noch keinen offenen Komponist-Fund haben.
+            var offeneNamen = (await db.CrawlFunde
+                    .Where(f => f.Status == CrawlFundStatus.Offen && f.Typ == CrawlFundTyp.Komponist)
+                    .Select(f => f.DatenJson).ToListAsync())
+                .Select(j => CrawlDaten.Deserialisiere<KomponistFundDaten>(j)?.Name)
+                .Where(n => n != null).Select(n => n!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var komponisten = (await db.Personen
+                    .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist)
+                                && (p.Biografie == null || p.Biografie == ""))
+                    .OrderBy(p => p.Name).Take(50).ToListAsync())
+                .Where(p => !offeneNamen.Contains(p.Name)).ToList();
+
+            if (komponisten.Count == 0)
+            {
+                Snackbar.Add("Keine Komponist:innen ohne Biografie offen (oder bereits als Vorschlag).", Severity.Info);
+                return;
+            }
+
+            var drossel = new SemaphoreSlim(5);
+            var treffer = await Task.WhenAll(komponisten.Select(async p =>
+            {
+                await drossel.WaitAsync();
+                try { return (Person: p, Erg: await Wiki.AnreichernAsync(p.Name)); }
+                finally { drossel.Release(); }
+            }));
+
+            var neu = 0;
+            foreach (var (p, e) in treffer)
+            {
+                if (e is null) continue;
+                var daten = new KomponistFundDaten(p.Name, e.Biografie, e.BildUrl, e.Geburtsjahr, e.Url);
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    Typ = CrawlFundTyp.Komponist,
+                    QuellUrl = e.Url ?? "https://de.wikipedia.org",
+                    DatenJson = CrawlDaten.Serialisiere(daten),
+                    DublettHinweis = $"Wikipedia-Anreicherung für bestehende Person \"{p.Name}\"",
+                    Konfidenz = Konfidenz.Mittel,
+                    Status = CrawlFundStatus.Offen
+                });
+                neu++;
+            }
+            await db.SaveChangesAsync();
+            Snackbar.Add($"{neu} Wikipedia-Vorschläge erstellt (von {komponisten.Count} geprüft) → Funde, Typ \"Komponist\".",
+                neu > 0 ? Severity.Success : Severity.Info);
+        }
+        finally { _anreicherungLaeuft = false; }
     }
 
     private async Task VorschlaegeLoeschen()

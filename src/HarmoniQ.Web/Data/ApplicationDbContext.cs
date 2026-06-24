@@ -295,8 +295,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<CrawlFund>(e =>
         {
+            // LaufId optional (Anreicherungs-Funde haben keinen Lauf); Lauf-Löschung kaskadiert auf seine Funde.
             e.HasOne(f => f.Lauf).WithMany(l => l.Funde)
-                .HasForeignKey(f => f.LaufId).OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(f => f.LaufId).OnDelete(DeleteBehavior.Cascade).IsRequired(false);
             e.HasIndex(f => f.Status);
             e.HasIndex(f => f.Typ);
         });

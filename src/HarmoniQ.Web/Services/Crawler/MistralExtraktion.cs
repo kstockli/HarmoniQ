@@ -79,9 +79,35 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     public async Task<ExtraktionsErgebnis> ExtrahiereAsync(ExtraktionsAnfrage anfrage, CancellationToken ct = default)
     {
-        var text = anfrage.Text.Length > MaxTextZeichen ? anfrage.Text[..MaxTextZeichen] : anfrage.Text;
-        if (string.IsNullOrWhiteSpace(text)) return ExtraktionsErgebnis.Leer();
+        if (string.IsNullOrWhiteSpace(anfrage.Text)) return ExtraktionsErgebnis.Leer();
 
+        // Große Seiten in überlappende Abschnitte teilen und je Abschnitt das LLM aufrufen,
+        // statt nach MaxTextZeichen abzuschneiden. Die Teil-Antworten werden anschließend zusammengeführt.
+        var chunks = Teile(anfrage.Text, MaxTextZeichen, ChunkUeberlappung, MaxChunks);
+        if (chunks.Count >= MaxChunks && anfrage.Text.Length > AbgedeckteLaenge(MaxChunks))
+            logger.LogWarning("Inhalt {Url}: {Len} Zeichen, nur ~{Abged} in {Max} Abschnitten extrahiert – Rest verworfen.",
+                anfrage.QuellUrl, anfrage.Text.Length, AbgedeckteLaenge(MaxChunks), MaxChunks);
+        if (chunks.Count > 1)
+            logger.LogInformation("Großer Inhalt {Url}: {Len} Zeichen → {Chunks} LLM-Abschnitte.",
+                anfrage.QuellUrl, anfrage.Text.Length, chunks.Count);
+
+        var antworten = new List<MistralAntwort>();
+        string? fehler = null;
+        foreach (var chunk in chunks)
+        {
+            ct.ThrowIfCancellationRequested();
+            var (a, err) = await EinChunkAsync(chunk, anfrage, ct);
+            if (a != null) antworten.Add(a);
+            else fehler ??= err;
+        }
+        if (antworten.Count == 0) return new ExtraktionsErgebnis([], fehler ?? "Keine LLM-Antwort.");
+        return new ExtraktionsErgebnis(AlsFunde(Zusammenfuehren(antworten), anfrage).ToList());
+    }
+
+    /// <summary>Ein LLM-Aufruf für einen Textabschnitt. Liefert (Antwort, Fehlertext).</summary>
+    private async Task<(MistralAntwort? Antwort, string? Fehler)> EinChunkAsync(
+        string text, ExtraktionsAnfrage anfrage, CancellationToken ct)
+    {
         var kontext = new System.Text.StringBuilder();
         kontext.Append($"Quelle: {anfrage.QuellUrl} (Typ: {anfrage.QuelleTyp}).");
         if (anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain && !string.IsNullOrWhiteSpace(anfrage.BandName))
@@ -120,28 +146,73 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
             {
                 var fehlertext = await resp.Content.ReadAsStringAsync(ct);
                 logger.LogWarning("Mistral HTTP {Code}: {Body}", (int)resp.StatusCode, Kurz(fehlertext));
-                return new ExtraktionsErgebnis([], $"Mistral HTTP {(int)resp.StatusCode}");
+                return (null, $"Mistral HTTP {(int)resp.StatusCode}");
             }
 
             var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
             var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
-            if (string.IsNullOrWhiteSpace(inhalt)) return ExtraktionsErgebnis.Leer("Leere LLM-Antwort.");
+            if (string.IsNullOrWhiteSpace(inhalt)) return (null, "Leere LLM-Antwort.");
 
             if (_llm.LogCalls)
                 logger.LogInformation("Mistral-RESULT [{Url}]:\n{Content}", anfrage.QuellUrl, inhalt);
 
             var antwort = JsonSerializer.Deserialize<MistralAntwort>(inhalt, MistralJson);
-            if (antwort == null) return ExtraktionsErgebnis.Leer("LLM-Antwort nicht lesbar.");
-
-            return new ExtraktionsErgebnis(AlsFunde(antwort, anfrage).ToList());
+            return antwort == null ? (null, "LLM-Antwort nicht lesbar.") : (antwort, null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Mistral-Extraktion fehlgeschlagen für {Url}", anfrage.QuellUrl);
-            return new ExtraktionsErgebnis([], ex.Message);
+            return (null, ex.Message);
         }
     }
+
+    // ── Chunking großer Seiten + Zusammenführung der Teil-Antworten ──────────
+    private const int ChunkUeberlappung = 1500;
+    private const int MaxChunks = 8;
+
+    private static int AbgedeckteLaenge(int chunks) =>
+        MaxTextZeichen + (chunks - 1) * (MaxTextZeichen - ChunkUeberlappung);
+
+    private static List<string> Teile(string text, int size, int overlap, int max)
+    {
+        if (text.Length <= size) return [text];
+        var list = new List<string>();
+        var pos = 0;
+        while (pos < text.Length && list.Count < max)
+        {
+            var len = Math.Min(size, text.Length - pos);
+            list.Add(text.Substring(pos, len));
+            if (pos + len >= text.Length) break;
+            pos += size - overlap;
+        }
+        return list;
+    }
+
+    /// <summary>Führt Teil-Antworten zusammen: Konzerte gleicher Identität (Datum/Name/Ort) werden zu
+    /// EINEM Konzert verschmolzen (Programmzeilen vereinigt + dedupliziert, sonst ginge beim Runner-Dedup
+    /// die Hälfte verloren). Übrige Listen werden konkateniert (Dubletten erledigt der Runner-Dedup).</summary>
+    private static MistralAntwort Zusammenfuehren(List<MistralAntwort> teile)
+    {
+        var konzerte = teile.SelectMany(t => t.Konzerte ?? Enumerable.Empty<KonzertDto>())
+            .GroupBy(k => (k.Datum, NormKey(k.Name), NormKey(k.Ort)))
+            .Select(g =>
+            {
+                var programm = g.SelectMany(k => k.Programm ?? Enumerable.Empty<ProgrammDto>())
+                    .GroupBy(p => (NormKey(p.StueckTitel), NormKey(p.BandName)))
+                    .Select(pg => pg.First()).ToList();
+                return g.First() with { Programm = programm };
+            }).ToList();
+
+        return new MistralAntwort(
+            konzerte,
+            teile.SelectMany(t => t.Leitungen ?? Enumerable.Empty<LeitungDto>()).ToList(),
+            teile.SelectMany(t => t.Stuecke ?? Enumerable.Empty<StueckDto>()).ToList(),
+            teile.SelectMany(t => t.Komponisten ?? Enumerable.Empty<KomponistDto>()).ToList(),
+            teile.Select(t => t.Verein).FirstOrDefault(v => v != null));
+    }
+
+    private static string NormKey(string? s) => (s ?? "").Trim().ToLowerInvariant();
 
     private static IEnumerable<ExtrahierterFund> AlsFunde(MistralAntwort a, ExtraktionsAnfrage anfrage)
     {

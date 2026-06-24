@@ -34,6 +34,9 @@
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Webseite)">Webseiten-Vorschlag</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Sonstiges)">Sonstiges</MudSelectItem>
     </MudSelect>
+    <MudTextField @bind-Value="_suche" Label="Suche (Name/Ort/URL …)" Variant="Variant.Outlined"
+                  Margin="Margin.Dense" Clearable="true" Style="max-width:240px;"
+                  Immediate="false" OnKeyDown="@(e => { if (e.Key == "Enter") _ = Laden(); })" />
     <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#3a1060;" OnClick="Laden">Filtern</MudButton>
     @if (_laufId is not null)
     {
@@ -42,6 +45,8 @@
         </MudChip>
     }
     <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.LibraryAddCheck" OnClick="AlleUebernehmen">Alle angezeigten übernehmen</MudButton>
     <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
                StartIcon="@Icons.Material.Filled.DoneAll" OnClick="AlleVerwerfen">Alle offenen verwerfen</MudButton>
     <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
@@ -121,6 +126,7 @@ else
 
     private CrawlFundStatus? _status = CrawlFundStatus.Offen;
     private CrawlFundTyp? _typ;
+    private string? _suche;
     private List<FundEdit> _funde = [];
 
     protected override async Task OnInitializedAsync() => await Laden();
@@ -132,6 +138,11 @@ else
         if (_laufId is not null) q = q.Where(f => f.LaufId == _laufId);
         if (_status is not null) q = q.Where(f => f.Status == _status);
         if (_typ is not null) q = q.Where(f => f.Typ == _typ);
+        if (!string.IsNullOrWhiteSpace(_suche))
+        {
+            var s = $"%{_suche.Trim()}%";
+            q = q.Where(f => EF.Functions.ILike(f.DatenJson, s) || EF.Functions.ILike(f.QuellUrl, s));
+        }
 
         _funde = await q.OrderByDescending(f => f.AbgerufenAm).Take(200)
             .Select(f => new FundEdit
@@ -277,6 +288,31 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         await CrawlUebernahmeService.VerwerfenAsync(db, f.Id);
         Snackbar.Add("Verworfen.", Severity.Info);
+        await Laden();
+    }
+
+    private async Task AlleUebernehmen()
+    {
+        var offene = _funde.Where(f => f.Status == CrawlFundStatus.Offen).ToList();
+        if (offene.Count == 0) { Snackbar.Add("Keine offenen Funde im aktuellen Filter.", Severity.Info); return; }
+
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"{offene.Count} angezeigte, offene Funde übernehmen? (Find-or-create; bei Webseiten entstehen Quellen-Vorschläge.)" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Übernehmen bestätigen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        int ok = 0, fehler = 0;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        foreach (var f in offene)
+        {
+            try { await CrawlUebernahmeService.UebernehmenAsync(db, f.Id, f.Json); ok++; }
+            catch { fehler++; }
+        }
+        Snackbar.Add($"{ok} übernommen{(fehler > 0 ? $", {fehler} mit Fehler (z. B. fehlendes Datum)" : "")}.",
+            fehler > 0 ? Severity.Warning : Severity.Success);
         await Laden();
     }
 
