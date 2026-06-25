@@ -138,26 +138,20 @@ public static class KonzertErfassungService
 
             if (!stueckCache.TryGetValue(titel, out var stueck))
             {
-                stueck = await db.Stuecke.FirstOrDefaultAsync(x => x.Titel == titel)
+                stueck = await db.Stuecke.FirstOrDefaultAsync(x => x.Titel == titel || x.Aliase.Any(a => a.Name == titel))
                     ?? db.Stuecke.Local.FirstOrDefault(x => string.Equals(x.Titel, titel, StringComparison.OrdinalIgnoreCase));
                 if (stueck == null)
                 {
                     stueck = new Stueck { Titel = titel };
                     db.Stuecke.Add(stueck);
-                    if (!string.IsNullOrWhiteSpace(row.KomponistName))
+                    // Komponist:in-/Arrangeur:in-Feld zerlegen: mehrere Namen trennen + Arr.-Marker
+                    // erkennen (→ Rolle Arrangeur). Personen-Rolle bleibt Komponist:in (Sichtbarkeit).
+                    foreach (var beitrag in KomponistParser.Parse(row.KomponistName, row.ArrangeurName))
                     {
-                        var komponist = await PersonHolen(row.KomponistName!, PersonRolleTyp.Komponist);
+                        var person = await PersonHolen(beitrag.Name, PersonRolleTyp.Komponist);
                         db.StueckBeitraege.Add(new StueckBeitrag
                         {
-                            Stueck = stueck, Person = komponist, Rolle = StueckRolle.Komponist
-                        });
-                    }
-                    if (!string.IsNullOrWhiteSpace(row.ArrangeurName))
-                    {
-                        var arrangeur = await PersonHolen(row.ArrangeurName!, PersonRolleTyp.Komponist);
-                        db.StueckBeitraege.Add(new StueckBeitrag
-                        {
-                            Stueck = stueck, Person = arrangeur, Rolle = StueckRolle.Arrangeur
+                            Stueck = stueck, Person = person, Rolle = beitrag.Rolle
                         });
                     }
                 }

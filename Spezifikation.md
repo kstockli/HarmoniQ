@@ -293,8 +293,20 @@ Stück                               (kein KomponistId mehr → über StückBeit
 ├── Besetzung (string?)            ← z. B. "Blasorchester"
 ├── Beschreibung (string?)
 ├── OriginalUrl (string?)          ← Quell-URL beim Import
+├── Aliase [1:n] → StückAlias      — NEU: alternative Titel
 ├── Beiträge [1:n] → StückBeitrag  ← Komponist:in / Arrangeur:in / Bearbeiter:in
 └── Videos [1:n]
+
+StückAlias                          (NEU – alternativer Titel eines Stücks, analog BandAlias)
+├── Id (Guid) · StückId (FK) · Name (string)
+└── UNIQUE (StückId, Name)
+> Beispiele: „Lord Tullamore" ↔ „Lord Tullamore March". Wird beim Find-or-create (Import/Crawler) und
+> beim **Merge** zur Erkennung desselben Stücks genutzt.
+
+> **Stück zusammenführen (Merge):** `StueckMergeService` schmilzt ein Quell-Stück in ein Ziel-Stück:
+> Programm-Punkte (KonzertStueck), Beiträge (StückBeitrag) und Videos werden umgehängt (dublettenfrei);
+> der Quell-Titel + seine Aliase bleiben als `StückAlias` des Ziels erhalten; das Quell-Stück wird gelöscht.
+> Bedienung im Stück-Admin („Zusammenführen").
 
 StückBeitrag                        (wer hat zum Stück beigetragen – mehrere möglich)
 ├── Id (Guid)

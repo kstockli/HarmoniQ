@@ -23,6 +23,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PersonRolle> PersonRollen => Set<PersonRolle>();
     public DbSet<PersonLink> PersonLinks => Set<PersonLink>();
     public DbSet<StueckBeitrag> StueckBeitraege => Set<StueckBeitrag>();
+    public DbSet<StueckAlias> StueckAliase => Set<StueckAlias>();
     public DbSet<Instrument> Instrumente => Set<Instrument>();
     public DbSet<Stimme> Stimmen => Set<Stimme>();
     public DbSet<PersonInstrument> PersonInstrumente => Set<PersonInstrument>();
@@ -126,6 +127,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             // bereits getrackte Person gehängten Link für „existierend" → UPDATE statt INSERT →
             // „0 rows affected"-Concurrency-Fehler beim Speichern.
             e.Property(l => l.Id).ValueGeneratedNever();
+        });
+
+        // Stück-Aliase (alternative Titel) – analog BandAlias.
+        builder.Entity<StueckAlias>(e =>
+        {
+            e.HasOne(a => a.Stueck).WithMany(s => s.Aliase)
+                .HasForeignKey(a => a.StueckId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(a => new { a.StueckId, a.Name }).IsUnique();
+            // Clientseitiger Guid-Key → ValueGeneratedNever (siehe BandAlias/BandLink): sonst hält EF
+            // einen via Navigation angehängten Alias für „existierend" → „0 rows affected".
+            e.Property(a => a.Id).ValueGeneratedNever();
         });
 
         builder.Entity<StueckBeitrag>(e =>

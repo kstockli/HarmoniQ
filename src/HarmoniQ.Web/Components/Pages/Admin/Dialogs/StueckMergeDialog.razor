@@ -1,0 +1,53 @@
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            „<b>@QuelleName</b>" wird in das gewählte Stück <b>hineingeschmolzen</b>: alle Programm-Punkte,
+            Beiträge (Komponist:in/Arrangeur:in) und Videos werden übernommen (ohne Dubletten), der Titel
+            bleibt als Alias erhalten, danach wird „@QuelleName" gelöscht. <b>Nicht umkehrbar.</b>
+        </MudAlert>
+        <MudAutocomplete T="StueckRef" Label="Ziel-Stück" Variant="Variant.Outlined" Required="true"
+                         Value="_ziel" ValueChanged="@(v => _ziel = v)" SearchFunc="Suche"
+                         ToStringFunc="@(s => s?.Titel ?? "")" MaxItems="30" ResetValueOnEmptyText="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   OnClick="Bestaetigen" Disabled="@(_ziel is null)">Zusammenführen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid QuelleId { get; set; }
+    [Parameter] public string QuelleName { get; set; } = "";
+
+    private StueckRef? _ziel;
+    private List<StueckRef> _stuecke = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _stuecke = await db.Stuecke.Where(s => s.Id != QuelleId).OrderBy(s => s.Titel)
+            .Select(s => new StueckRef(s.Id, s.Titel)).ToListAsync();
+    }
+
+    private Task<IEnumerable<StueckRef>> Suche(string? v, CancellationToken ct)
+    {
+        IEnumerable<StueckRef> r = string.IsNullOrWhiteSpace(v)
+            ? _stuecke : _stuecke.Where(s => s.Titel.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(30));
+    }
+
+    private void Bestaetigen()
+    {
+        if (_ziel is null) return;
+        MudDialog.Close(DialogResult.Ok(_ziel.Id));
+    }
+
+    public record StueckRef(Guid Id, string Titel);
+}

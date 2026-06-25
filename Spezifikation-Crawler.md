@@ -19,8 +19,10 @@
   `/admin/crawler/funde` (lesbare Aufbereitung je Fund-Typ, JSON einblendbar/editierbar, Übernehmen/Verwerfen,
   Massen-Aktionen). Crawler-Link im Admin-Menü über dem Import-Assistenten.
 - Übernahme-Pfade (Find-or-create): Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft`;
-  Stück → `Stueck` + `StueckBeitrag`; Komponist:in → `Person`; **Verein → `Band`** (Name/Alias-Abgleich,
-  leere Felder füllen, Aliase + Social-Links ergänzen).
+  Stück → `Stueck` (Titel-/Alias-Abgleich) + `StueckBeitrag`; Komponist:in → `Person`;
+  **Verein → `Band`** (Name/Alias-Abgleich, leere Felder füllen, Aliase + Social-Links ergänzen).
+  Stücke/Bands lassen sich im Admin **zusammenführen** (Merge), wenn derselbe Eintrag unter
+  verschiedenen Namen entstanden ist – alle Referenzen werden umgehängt, der Quell-Name bleibt als Alias.
 
 **Entscheide:**
 - **LLM-Anbieter: Mistral „La Plateforme", Modell `mistral-large-latest`** (Interface bleibt anbieter-neutral).
@@ -28,6 +30,11 @@
 - **Heuristik wurde als *Fund-Produzent* verworfen** (zu fragil); sie dient nur noch als billiger **Seiten-Filter**
   (Keyword-Triage vor dem LLM). Die LLM-Extraktion (ursprünglich C3) wurde **vorgezogen**.
 - **Arrangeur:in** wird getrennt von Komponist:in extrahiert (eigener `StueckBeitrag` mit `StueckRolle.Arrangeur`).
+  Zusätzlich zerlegt der `KomponistParser` beim Übernehmen jedes Komponist-/Arrangeur-Feld deterministisch:
+  mehrere Namen werden getrennt (Komma, „&", „und", „/", „;", „+") und Arrangeur-Marker erkannt
+  („Arr."/„arr."/„Arrangeur"/„Bearb."/„arranged by"/„orch." …) → diese Namen erhalten die Rolle Arrangeur
+  (Marker wirkt „klebrig" für nachfolgende Namen). Beispiel: „Arr. Filip Ceunen, Michael Story" → zwei
+  Arrangeur-Beiträge. Greift in `KonzertErfassungService` (Programm) und `CrawlUebernahmeService` (Stück-Fund).
 - **Diagnose:** LLM-Calls/Antworten optional protokollierbar (`Crawler:Llm:LogCalls`).
 
 **C2 (teilweise umgesetzt):** JS-Rendering via Playwright/Chromium (`ISeitenRenderer`/`PlaywrightRenderer`,

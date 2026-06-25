@@ -297,8 +297,9 @@ public static class CrawlUebernahmeService
         if (string.IsNullOrWhiteSpace(titel))
             throw new InvalidOperationException("Stück-Titel fehlt.");
 
-        // Find-or-create Stück (Abgleich über Titel, normalisiert).
-        var stueck = await db.Stuecke.FirstOrDefaultAsync(s => s.Titel == titel);
+        // Find-or-create Stück (Abgleich über Titel oder Alias).
+        var stueck = await db.Stuecke.Include(s => s.Aliase)
+            .FirstOrDefaultAsync(s => s.Titel == titel || s.Aliase.Any(a => a.Name == titel));
         if (stueck == null)
         {
             stueck = new Stueck
@@ -313,17 +314,17 @@ public static class CrawlUebernahmeService
             db.Stuecke.Add(stueck);
         }
 
-        // Optional Komponist:in als StückBeitrag (find-or-create Person, keine Dublette).
-        var kname = d.KomponistName?.Trim();
-        if (!string.IsNullOrWhiteSpace(kname))
+        // Komponist:in-/Arrangeur:in-Feld zerlegen (mehrere Namen, Arr.-Marker → Arrangeur) und
+        // je Beitrag find-or-create Person, keine Dublette (Stück + Person + Rolle).
+        foreach (var beitrag in KomponistParser.Parse(d.KomponistName))
         {
-            var person = await PersonHolenAsync(db, kname, PersonRolleTyp.Komponist);
+            var person = await PersonHolenAsync(db, beitrag.Name, PersonRolleTyp.Komponist);
             var existiert = await db.StueckBeitraege.AnyAsync(b =>
-                b.StueckId == stueck.Id && b.Person.Name == kname && b.Rolle == StueckRolle.Komponist);
+                b.StueckId == stueck.Id && b.Person.Name == beitrag.Name && b.Rolle == beitrag.Rolle);
             if (!existiert)
                 db.StueckBeitraege.Add(new StueckBeitrag
                 {
-                    Stueck = stueck, Person = person, Rolle = StueckRolle.Komponist
+                    Stueck = stueck, Person = person, Rolle = beitrag.Rolle
                 });
         }
     }

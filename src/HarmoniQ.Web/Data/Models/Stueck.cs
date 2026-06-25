@@ -14,6 +14,8 @@ public class Stueck
 
     public ICollection<Video> Videos { get; set; } = [];
     public ICollection<StueckBeitrag> Beitraege { get; set; } = [];
+    /// <summary>Alternative Titel desselben Stücks (für Find-or-create &amp; Merge).</summary>
+    public ICollection<StueckAlias> Aliase { get; set; } = [];
 
     /// <summary>Komponist:innen des Stücks (aus den Beiträgen). Setzt geladene Beiträge+Person voraus.</summary>
     [NotMapped]

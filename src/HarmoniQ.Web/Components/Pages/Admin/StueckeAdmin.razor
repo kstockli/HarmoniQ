@@ -5,6 +5,7 @@
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 @using HarmoniQ.Web.Components.Shared
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -26,7 +27,18 @@
 
 <MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
     <Columns>
-        <PropertyColumn Property="z => z.Titel" Title="Titel" />
+        <TemplateColumn Title="Titel" SortBy="@(z => z.Titel)">
+            <CellTemplate>
+                @context.Item.Titel
+                @if (context.Item.Aliase.Count > 0)
+                {
+                    <MudTooltip Text="@context.Item.AliasText">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2"
+                                 Style="color:#9B59B6;">@($"+{context.Item.Aliase.Count} Alias")</MudChip>
+                    </MudTooltip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
         <PropertyColumn Property="z => z.KomponistText" Title="Komponist" />
         <PropertyColumn Property="z => z.Jahr" Title="Jahr" />
         <TemplateColumn Title="Schwierigkeit" SortBy="@(z => (int)z.Grad)">
@@ -44,6 +56,9 @@
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                OnClick="@(() => Bearbeiten(context.Item))" />
+                <MudIconButton Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Style="color:#9B59B6;"
+                               Title="Mit anderem Stück zusammenführen"
+                               OnClick="@(() => Zusammenfuehren(context.Item))" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => Loeschen(context.Item))" />
             </CellTemplate>
@@ -70,18 +85,21 @@
 
         var stuecke = await db.Stuecke
             .Include(s => s.Beitraege).ThenInclude(b => b.Person)
+            .Include(s => s.Aliase)
             .OrderBy(s => s.Titel)
             .ToListAsync();
         _alle = stuecke.Select(s => new Zeile(
             s.Id, s.Titel, s.KomponistenText,
             s.Komponisten.Select(p => p.Id).FirstOrDefault(),
-            s.Jahr, s.Schwierigkeitsgrad, s.Besetzung)).ToList();
+            s.Jahr, s.Schwierigkeitsgrad, s.Besetzung,
+            s.Aliase.Select(a => a.Name).OrderBy(n => n).ToList())).ToList();
         Filtern();
     }
 
     private void Filtern() =>
         _gefiltert = _suche == "" ? _alle
-            : _alle.Where(z => z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)).ToList();
+            : _alle.Where(z => z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
+                || z.Aliase.Any(a => a.Contains(_suche, StringComparison.OrdinalIgnoreCase))).ToList();
 
     private async Task Bearbeiten(Zeile? z)
     {
@@ -167,6 +185,27 @@
         await Laden();
     }
 
+    private async Task Zusammenfuehren(Zeile z)
+    {
+        var parameters = new DialogParameters<StueckMergeDialog>
+        {
+            { x => x.QuelleId, z.Id }, { x => x.QuelleName, z.Titel }
+        };
+        var dialog = await DialogService.ShowAsync<StueckMergeDialog>("Stück zusammenführen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var zielId = (Guid)result.Data!;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var (ok, meldung) = await StueckMergeService.MergeAsync(db, z.Id, zielId);
+        Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+        if (ok) await Laden();
+    }
+
     private record Zeile(Guid Id, string Titel, string KomponistText, Guid KomponistId,
-        int? Jahr, Schwierigkeitsgrad Grad, string? Besetzung);
+        int? Jahr, Schwierigkeitsgrad Grad, string? Besetzung, List<string> Aliase)
+    {
+        public string AliasText => string.Join(" • ", Aliase);
+    }
 }
