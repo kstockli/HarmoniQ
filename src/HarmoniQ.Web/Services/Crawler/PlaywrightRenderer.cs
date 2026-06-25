@@ -89,7 +89,13 @@ public sealed class PlaywrightRenderer(IOptions<CrawlerOptions> opt, ILogger<Pla
             if (_fehlgeschlagen) return null;
 
             _pw ??= await Playwright.CreateAsync();
-            _browser = await _pw.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+            // --no-sandbox: im Container läuft der Prozess als root, Chromium startet sonst NICHT.
+            // --disable-dev-shm-usage: /dev/shm ist in Containern oft winzig → Absturz beim Rendern.
+            _browser = await _pw.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+            {
+                Headless = true,
+                Args = ["--no-sandbox", "--disable-dev-shm-usage"]
+            });
             logger.LogInformation("Playwright/Chromium gestartet (JS-Rendering aktiv).");
             return _browser;
         }

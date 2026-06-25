@@ -56,9 +56,10 @@
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                OnClick="@(() => Bearbeiten(context.Item))" />
-                <MudIconButton Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Style="color:#9B59B6;"
-                               Title="Mit anderem Stück zusammenführen"
-                               OnClick="@(() => Zusammenfuehren(context.Item))" />
+                <MudTooltip Text="Mit anderem Stück zusammenführen">
+                    <MudIconButton Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Style="color:#9B59B6;"
+                                   OnClick="@(() => Zusammenfuehren(context.Item))" />
+                </MudTooltip>
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => Loeschen(context.Item))" />
             </CellTemplate>

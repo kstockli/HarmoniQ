@@ -89,6 +89,19 @@ Diese Punkte haben beim Erst-Deployment Zeit gekostet; sie sind im Code/Dockerfi
 - **`Cannot load library libgssapi_krb5.so.2`** beim DB-Zugriff. Npgsql versucht eine
   GSSAPI/Kerberos-Aushandlung; die Lib fehlt im schlanken Runtime-Image. → im **Dockerfile**
   `libgssapi-krb5-2` nachinstalliert.
+- **Crawler-JS-Rendering (Playwright/Chromium) liefert auf Railway nur die „Hülle".** Symptom: SPA-Seiten
+  wie `https://www.emf26.ch/vereine` rendern leer (nur das äussere Gerüst). Drei Ursachen, alle gelöst:
+  1. **Production lädt `appsettings.Development.json` NICHT** → `Crawler:RenderingAktiv` war `false`. → im
+     **Dockerfile** `ENV Crawler__RenderingAktiv=true` gesetzt.
+  2. **Kein Browser im Runtime-Image.** → Final-Stage ist jetzt `mcr.microsoft.com/playwright/dotnet:v1.60.0-noble`
+     (Chromium + System-Libs passend zu Microsoft.Playwright 1.60.0 enthalten). Damit das Image nicht an die
+     .NET-Version des Playwright-Images gebunden ist, wird die App **self-contained** (`-r linux-x64
+     --self-contained`) veröffentlicht. **Wichtig:** Bei Update der `Microsoft.Playwright`-NuGet-Version den
+     Image-Tag `v<version>-noble` mitziehen, sonst passen die Browser-Revisionen nicht.
+  3. **Chromium startet als root nicht.** Im Container läuft der Prozess als root → `PlaywrightRenderer` startet
+     den Browser mit `--no-sandbox --disable-dev-shm-usage`.
+  > Der Renderer fällt bei fehlendem Browser **still auf reinen HTTP-Fetch** zurück (kein Crash) – deshalb sieht
+  > man nur die leere Hülle statt eines Fehlers. Im Log steht dann „Playwright/Chromium nicht verfügbar …".
 - **SMTP blockiert.** Railway lässt ausgehenden SMTP (465/587) nicht zu → Mailversand über die
   **Resend-HTTPS-API** (siehe §3).
 - **Custom-Domain-Port:** Bei der Custom Domain den **Container-Port (8080)** angeben, nicht 443
