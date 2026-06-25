@@ -28,6 +28,19 @@ public sealed class PlaywrightRenderer(IOptions<CrawlerOptions> opt, ILogger<Pla
         {
             context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = _opt.UserAgent });
             var page = await context.NewPageAsync();
+
+            // Schwere Ressourcen blocken (Bilder/Medien/Fonts/CSS): Für die Link-/Text-Ernte brauchen
+            // wir nur DOM + Anker + die JS/XHR, die die Liste nachlädt. Spart sehr viel Chromium-Speicher
+            // → verhindert „Target crashed" (OOM) auf kleinen Containern (Railway).
+            await page.RouteAsync("**/*", async route =>
+            {
+                var typ = route.Request.ResourceType;
+                if (typ is "image" or "media" or "font" or "stylesheet")
+                    await route.AbortAsync();
+                else
+                    await route.ContinueAsync();
+            });
+
             var timeout = Math.Max(_opt.RequestTimeoutSekunden * 1000f, 45000f);
 
             await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = timeout });
@@ -89,12 +102,24 @@ public sealed class PlaywrightRenderer(IOptions<CrawlerOptions> opt, ILogger<Pla
             if (_fehlgeschlagen) return null;
 
             _pw ??= await Playwright.CreateAsync();
-            // --no-sandbox: im Container läuft der Prozess als root, Chromium startet sonst NICHT.
-            // --disable-dev-shm-usage: /dev/shm ist in Containern oft winzig → Absturz beim Rendern.
+            // Container-gehärtete Flags (Railway läuft als root, wenig RAM, kein GPU):
+            //  --no-sandbox            : Chromium startet als root sonst NICHT.
+            //  --disable-dev-shm-usage : /dev/shm ist in Containern winzig → sonst „Target crashed".
+            //  --disable-gpu / -software-rasterizer / VizDisplayCompositor : kein GPU/Compositor → weniger
+            //                            Speicher & keine Renderer-Abstürze.
             _browser = await _pw.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
                 Headless = true,
-                Args = ["--no-sandbox", "--disable-dev-shm-usage"]
+                Args =
+                [
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-features=VizDisplayCompositor"
+                ]
             });
             logger.LogInformation("Playwright/Chromium gestartet (JS-Rendering aktiv).");
             return _browser;

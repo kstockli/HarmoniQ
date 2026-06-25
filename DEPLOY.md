@@ -99,7 +99,12 @@ Diese Punkte haben beim Erst-Deployment Zeit gekostet; sie sind im Code/Dockerfi
      --self-contained`) veröffentlicht. **Wichtig:** Bei Update der `Microsoft.Playwright`-NuGet-Version den
      Image-Tag `v<version>-noble` mitziehen, sonst passen die Browser-Revisionen nicht.
   3. **Chromium startet als root nicht.** Im Container läuft der Prozess als root → `PlaywrightRenderer` startet
-     den Browser mit `--no-sandbox --disable-dev-shm-usage`.
+     den Browser mit `--no-sandbox --disable-dev-shm-usage --disable-gpu …`.
+  4. **`Target crashed` (Renderer-Absturz, meist OOM).** Symptom nach erfolgreichem Browser-Start: „Rendern
+     fehlgeschlagen … Target crashed" → Fallback HTTP → wieder nur die Hülle. Chromium ist speicherhungrig.
+     Lösungen in `PlaywrightRenderer`: **schwere Ressourcen blocken** (Bilder/Medien/Fonts/CSS via
+     `page.RouteAsync`-Abort – für die Link-/Text-Ernte unnötig) + GPU-Flags. **Falls es weiter crasht:**
+     der Railway-Service braucht genug RAM – Chromium + .NET zusammen realistisch **≥ 1 GB** (lieber 2 GB).
   > Der Renderer fällt bei fehlendem Browser **still auf reinen HTTP-Fetch** zurück (kein Crash) – deshalb sieht
   > man nur die leere Hülle statt eines Fehlers. Im Log steht dann „Playwright/Chromium nicht verfügbar …".
 - **SMTP blockiert.** Railway lässt ausgehenden SMTP (465/587) nicht zu → Mailversand über die
