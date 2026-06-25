@@ -234,7 +234,8 @@ else
                     if (w != null)
                     {
                         fe.FriendlyTitel = $"Webseite: {w.VereinName ?? w.Url}";
-                        fe.FriendlySub = w.Titel;
+                        fe.FriendlySub = string.Join(" · ",
+                            new[] { w.Kategorie, w.Titel }.Where(x => !string.IsNullOrWhiteSpace(x)));
                         var z = new List<string>();
                         if (!string.IsNullOrWhiteSpace(w.Beschreibung))
                             z.Add(w.Beschreibung!.Length > 200 ? w.Beschreibung![..200] + "…" : w.Beschreibung!);

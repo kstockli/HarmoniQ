@@ -20,6 +20,8 @@ public class CrawlRunner(
     private string? _hinweis;
     // Dedup innerhalb eines Laufs: je Fund-Identität der bisher vollständigste Datensatz.
     private readonly Dictionary<string, (CrawlFund Fund, int Score)> _gesehen = new();
+    // Im Lauf gefundene Gremiums-Mitglieder (Name|Funktion) – für die Abgangs-Prüfung.
+    private readonly HashSet<string> _boardGesehen = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task AusfuehrenAsync(Guid laufId, CancellationToken ct)
     {
@@ -37,10 +39,29 @@ public class CrawlRunner(
 
         lauf.Status = CrawlLaufStatus.Laufend;
         _gesehen.Clear();
+        _boardGesehen.Clear();
         await db.SaveChangesAsync(ct);
 
         // Kontext für die Extraktion: Quell-Band (für BandDomain-Zuordnung) + Admin-Hinweis.
         _hinweis = quelle.ExtraktionsHinweis;
+
+        // BandDomain ohne Ziel-Band: Band aus der Domain bestimmen/anlegen, damit gefundene Personen
+        // (Dirigent/Vorstand/Muko) und Konzerte „tendenziell der Band der Seite" zugeordnet werden.
+        if (quelle.Typ == CrawlQuelleTyp.BandDomain && quelle.BandId is null
+            && Uri.TryCreate(quelle.StartUrl, UriKind.Absolute, out var su))
+        {
+            var host = su.Host;
+            var band = await db.Bands.FirstOrDefaultAsync(b => b.Webseite != null && b.Webseite.Contains(host), ct);
+            if (band == null)
+            {
+                band = new Band { Name = BandNameAusHost(host), Webseite = $"{su.Scheme}://{host}/" };
+                db.Bands.Add(band);
+            }
+            quelle.BandId = band.Id;
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("BandDomain ohne Ziel-Band → Band '{Name}' zugeordnet.", band.Name);
+        }
+
         _bandName = quelle.BandId is { } bid
             ? await db.Bands.Where(b => b.Id == bid).Select(b => b.Name).FirstOrDefaultAsync(ct)
             : null;
@@ -56,6 +77,13 @@ public class CrawlRunner(
                 await BandDomainCrawlAsync(lauf, quelle, ct);
             else
                 await EinzelAbrufAsync(lauf, quelle, quelle.StartUrl, einzelseiteImmerRelevant: true, ct);
+
+            // Abgänge im Gremium nur prüfen, wenn ein Gremium gecrawlt wurde UND tatsächlich Mitglieder
+            // gefunden wurden (sonst würde ein Fehl-/Leerlauf fälschlich alle als „weg" melden).
+            var boardGewuenscht = quelle.Anforderungen.HasFlag(CrawlAnforderungen.VorstandCrawlen)
+                                  || quelle.Anforderungen.HasFlag(CrawlAnforderungen.MukoCrawlen);
+            if (boardGewuenscht && quelle.BandId is not null && _boardGesehen.Count > 0)
+                await AbgaengePruefenAsync(lauf, quelle.BandId.Value, ct);
 
             lauf.Status = CrawlLaufStatus.Fertig;
             lauf.Meldung = $"{lauf.SeitenBesucht} Seiten, {lauf.FundeAnzahl} Funde.";
@@ -129,10 +157,14 @@ public class CrawlRunner(
         if (relevant && !unveraendert && text.Trim().Length > 0)
         {
             var erg = await extraktion.ExtrahiereAsync(
-                new ExtraktionsAnfrage(quelle.Typ, url, text, res.IstPdf, _bandName, _hinweis, logo), ct);
+                new ExtraktionsAnfrage(quelle.Typ, url, text, res.IstPdf, _bandName, _hinweis, logo,
+                    quelle.Anforderungen.HasFlag(CrawlAnforderungen.VorstandCrawlen),
+                    quelle.Anforderungen.HasFlag(CrawlAnforderungen.MukoCrawlen)), ct);
 
             foreach (var f in erg.Funde)
             {
+                if (!AnforderungErfuellt(f, quelle)) continue;
+                BoardMerken(f);
                 var (key, score) = Bewerten(f);
 
                 // Bereits gesehener Fund (gleiche Identität): nur ersetzen, wenn vollständiger.
@@ -184,41 +216,58 @@ public class CrawlRunner(
     private async Task VereinsLinksErntenAsync(CrawlLauf lauf, string html, string url, CancellationToken ct)
     {
         const int maxVorschlaege = 500;
-        var externe = CrawlHtmlHelfer.ExterneLinks(html, new Uri(url));
-        if (externe.Count > maxVorschlaege)
-            logger.LogWarning("Event {Url}: {Total} fremde Domains, max. {Max} werden als Fund angelegt.",
-                url, externe.Count, maxVorschlaege);
-        externe = externe.Take(maxVorschlaege).ToList();
+        // Vereins-Domains MIT Kategorie/Klasse (aus den Gruppen-Überschriften der Verzeichnis-Seite).
+        var kandidaten = CrawlHtmlHelfer.ExterneLinksMitKategorie(html, new Uri(url));
 
-        // Domains, die der Crawler schon als Quelle kennt, überspringen.
+        // Schon bekannte Domains (bestehende Quellen) überspringen.
         var bekannt = (await db.CrawlQuellen.Where(q => q.Domain != null).Select(q => q.Domain!).ToListAsync(ct))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var ziele = externe.Where(l => !bekannt.Contains(new Uri(l).Host)).ToList();
-        logger.LogInformation("Vereins-Link-Ernte {Url}: {Gesamt} fremde Domains, {Bekannt} bereits als Quelle " +
-            "(übersprungen), {Neu} neu → lade Vorschauen …", url, externe.Count, externe.Count - ziele.Count, ziele.Count);
-        if (ziele.Count == 0)
+        kandidaten = kandidaten.Where(k => !bekannt.Contains(new Uri(k.Url).Host)).ToList();
+        if (kandidaten.Count == 0)
         {
-            logger.LogInformation("Keine neuen Domains. Tipp: alte Quellen-Vorschläge löschen, dann werden sie " +
-                "als Funde neu aufbereitet.");
+            logger.LogInformation("Vereins-Link-Ernte {Url}: keine neuen Domains.", url);
             return;
         }
 
+        // Liegt ein Hinweis vor, vom LLM nach Kategorie/Klasse filtern (z. B. 'Höchstklasse, Harmonie').
+        if (!string.IsNullOrWhiteSpace(_hinweis))
+        {
+            var passende = await extraktion.FiltereVereineAsync(
+                kandidaten.Select(k => new VereinKandidat(k.Url, k.Kategorie)).ToList(), _hinweis!, ct);
+            var set = passende.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var vorher = kandidaten.Count;
+            kandidaten = kandidaten.Where(k => set.Contains(k.Url)).ToList();
+            logger.LogInformation("Vereins-Link-Ernte {Url}: {Vorher} neue Domains → {Nachher} nach Hinweis-Filter '{Hinweis}'.",
+                url, vorher, kandidaten.Count, _hinweis);
+        }
+        else
+        {
+            logger.LogInformation("Vereins-Link-Ernte {Url}: {Neu} neue Domains (kein Hinweis-Filter).", url, kandidaten.Count);
+        }
+
+        if (kandidaten.Count > maxVorschlaege)
+        {
+            logger.LogWarning("{Total} Treffer – nur {Max} werden angelegt.", kandidaten.Count, maxVorschlaege);
+            kandidaten = kandidaten.Take(maxVorschlaege).ToList();
+        }
+        if (kandidaten.Count == 0) return;
+
         // Vorschau parallel laden (verschiedene Domains; DB-frei – EF ist nicht thread-safe).
         var drossel = new SemaphoreSlim(8);
-        var previews = await Task.WhenAll(ziele.Select(async link =>
+        var previews = await Task.WhenAll(kandidaten.Select(async k =>
         {
             await drossel.WaitAsync(ct);
             try
             {
-                var host = new Uri(link).Host;
-                var r = await fetch.HoleAsync(link, false, ct);
+                var host = new Uri(k.Url).Host;
+                var r = await fetch.HoleAsync(k.Url, false, ct);
                 string? titel = null, besch = null;
                 if (r.Erfolg && !string.IsNullOrEmpty(r.Text))
                     (titel, besch) = CrawlHtmlHelfer.SeitenInfo(r.Text!);
-                return new WebseiteFundDaten(link, titel ?? host, titel, besch);
+                return new WebseiteFundDaten(k.Url, titel ?? host, titel, besch, k.Kategorie);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch { return new WebseiteFundDaten(link, new Uri(link).Host); }
+            catch { return new WebseiteFundDaten(k.Url, new Uri(k.Url).Host, Kategorie: k.Kategorie); }
             finally { drossel.Release(); }
         }));
 
@@ -236,7 +285,7 @@ public class CrawlRunner(
             });
             lauf.FundeAnzahl++;
         }
-        logger.LogInformation("{Count} Webseiten-Funde (Vereins-Vorschläge) aus {Url} angelegt.", previews.Length, url);
+        logger.LogInformation("{Count} Webseiten-Funde aus {Url} angelegt.", previews.Length, url);
     }
 
     /// <summary>Legt die CrawlSeite an oder aktualisiert sie. Gibt true zurück, wenn der Inhalt
@@ -312,4 +361,62 @@ public class CrawlRunner(
     }
 
     private static string Norm(string? s) => (s ?? "").Trim().ToLowerInvariant();
+
+    /// <summary>Platzhalter-Bandname aus der Domain (z. B. „stadtmusik-luzern.ch" → „Stadtmusik Luzern");
+    /// wird beim späteren Vereins-Fund verfeinert/ergänzt.</summary>
+    private static string BandNameAusHost(string host)
+    {
+        var h = host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
+        var basis = h.Split('.')[0].Replace('-', ' ').Replace('_', ' ');
+        return System.Globalization.CultureInfo.GetCultureInfo("de-CH").TextInfo.ToTitleCase(basis);
+    }
+
+    /// <summary>Merkt sich Gremiums-Mitglieder (Leitung-Fund mit Funktion ≠ Dirigent) für die Abgangs-Prüfung.</summary>
+    private void BoardMerken(ExtrahierterFund f)
+    {
+        if (f.Typ != CrawlFundTyp.Leitung) return;
+        var d = CrawlDaten.Deserialisiere<LeitungFundDaten>(f.DatenJson);
+        if (d == null || string.IsNullOrWhiteSpace(d.PersonName)) return;
+        if (string.Equals(d.Funktion, "Dirigent", StringComparison.OrdinalIgnoreCase)) return;
+        _boardGesehen.Add($"{Norm(d.PersonName)}|{Norm(d.Funktion)}");
+    }
+
+    /// <summary>Erzeugt Hinweis-Funde für aktive Gremiums-Mitgliedschaften der Band, die im aktuellen
+    /// Lauf NICHT gefunden wurden (möglicher Abgang). Beendet nichts automatisch – der Admin entscheidet.</summary>
+    private async Task AbgaengePruefenAsync(CrawlLauf lauf, Guid bandId, CancellationToken ct)
+    {
+        var aktiv = await db.BandMitgliedschaften.Include(m => m.Person)
+            .Where(m => m.BandId == bandId && m.BisJahr == null
+                        && m.Funktion != null && m.Funktion != "Dirigent")
+            .ToListAsync(ct);
+
+        foreach (var m in aktiv)
+        {
+            if (_boardGesehen.Contains($"{Norm(m.Person.Name)}|{Norm(m.Funktion!)}")) continue;
+            db.CrawlFunde.Add(new CrawlFund
+            {
+                LaufId = lauf.Id,
+                Typ = CrawlFundTyp.Sonstiges,
+                QuellUrl = "",
+                AbgerufenAm = DateTime.UtcNow,
+                DatenJson = "{}",
+                DublettHinweis = $"Beenden prüfen: \"{m.Person.Name}\" – Funktion \"{m.Funktion}\" wurde im "
+                    + "aktuellen Crawl nicht mehr gefunden (ggf. im Mitglieder-Editor BisJahr setzen).",
+                Status = CrawlFundStatus.Offen
+            });
+            lauf.FundeAnzahl++;
+        }
+    }
+
+    /// <summary>Prüft die strukturierten Anforderungen der Quelle gegen einen Fund.
+    /// Aktuell: Konzert nur, wenn es mindestens eine Programmzeile hat (KonzertBrauchtStueck).</summary>
+    private static bool AnforderungErfuellt(ExtrahierterFund f, CrawlQuelle quelle)
+    {
+        if (f.Typ == CrawlFundTyp.Konzert && quelle.Anforderungen.HasFlag(CrawlAnforderungen.KonzertBrauchtStueck))
+        {
+            var d = CrawlDaten.Deserialisiere<KonzertFundDaten>(f.DatenJson);
+            if (d?.Programm is not { Count: > 0 }) return false;
+        }
+        return true;
+    }
 }

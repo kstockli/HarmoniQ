@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using HarmoniQ.Web.Data;
 using HarmoniQ.Web.Data.Models;
@@ -107,17 +108,34 @@ public static class CrawlUebernahmeService
         var band = await BandAufloesenAsync(db, fund, d.BandName)
             ?? throw new InvalidOperationException("Keine Band bestimmbar – Bandname fehlt und Quelle hat keine Ziel-Band.");
 
-        // Person find-or-create (+ Rolle Dirigent). Dirigent:in ist öffentlich (Funktionsträger:in).
-        var person = await db.Personen.Include(p => p.Rollen).FirstOrDefaultAsync(p => p.Name == name);
+        var funktion = string.IsNullOrWhiteSpace(d.Funktion) ? "Dirigent" : d.Funktion.Trim();
+        var istDirigent = string.Equals(funktion, "Dirigent", StringComparison.OrdinalIgnoreCase);
+        // Dirigent:in → Rolle Dirigent; Vorstand/Muko & Co. → Musikant. Alle sind Funktionsträger:innen → öffentlich.
+        var rolle = istDirigent ? PersonRolleTyp.Dirigent : PersonRolleTyp.Musikant;
+
+        var person = await db.Personen.Include(p => p.Rollen).Include(p => p.Links)
+            .FirstOrDefaultAsync(p => p.Name == name);
         if (person == null)
         {
-            person = new Person { Name = name, Sichtbarkeit = Sichtbarkeit.Oeffentlich };
+            person = new Person { Name = name };
             db.Personen.Add(person);
         }
-        if (person.Rollen.All(r => r.Rolle != PersonRolleTyp.Dirigent))
-            person.Rollen.Add(new PersonRolle { Rolle = PersonRolleTyp.Dirigent });
+        person.Sichtbarkeit = Sichtbarkeit.Oeffentlich;
+        if (person.Rollen.All(r => r.Rolle != rolle))
+            person.Rollen.Add(new PersonRolle { Rolle = rolle });
+        if (!string.IsNullOrWhiteSpace(d.EMail) && string.IsNullOrWhiteSpace(person.EMail))
+            person.EMail = d.EMail.Trim();
 
-        var funktion = string.IsNullOrWhiteSpace(d.Funktion) ? "Dirigent" : d.Funktion.Trim();
+        // Optionales Instrument (find-or-create) für die Mitgliedschaft.
+        Guid? instrumentId = null;
+        if (!string.IsNullOrWhiteSpace(d.InstrumentName))
+        {
+            var iname = d.InstrumentName.Trim();
+            var instrument = await db.Instrumente.FirstOrDefaultAsync(i => i.Name == iname)
+                             ?? db.Instrumente.Local.FirstOrDefault(i => i.Name == iname);
+            if (instrument == null) { instrument = new Instrument { Name = iname }; db.Instrumente.Add(instrument); }
+            instrumentId = instrument.Id;
+        }
 
         // Keine Dublette: gleiche Person + Band + Funktion (laufende Mitgliedschaft) nicht doppelt.
         var existiert = await db.BandMitgliedschaften.AnyAsync(m =>
@@ -128,6 +146,7 @@ public static class CrawlUebernahmeService
                 Band = band,
                 Person = person,
                 Funktion = funktion,
+                InstrumentId = instrumentId,
                 VonJahr = d.VonJahr,
                 BisJahr = d.BisJahr
             });
@@ -149,6 +168,11 @@ public static class CrawlUebernahmeService
             band = await db.Bands.Include(b => b.Links).Include(b => b.Aliase).FirstOrDefaultAsync(b => b.Id == bid);
         band ??= await db.Bands.Include(b => b.Links).Include(b => b.Aliase)
             .FirstOrDefaultAsync(b => b.Name == name || b.Aliase.Any(a => a.Name == name));
+        // Auch über die Webseite matchen (z. B. die aus einem Webseiten-Fund angelegte Band).
+        if (band == null && !string.IsNullOrWhiteSpace(d.Webseite)
+            && Uri.TryCreate(d.Webseite, UriKind.Absolute, out var wu))
+            band = await db.Bands.Include(b => b.Links).Include(b => b.Aliase)
+                .FirstOrDefaultAsync(b => b.Webseite != null && b.Webseite.Contains(wu.Host));
         if (band == null)
         {
             band = new Band { Name = name };
@@ -186,16 +210,74 @@ public static class CrawlUebernahmeService
             throw new InvalidOperationException("Ungültige Webseiten-URL.");
 
         var host = uri.Host;
-        // Schon als Quelle vorhanden? dann nichts tun (idempotent).
-        if (await db.CrawlQuellen.AnyAsync(q => q.Domain == host)) return;
+        var root = $"{uri.Scheme}://{host}/";
 
-        db.CrawlQuellen.Add(new CrawlQuelle
+        // Ziel-Band find-or-create (über Webseite-Host, sonst Name) + Kategorie/Klasse aus dem Fund.
+        var name = SauberBandName(d.VereinName, host);
+        var band = await db.Bands.FirstOrDefaultAsync(b => b.Webseite != null && b.Webseite.Contains(host))
+                   ?? await db.Bands.FirstOrDefaultAsync(b => b.Name == name);
+        if (band == null)
         {
-            Typ = CrawlQuelleTyp.BandDomain,
-            StartUrl = uri.ToString(),
-            Domain = host,
-            Aktiv = false // Vorschlag – Admin aktiviert und startet den Lauf
-        });
+            band = new Band { Name = name };
+            db.Bands.Add(band);
+        }
+        if (string.IsNullOrWhiteSpace(band.Webseite)) band.Webseite = root;
+        var (kat, klasse) = ParseKategorieKlasse(d.Kategorie);
+        band.Kategorie ??= kat;
+        band.Staerkeklasse ??= klasse;
+
+        // Quelle (Vorschlag) anlegen mit gesetzter Ziel-Band; existiert sie schon, Ziel-Band nachtragen.
+        var quelle = await db.CrawlQuellen.FirstOrDefaultAsync(q => q.Domain == host);
+        if (quelle == null)
+            db.CrawlQuellen.Add(new CrawlQuelle
+            {
+                Typ = CrawlQuelleTyp.BandDomain,
+                StartUrl = root,
+                Domain = host,
+                Aktiv = false, // Vorschlag – Admin aktiviert und startet den Lauf
+                BandId = band.Id
+            });
+        else if (quelle.BandId == null)
+            quelle.BandId = band.Id;
+    }
+
+    /// <summary>Bestmöglicher Band-Name aus dem Seitentitel (Trenner/„Home"-Wörter entfernt), sonst aus der Domain.</summary>
+    private static string SauberBandName(string? titel, string host)
+    {
+        var t = (titel ?? "").Trim();
+        if (t.Length > 0)
+        {
+            var segmente = Regex.Split(t, @"\s*[|–—·:]\s*|\s+-\s+")
+                .Select(s => s.Trim())
+                .Where(s => s.Length >= 3 &&
+                            !Regex.IsMatch(s, "^(home|start(seite)?|willkommen|welcome|aktuelles?|news)$", RegexOptions.IgnoreCase))
+                .ToList();
+            if (segmente.Count > 0) return segmente.OrderByDescending(s => s.Length).First();
+        }
+        var h = host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
+        var basis = h.Split('.')[0].Replace('-', ' ').Replace('_', ' ');
+        return System.Globalization.CultureInfo.GetCultureInfo("de-CH").TextInfo.ToTitleCase(basis);
+    }
+
+    /// <summary>Parst eine Kategorie-Zeichenkette (z. B. „Konzertmusik, Höchstklasse, Harmonie") in die Enums.</summary>
+    private static (BandKategorie?, Staerkeklasse?) ParseKategorieKlasse(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return (null, null);
+        var t = s.ToLowerInvariant();
+        BandKategorie? kat =
+            t.Contains("brass") ? BandKategorie.Brassband
+            : t.Contains("harmonie") ? BandKategorie.Harmonie
+            : t.Contains("fanfare") ? BandKategorie.Fanfare
+            : null;
+        Staerkeklasse? klasse =
+            t.Contains("höchst") || t.Contains("hoechst") ? Staerkeklasse.Hoechstklasse
+            : t.Contains("elite") ? Staerkeklasse.Elite
+            : Regex.IsMatch(t, @"1\.?\s*klasse") ? Staerkeklasse.Klasse1
+            : Regex.IsMatch(t, @"2\.?\s*klasse") ? Staerkeklasse.Klasse2
+            : Regex.IsMatch(t, @"3\.?\s*klasse") ? Staerkeklasse.Klasse3
+            : Regex.IsMatch(t, @"4\.?\s*klasse") ? Staerkeklasse.Klasse4
+            : null;
+        return (kat, klasse);
     }
 
     private static void AliasErgaenzen(Band band, string? alias)

@@ -36,13 +36,35 @@ config-gesteuert `Crawler:RenderingAktiv`, Default aus, HTTP-Fallback) – verif
 der Renderer wartet, bis die **Link-Anzahl stabil** ist (lazy-geladene SPA-Inhalte) – nicht auf NetworkIdle
 (flaky) und ohne Scrollen (würde virtualisierte Listen ausdünnen). **Vereins-Link-Ernte:** Event-Quellen ernten
 fremde Domains und legen je einen **Webseiten-Fund** (`CrawlFundTyp.Webseite`) mit Mini-Vorschau (Seitentitel/
-Beschreibung, **ohne LLM**, parallel geladen) an. Beim **Übernehmen** entsteht eine **inaktive BandDomain-Quelle
-(Vorschlag)** – so entscheidet der Admin je Verein in der Funde-Review (statt dass direkt Quellen entstehen).
+Beschreibung, **ohne LLM**, parallel geladen) an. **Kategorie/Stärkeklasse je Verein** wird aus den
+**Gruppen-Überschriften** der Verzeichnis-Seite gelesen (Dokumentreihenfolge: die letzte Überschrift gilt –
+z. B. „Konzertmusik, Höchstklasse, Harmonie"; verifiziert: 472/472 Vereine auf emf26 zugeordnet). Liegt ein
+**Hinweis** vor, filtert das LLM (`IExtraktion.FiltereVereineAsync`, nummern-basiert, gechunkt) die Liste vor
+der Fund-Erzeugung (z. B. „Höchstklasse, Harmonie" → 11 statt 472). Beim **Übernehmen** entsteht eine
+**inaktive BandDomain-Quelle (Vorschlag) mit gesetzter Ziel-Band** (find-or-create über Webseite/Name; Name
+aus Seitentitel bzw. Domain; **Kategorie/Stärkeklasse** aus dem Fund übernommen) – so kann der Folge-Crawl
+seine Konzerte direkt der richtigen Band zuordnen, und der Admin entscheidet je Verein in der Funde-Review.
 Noch offen in C2:
 **Join Rangliste-PDF ↔ Spielplan** über Vereinsnamen und automatische **Rück-Zuordnung** der Folge-Crawl-Stücke
 ans (Lokal,Datum)-Konzert.
 
-**Noch offen:** C2-Rest (Join/Rück-Zuordnung), C4 (Wikipedia-Anreicherung, Region-Filter, geplante Läufe).
+**C3+ (umgesetzt):** Große Seiten werden in überlappende **Chunks** zerlegt und je Abschnitt extrahiert
+(statt bei 24 000 Zeichen abzuschneiden); Konzerte gleicher Identität werden über die Chunks hinweg
+zusammengeführt. **Wikipedia-Anreicherung** für Komponist:innen umgesetzt: `WikipediaService` (REST-Summary +
+Wikidata-Geburtsjahr, kein Key) erzeugt **Komponist-Funde** (auch ohne Lauf, `CrawlFund.LaufId` nullable) →
+Review/Übernahme füllt leere Person-Felder (Bio/Bild/Geburtsjahr/Wikipedia-Link). Auslöser: Button in `/admin/crawler`.
+
+**Anforderungen-Bitset (`CrawlQuelle.Anforderungen`, umgesetzt):** je Quelle setzbare strukturierte
+Anforderungen. `KonzertBrauchtStueck` → Konzerte ohne Programmzeile werden gar nicht als Fund vorgeschlagen.
+`VorstandCrawlen` / `MukoCrawlen` → das LLM erfasst zusätzlich Vorstands-/Muko-Mitglieder (Feld `funktionaere`:
+Name, Funktion, E-Mail, Instrument). Übernahme = `BandMitgliedschaft` mit der **Funktion** (Identität =
+Person + Band + Funktion, daher getrennt von Dirigent-/Spiel-Mitgliedschaften), Person als **Musikant**,
+**Sichtbarkeit Öffentlich**, E-Mail als `PersonLink`, Instrument optional. **Abgänge** werden **nie automatisch**
+beendet: am Laufende werden aktive Gremiums-Mitgliedschaften, die der Crawl nicht (mehr) fand, als
+**Hinweis-Fund** gemeldet (nur wenn überhaupt Mitglieder gefunden wurden) – der Admin setzt ggf. `BisJahr`.
+
+**Noch offen:** C2-Rest (Join/Rück-Zuordnung, `Band.Webseite`-Autofill), C4 (Ort→Kanton-Regionfilter,
+geplante Läufe), `Crawler:Llm:TagesLimit` durchsetzen, Rendering in Prod aktivieren.
 
 ## 1. Ziel & Abgrenzung
 
@@ -174,6 +196,8 @@ CrawlQuelle                         (Seed: Band-Domain, Dokument/PDF oder Event)
 ├── StartUrl (string)               ← Domain-Start, PDF-/Dokument-Link oder Event-Seite
 ├── Domain (string?)                ← bei BandDomain; Crawler bleibt darauf
 ├── BrauchtRendering (bool)         ← Event/SPA: per Headless-Browser rendern (C2)
+├── Anforderungen (flags)           ← Bitset: KonzertBrauchtStueck(1), VorstandCrawlen(2),
+│                                      MukoCrawlen(4) — alle umgesetzt
 ├── ExtraktionsHinweis (string?)    ← Freitext-Zusatzanweisung ans LLM, vor jedem Lauf editierbar
 │                                     (z. B. „Nur Konzerte ab 2023 …"); wirkt auch als Filter
 ├── MaxTiefe (int, Default 2)       ← nur BandDomain
@@ -213,6 +237,7 @@ CrawlFund                           (Kandidat zur Übernahme)
 ## 6. Steuerung (Einflussnahme)
 
 - **Seed-Verwaltung** `/admin/crawler`: Bands + Start-URLs erfassen/aktivieren, Limits (Tiefe/Seiten) setzen.
+- **Läufe** werden **über** den Quellen angezeigt (Fortschritt beobachten, „Aktualisieren") und sind **einzeln löschbar** (Funde kaskadieren mit; übernommene Daten bleiben).
 - **Lauf starten/stoppen**, Fortschritt & Log sehen.
 - **Allowlist-Domain** je Quelle (kein Abwandern). **URL-Stichwortfilter** konfigurierbar.
 - **Discovery mit Bremse:** Gefundene Links zu *anderen* Vereinen erscheinen als **Quellen-Vorschläge**
@@ -225,14 +250,19 @@ CrawlFund                           (Kandidat zur Übernahme)
   Programmzeilen „Stück — Komponist, arr. … · Band" in Reihenfolge; Stück; Komponist:in), Quell-Link,
   Dublett-Hinweis, **Übernehmen** / **Verwerfen**. Das rohe **JSON** ist nur noch einblendbar und dort
   editierbar (z. B. fehlendes Datum ergänzen) – diese Daten werden beim Übernehmen verwendet.
-- **Massen-Aktionen:** „Alle offenen verwerfen" und „Alle angezeigten löschen" (bezogen auf den aktuellen Filter).
+- **Volltext-Suche** über die Funde (Name/Ort/URL – ILIKE auf DatenJson/QuellUrl), um z. B. Webseiten-Funde
+  einzugrenzen. **Massen-Aktionen** (auf den aktuellen Filter): „Alle angezeigten übernehmen",
+  „Alle offenen verwerfen", „Alle angezeigten löschen".
 - **Übernehmen** ruft die Find-or-create-Services → keine Dubletten; Quell-URL bleibt als Provenienz erhalten.
   Übernahme-Pfade: Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft` (Funktion „Dirigent",
   optional Von/Bis-Jahr); Stück → `Stueck` (+ `StueckBeitrag` Komponist/Arrangeur); Komponist:in → `Person`;
   **Verein → `Band`** (Abgleich über Name/Alias; füllt leere Stammdaten – Land, Webseite, Kategorie,
   Stärkeklasse, Gründungsjahr, Geschichte – und ergänzt `BandAlias` + `BandLink`-Social-Links);
   **Webseite → inaktive BandDomain-Quelle (Vorschlag)**.
-  Bei **BandDomain**-Funden wird das Konzert immer der Quell-Band zugeordnet.
+  Bei **BandDomain**-Funden wird das Konzert immer der Quell-Band zugeordnet. Ebenso werden **Personen**
+  von einer Vereinsseite (Dirigent, Vorstand, Muko) tendenziell der **Quell-Band** zugeordnet (Quell-Band
+  vor evtl. fehlerhaft erkanntem Namen). Hat eine BandDomain-Quelle keine Ziel-Band, wird sie zu
+  Lauf-Beginn aus der Domain bestimmt/angelegt (Abgleich über Webseite-Host), damit eine Zuordnung möglich ist.
 
 ## 8. Extraktion im Detail
 
@@ -245,7 +275,9 @@ CrawlFund                           (Kandidat zur Übernahme)
    **Prompt-Regeln:** Fakten wörtlich, nicht raten; Komponist:in vs. **Arrangeur:in** trennen („arr. X");
    Personennamen „Vorname Nachname"; `reihenfolge` = Startzeit als Zahl (14:40 → 1440), sonst fortlaufend;
    Datum nicht mit Nullen auffüllen; enthält der **Admin-Hinweis** eine Einschränkung, wirkt er als **Filter**
-   (nur passende Funde). Bei BandDomain ist die Quell-Band Standard-Band, wenn keine genannt. Auf der eigenen
+   (nur passende Funde) – inkl. Merkmalen wie **Stärkeklasse** (z. B. „nur Höchstklasse"), **Land**,
+   **Kategorie/Besetzung**, Jahr, Ort, sofern das Merkmal auf der Seite steht (verifiziert). Was NICHT auf der
+   Seite steht (z. B. Kanton zu einem Ort) kann das LLM nicht filtern → dafür bliebe Ort→Kanton (C4). Bei BandDomain ist die Quell-Band Standard-Band, wenn keine genannt. Auf der eigenen
    Vereinsseite wird zusätzlich ein **Vereins-Block** extrahiert (`verein`: Name, Aliase, Land, Webseite,
    Gründungsjahr, Kategorie, Stärkeklasse, Geschichte, Social-Links) → Band-Fund. Das **Logo** (`BildUrl`)
    kommt nicht vom LLM (der sieht nur Text), sondern **heuristisch aus dem HTML** (`og:image` →

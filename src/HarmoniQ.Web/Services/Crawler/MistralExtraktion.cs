@@ -49,7 +49,9 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "\"gruendungsjahr\":null,\"kategorie\":\"Harmonie|Brassband|Fanfare|Unterhaltung|Jugendmusik|" +
         "Bläserensemble|null\",\"staerkeklasse\":\"|null\",\"geschichte\":\"|null\",\"instagram\":\"|null\"," +
         "\"facebook\":\"|null\",\"youtube\":\"|null\",\"x\":\"|null\",\"wikipedia\":\"|null\"," +
-        "\"email\":\"|null\",\"mobile\":\"|null\"}}\n" +
+        "\"email\":\"|null\",\"mobile\":\"|null\"}," +
+        "\"funktionaere\":[{\"personName\":\"\",\"funktion\":\"\",\"gremium\":\"Vorstand|Muko\"," +
+        "\"email\":\"|null\",\"instrument\":\"|null\"}]}\n" +
         "Regeln:\n" +
         "- Jedes gespielte Stück gehört als Programmzeile in sein Konzert: Komponist:in in komponistName, " +
         "spielende Band/Verein in bandName.\n" +
@@ -69,13 +71,19 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "(1, 2, 3, …). Behalte die zeitliche/Programm-Reihenfolge bei.\n" +
         "- datum: vollständiges Datum YYYY-MM-DD. Ist nur das Jahr (oder Jahr+Monat) bekannt, NICHT mit " +
         "Nullen auffüllen – fehlende Teile weglassen (also \"2024\" oder \"2024-06\", nicht \"2024-00-00\").\n" +
-        "- Enthält die Admin-Anweisung eine EINSCHRÄNKUNG (z. B. nur Konzerte ab einem Jahr, nur ein " +
-        "bestimmter Ort/Lokal, nur mit Stück-Angaben), dann gib AUSSCHLIESSLICH dazu passende Funde " +
-        "zurück und lass alle anderen weg – auch wenn sie im Text stehen.\n" +
+        "- Enthält die Admin-Anweisung eine EINSCHRÄNKUNG – z. B. nur ab einem Jahr, nur ein Ort/Lokal, " +
+        "nur ein Land, nur eine Stärkeklasse (z. B. Höchstklasse/Elite/1. Klasse), nur eine Kategorie/" +
+        "Besetzung (Harmonie/Brassband/Fanfare …), nur mit Stück-Angaben – dann gib AUSSCHLIESSLICH " +
+        "passende Funde zurück und lass alle anderen weg. Funde, bei denen das geforderte Merkmal im Text " +
+        "NICHT vorkommt oder nicht erkennbar ist, ebenfalls weglassen.\n" +
         "- verein: NUR ausfüllen, wenn die Seite die EIGENE Seite eines Vereins ist (Vereins-Domain). Dann " +
         "die Daten DIESES Vereins: offizieller name, alternative Namen als aliase[], land, webseite, " +
         "gruendungsjahr, kategorie (Besetzungsart), staerkeklasse, kurze geschichte/Beschreibung, " +
-        "Social-Media-Links. Bei Fest-/Ranglisten-/Fremdseiten verein WEGLASSEN (null).";
+        "Social-Media-Links. Bei Fest-/Ranglisten-/Fremdseiten verein WEGLASSEN (null).\n" +
+        "- funktionaere: NUR ausfüllen, wenn die Anweisung Vorstand und/oder Musikkommission (Muko) verlangt. " +
+        "Vorstand = Präsident/Vizepräsident/Kassier:in/Aktuar:in/Beisitzer:in usw. (gremium=\"Vorstand\"); " +
+        "Muko = Musikkommission (gremium=\"Muko\"). funktion = die konkrete Rolle, email/instrument nur falls " +
+        "genannt. Sonst leeres Array. (Dirigent:innen gehören weiterhin in leitungen, NICHT in funktionaere.)";
 
     public async Task<ExtraktionsErgebnis> ExtrahiereAsync(ExtraktionsAnfrage anfrage, CancellationToken ct = default)
     {
@@ -116,6 +124,16 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                            "trage sie dann als bandName ein.");
         if (!string.IsNullOrWhiteSpace(anfrage.Hinweis))
             kontext.Append($"\nZUSÄTZLICHE ANWEISUNG DES ADMINS (unbedingt befolgen): {anfrage.Hinweis.Trim()}");
+        if (anfrage.VorstandGewuenscht || anfrage.MukoGewuenscht)
+        {
+            var gremien = (anfrage.VorstandGewuenscht, anfrage.MukoGewuenscht) switch
+            {
+                (true, true) => "Vorstand UND Musikkommission (Muko)",
+                (true, false) => "Vorstand",
+                _ => "Musikkommission (Muko)"
+            };
+            kontext.Append($"\nErfasse zusätzlich die Mitglieder von: {gremien} (Feld funktionaere, mit Funktion/E-Mail/Instrument falls genannt).");
+        }
         kontext.Append("\n\nExtrahiere die Funde aus folgendem Text:\n\n").Append(text);
         var anfrageKontext = kontext.ToString();
 
@@ -167,6 +185,60 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         }
     }
 
+    public async Task<IReadOnlyList<string>> FiltereVereineAsync(
+        IReadOnlyList<VereinKandidat> kandidaten, string kriterium, CancellationToken ct = default)
+    {
+        var treffer = new List<string>();
+        const int proChunk = 250;
+        for (var start = 0; start < kandidaten.Count; start += proChunk)
+        {
+            var teil = kandidaten.Skip(start).Take(proChunk).ToList();
+            var sb = new System.Text.StringBuilder();
+            for (var i = 0; i < teil.Count; i++)
+                sb.Append(i + 1).Append(") ").Append(teil[i].Url).Append(" | ").Append(teil[i].Kategorie ?? "?").Append('\n');
+
+            var sys = "Du filterst eine Vereinsliste nach einem Kriterium. Jeder Eintrag: Nummer) URL | Kategorie " +
+                "(Disziplin, Stärkeklasse, Besetzung). Gib AUSSCHLIESSLICH die Nummern der Einträge zurück, deren " +
+                "Kategorie das Kriterium erfüllt, als JSON {\"treffer\":[1,2,...]}. Keine Erklärungen.";
+            var user = $"Kriterium: {kriterium}\n\nEinträge:\n{sb}";
+
+            var body = new
+            {
+                model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+                temperature = 0.0,
+                response_format = new { type = "json_object" },
+                messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } }
+            };
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+                req.Content = JsonContent.Create(body);
+                using var resp = await http.SendAsync(req, ct);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("Mistral-Filter HTTP {Code} – Chunk wird unfiltriert übernommen.", (int)resp.StatusCode);
+                    treffer.AddRange(teil.Select(k => k.Url));
+                    continue;
+                }
+                var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+                var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+                var antwort = inhalt == null ? null : JsonSerializer.Deserialize<FilterAntwort>(inhalt, MistralJson);
+                foreach (var n in antwort?.Treffer ?? Enumerable.Empty<int>())
+                    if (n >= 1 && n <= teil.Count) treffer.Add(teil[n - 1].Url);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Mistral-Filter fehlgeschlagen – Chunk unfiltriert übernommen.");
+                treffer.AddRange(teil.Select(k => k.Url));
+            }
+        }
+        return treffer;
+    }
+
+    private record FilterAntwort(List<int>? Treffer);
+
     // ── Chunking großer Seiten + Zusammenführung der Teil-Antworten ──────────
     private const int ChunkUeberlappung = 1500;
     private const int MaxChunks = 8;
@@ -209,7 +281,8 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
             teile.SelectMany(t => t.Leitungen ?? Enumerable.Empty<LeitungDto>()).ToList(),
             teile.SelectMany(t => t.Stuecke ?? Enumerable.Empty<StueckDto>()).ToList(),
             teile.SelectMany(t => t.Komponisten ?? Enumerable.Empty<KomponistDto>()).ToList(),
-            teile.Select(t => t.Verein).FirstOrDefault(v => v != null));
+            teile.Select(t => t.Verein).FirstOrDefault(v => v != null),
+            teile.SelectMany(t => t.Funktionaere ?? Enumerable.Empty<FunktionaerDto>()).ToList());
     }
 
     private static string NormKey(string? s) => (s ?? "").Trim().ToLowerInvariant();
@@ -236,7 +309,8 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         foreach (var l in a.Leitungen ?? [])
         {
             if (string.IsNullOrWhiteSpace(l.PersonName)) continue;
-            var daten = new LeitungFundDaten(l.PersonName!.Trim(), Leer(l.BandName) ?? standardBand,
+            // Auf einer Vereinsseite ist die Leitung die DIESER Band → Quell-Band bevorzugen.
+            var daten = new LeitungFundDaten(l.PersonName!.Trim(), standardBand ?? Leer(l.BandName),
                 string.IsNullOrWhiteSpace(l.Funktion) ? "Dirigent" : l.Funktion!.Trim(),
                 l.VonJahr, l.BisJahr);
             yield return new ExtrahierterFund(CrawlFundTyp.Leitung, CrawlDaten.Serialisiere(daten));
@@ -267,6 +341,19 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                 Leer(v.EMail), Leer(v.Mobile), aliase);
             yield return new ExtrahierterFund(CrawlFundTyp.Band, CrawlDaten.Serialisiere(daten));
         }
+
+        // Vorstand/Muko: nur wenn angefordert. Als Leitung-Fund (Funktion = Rolle) → BandMitgliedschaft.
+        if (anfrage.VorstandGewuenscht || anfrage.MukoGewuenscht)
+            foreach (var fnk in a.Funktionaere ?? Enumerable.Empty<FunktionaerDto>())
+            {
+                if (string.IsNullOrWhiteSpace(fnk.PersonName)) continue;
+                var istMuko = NormKey(fnk.Gremium).Contains("muko") || NormKey(fnk.Gremium).Contains("kommission");
+                if (istMuko ? !anfrage.MukoGewuenscht : !anfrage.VorstandGewuenscht) continue;
+                var funktion = !string.IsNullOrWhiteSpace(fnk.Funktion) ? fnk.Funktion!.Trim() : (istMuko ? "Muko" : "Vorstand");
+                var daten = new LeitungFundDaten(fnk.PersonName!.Trim(), standardBand, funktion,
+                    EMail: Leer(fnk.EMail), InstrumentName: Leer(fnk.Instrument));
+                yield return new ExtrahierterFund(CrawlFundTyp.Leitung, CrawlDaten.Serialisiere(daten));
+            }
     }
 
     private static BandKategorie? MapKategorie(string? s)
@@ -311,7 +398,9 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record MistralAntwort(
         List<KonzertDto>? Konzerte, List<LeitungDto>? Leitungen,
-        List<StueckDto>? Stuecke, List<KomponistDto>? Komponisten, VereinDto? Verein);
+        List<StueckDto>? Stuecke, List<KomponistDto>? Komponisten, VereinDto? Verein,
+        List<FunktionaerDto>? Funktionaere);
+    private record FunktionaerDto(string? PersonName, string? Funktion, string? Gremium, string? EMail, string? Instrument);
     private record VereinDto(
         string? Name, List<string>? Aliase, string? Land, string? Webseite, int? Gruendungsjahr,
         string? Kategorie, string? Staerkeklasse, string? Geschichte,

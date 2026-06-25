@@ -58,7 +58,9 @@ public record LeitungFundDaten(
     string Funktion = "Dirigent",
     int? VonJahr = null,
     int? BisJahr = null,
-    string? Notiz = null);
+    string? Notiz = null,
+    string? EMail = null,
+    string? InstrumentName = null);
 
 /// <summary>
 /// Stück-Fund (Typ <see cref="CrawlFundTyp.Stueck"/>): ein einzelnes Stück aus einer Repertoire-/
@@ -120,4 +122,5 @@ public record WebseiteFundDaten(
     string Url,
     string? VereinName = null,
     string? Titel = null,
-    string? Beschreibung = null);
+    string? Beschreibung = null,
+    string? Kategorie = null);

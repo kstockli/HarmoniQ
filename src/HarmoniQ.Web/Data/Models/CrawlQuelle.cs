@@ -27,6 +27,9 @@ public class CrawlQuelle
     /// (z. B. „Nur die Wettspielvorträge in der Kirche, nicht in der Arche").</summary>
     public string? ExtraktionsHinweis { get; set; }
 
+    /// <summary>Strukturierte Anforderungen an den Lauf (Bitset), z. B. „Konzert braucht ein Stück".</summary>
+    public CrawlAnforderungen Anforderungen { get; set; } = CrawlAnforderungen.Keine;
+
     /// <summary>Maximale Linktiefe (nur BandDomain).</summary>
     public int MaxTiefe { get; set; } = 2;
 

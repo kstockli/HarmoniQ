@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 
 namespace HarmoniQ.Web.Services.Crawler;
@@ -115,6 +117,56 @@ public static class CrawlHtmlHelfer
         }
         return ergebnis;
     }
+
+    /// <summary>
+    /// Wie <see cref="ExterneLinks"/>, ordnet aber jedem Vereins-Link die zuletzt vorausgehende
+    /// **Kategorie-Überschrift** zu (Dokumentreihenfolge) – z. B. „Konzertmusik, Höchstklasse, Harmonie".
+    /// So liefern Verzeichnis-Seiten (EMF: Logos gruppiert nach Klasse/Besetzung) je Verein die Kategorie.
+    /// </summary>
+    public static List<(string Url, string? Kategorie)> ExterneLinksMitKategorie(string html, Uri basis)
+    {
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var ergebnis = new List<(string, string?)>();
+        var gesehen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? kategorie = null;
+
+        foreach (var node in doc.DocumentNode.Descendants())
+        {
+            if (node.NodeType != HtmlNodeType.Element) continue;
+
+            var direkt = DirektText(node);
+            if (direkt.Length is > 0 and < 70 && IstKategorie(direkt)) kategorie = direkt;
+
+            if (node.Name != "a") continue;
+            var href = node.GetAttributeValue("href", "").Trim();
+            if (href.Length == 0 || href.StartsWith('#')) continue;
+            if (!Uri.TryCreate(basis, href, out var abs)) continue;
+            if (abs.Scheme != Uri.UriSchemeHttp && abs.Scheme != Uri.UriSchemeHttps) continue;
+            if (string.Equals(abs.Host, basis.Host, StringComparison.OrdinalIgnoreCase)) continue;
+            if (LinkRauschen.Any(r => abs.Host.Contains(r, StringComparison.OrdinalIgnoreCase))) continue;
+            if (!gesehen.Add(abs.Host)) continue;
+
+            ergebnis.Add(($"{abs.Scheme}://{abs.Host}/", kategorie));
+        }
+        return ergebnis;
+    }
+
+    /// <summary>Direkter Textinhalt eines Elements (nur eigene Text-Kindknoten, ohne Nachfahren).</summary>
+    private static string DirektText(HtmlNode node)
+    {
+        var sb = new StringBuilder();
+        foreach (var c in node.ChildNodes)
+            if (c.NodeType == HtmlNodeType.Text) sb.Append(c.InnerText);
+        var t = HtmlEntity.DeEntitize(sb.ToString());
+        return string.Join(' ', t.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static bool IstKategorie(string t) =>
+        Regex.IsMatch(t, "Konzertmusik|Marschmusik|Parademusik", RegexOptions.IgnoreCase)
+        || (Regex.IsMatch(t, @"Höchstklasse|Elite|[1-4]\.\s*Klasse|stufe", RegexOptions.IgnoreCase)
+            && Regex.IsMatch(t, @"Harmonie|Brass\s*Band|Brassband|Fanfare", RegexOptions.IgnoreCase));
 
     /// <summary>Kleine Seiten-Vorschau ohne LLM: <c>&lt;title&gt;</c> und Meta-/og-Beschreibung.</summary>
     public static (string? Titel, string? Beschreibung) SeitenInfo(string html)

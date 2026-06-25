@@ -65,13 +65,59 @@
         }
         <MudItem xs="12">
             <MudTextField @bind-Value="_neu.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2"
-                          Label="Zusatz-Hinweis an die Extraktion (optional)"
-                          Placeholder="z. B. Nur die Wettspielvorträge in der Kirche, nicht in der Arche" />
+                          Label="Zusatz-Hinweis an die Extraktion (optional, wirkt auch als Filter)"
+                          Placeholder="z. B. Nur Höchstklasse; nur Konzerte ab 2023; nur Land Schweiz; nur Harmonie-Besetzung" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCheckBox T="bool" @bind-Value="_neu.KonzertBrauchtStueck" Dense="true" Color="Color.Secondary"
+                         Label="Konzert nur mit mind. einem Stück" />
+        </MudItem>
+        <MudItem xs="6" md="4">
+            <MudCheckBox T="bool" @bind-Value="_neu.Vorstand" Dense="true" Color="Color.Secondary"
+                         Label="Vorstand mit erfassen" />
+        </MudItem>
+        <MudItem xs="6" md="4">
+            <MudCheckBox T="bool" @bind-Value="_neu.Muko" Dense="true" Color="Color.Secondary"
+                         Label="Musikkommission mit erfassen" />
         </MudItem>
     </MudGrid>
     <MudButton Class="mt-2" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                StartIcon="@Icons.Material.Filled.Add" OnClick="QuelleAnlegen">Quelle anlegen</MudButton>
 </MudPaper>
+
+<!-- Läufe (oben: man will den Fortschritt sehen und aktualisieren) -->
+<MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Letzte Läufe</MudText>
+@if (_laeufe.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-6">Noch keine Läufe.</MudAlert>
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6" Style="background:#1a0030;">
+        <thead>
+            <tr><th>Start</th><th>Quelle</th><th>Status</th><th>Seiten</th><th>Funde</th><th>Meldung</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var l in _laeufe)
+            {
+                <tr>
+                    <td style="white-space:nowrap;">@l.StartAm.ToLocalTime().ToString("dd.MM HH:mm")</td>
+                    <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">@l.QuelleUrl</td>
+                    <td><MudChip T="string" Size="Size.Small" Color="@StatusFarbe(l.Status)">@l.Status</MudChip></td>
+                    <td>@l.SeitenBesucht</td>
+                    <td>@l.FundeAnzahl</td>
+                    <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;color:#A78FC0;">@l.Meldung</td>
+                    <td style="white-space:nowrap;">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#3a1060;"
+                                   Href="@($"/admin/crawler/funde?lauf={l.Id}")">Funde</MudButton>
+                        <MudIconButton Size="Size.Small" Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       title="Lauf löschen" OnClick="@(() => LaufLoeschen(l.Id))" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
 
 <!-- Quellen -->
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
@@ -116,8 +162,22 @@ else
                     </MudText>
                 </MudStack>
                 <MudTextField @bind-Value="q.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2" Margin="Margin.Dense"
-                              Label="Zusatz-Hinweis an die Extraktion (vor dem Lauf editierbar)"
-                              Placeholder="z. B. Nur Konzerte ab 2023 mit Stück-Angaben; ältere ignorieren." />
+                              Label="Zusatz-Hinweis an die Extraktion (vor dem Lauf editierbar, wirkt als Filter)"
+                              Placeholder="z. B. Nur Höchstklasse; nur Konzerte ab 2023; nur Land Schweiz" />
+                <MudStack Row="true" Wrap="Wrap.Wrap" Class="mt-1">
+                    <MudCheckBox T="bool" Dense="true" Color="Color.Secondary"
+                                 Value="q.Anforderungen.HasFlag(CrawlAnforderungen.KonzertBrauchtStueck)"
+                                 ValueChanged="@(v => SetzeAnforderung(q, CrawlAnforderungen.KonzertBrauchtStueck, v))"
+                                 Label="Konzert nur mit mind. einem Stück" />
+                    <MudCheckBox T="bool" Dense="true" Color="Color.Secondary"
+                                 Value="q.Anforderungen.HasFlag(CrawlAnforderungen.VorstandCrawlen)"
+                                 ValueChanged="@(v => SetzeAnforderung(q, CrawlAnforderungen.VorstandCrawlen, v))"
+                                 Label="Vorstand" />
+                    <MudCheckBox T="bool" Dense="true" Color="Color.Secondary"
+                                 Value="q.Anforderungen.HasFlag(CrawlAnforderungen.MukoCrawlen)"
+                                 ValueChanged="@(v => SetzeAnforderung(q, CrawlAnforderungen.MukoCrawlen, v))"
+                                 Label="Muko" />
+                </MudStack>
                 <MudStack Row="true" Class="mt-2" Spacing="2" Wrap="Wrap.Wrap">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
                                StartIcon="@Icons.Material.Filled.PlayArrow"
@@ -145,38 +205,6 @@ else
             </MudPaper>
         }
     </MudStack>
-}
-
-<!-- Läufe -->
-<MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Letzte Läufe</MudText>
-@if (_laeufe.Count == 0)
-{
-    <MudAlert Severity="Severity.Info">Noch keine Läufe.</MudAlert>
-}
-else
-{
-    <MudSimpleTable Dense="true" Hover="true" Style="background:#1a0030;">
-        <thead>
-            <tr><th>Start</th><th>Quelle</th><th>Status</th><th>Seiten</th><th>Funde</th><th>Meldung</th><th></th></tr>
-        </thead>
-        <tbody>
-            @foreach (var l in _laeufe)
-            {
-                <tr>
-                    <td>@l.StartAm.ToLocalTime().ToString("dd.MM HH:mm")</td>
-                    <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">@l.QuelleUrl</td>
-                    <td><MudChip T="string" Size="Size.Small" Color="@StatusFarbe(l.Status)">@l.Status</MudChip></td>
-                    <td>@l.SeitenBesucht</td>
-                    <td>@l.FundeAnzahl</td>
-                    <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;color:#A78FC0;">@l.Meldung</td>
-                    <td>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#3a1060;"
-                                   Href="@($"/admin/crawler/funde?lauf={l.Id}")">Funde</MudButton>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </MudSimpleTable>
 }
 
 @code {
@@ -225,7 +253,11 @@ else
             BrauchtRendering = _neu.BrauchtRendering,
             MaxTiefe = _neu.MaxTiefe,
             MaxSeiten = _neu.MaxSeiten,
-            ExtraktionsHinweis = string.IsNullOrWhiteSpace(_neu.ExtraktionsHinweis) ? null : _neu.ExtraktionsHinweis.Trim()
+            ExtraktionsHinweis = string.IsNullOrWhiteSpace(_neu.ExtraktionsHinweis) ? null : _neu.ExtraktionsHinweis.Trim(),
+            Anforderungen =
+                (_neu.KonzertBrauchtStueck ? CrawlAnforderungen.KonzertBrauchtStueck : 0)
+                | (_neu.Vorstand ? CrawlAnforderungen.VorstandCrawlen : 0)
+                | (_neu.Muko ? CrawlAnforderungen.MukoCrawlen : 0)
         });
         await db.SaveChangesAsync();
         Snackbar.Add("Quelle angelegt.", Severity.Success);
@@ -249,6 +281,15 @@ else
     {
         await SpeichereHinweis(q.Id, q.ExtraktionsHinweis);
         Snackbar.Add("Hinweis gespeichert.", Severity.Success);
+    }
+
+    private async Task SetzeAnforderung(CrawlQuelle q, CrawlAnforderungen flag, bool an)
+    {
+        if (an) q.Anforderungen |= flag; else q.Anforderungen &= ~flag;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var e = await db.CrawlQuellen.FindAsync(q.Id);
+        if (e != null) { e.Anforderungen = q.Anforderungen; await db.SaveChangesAsync(); }
+        Snackbar.Add("Anforderung gespeichert.", Severity.Success);
     }
 
     private async Task LaufStarten(CrawlQuelle q)
@@ -352,6 +393,23 @@ else
         await Laden();
     }
 
+    private async Task LaufLoeschen(Guid id)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, "Diesen Lauf inkl. seiner Funde löschen? (Bereits übernommene Daten bleiben erhalten.)" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Lauf löschen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var l = await db.CrawlLaeufe.FindAsync(id);
+        if (l != null) { db.CrawlLaeufe.Remove(l); await db.SaveChangesAsync(); }
+        Snackbar.Add("Lauf gelöscht.", Severity.Info);
+        await Laden();
+    }
+
     private async Task QuelleLoeschen(CrawlQuelle q)
     {
         var parameters = new DialogParameters<ConfirmDialog>
@@ -385,6 +443,9 @@ else
         public int MaxTiefe { get; set; } = 2;
         public int MaxSeiten { get; set; } = 100;
         public string? ExtraktionsHinweis { get; set; }
+        public bool KonzertBrauchtStueck { get; set; }
+        public bool Vorstand { get; set; }
+        public bool Muko { get; set; }
     }
 
     private record LaufZeile(Guid Id, string QuelleUrl, CrawlLaufStatus Status, int SeitenBesucht,

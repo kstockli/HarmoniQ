@@ -11,7 +11,15 @@ namespace HarmoniQ.Web.Services.Crawler;
 public interface IExtraktion
 {
     Task<ExtraktionsErgebnis> ExtrahiereAsync(ExtraktionsAnfrage anfrage, CancellationToken ct = default);
+
+    /// <summary>Filtert eine Vereins-Kandidatenliste (URL + Kategorie/Klasse) nach einem Freitext-Kriterium
+    /// (z. B. „Höchstklasse, Harmonie") und gibt die passenden URLs zurück. Ohne LLM: alle (Passthrough).</summary>
+    Task<IReadOnlyList<string>> FiltereVereineAsync(
+        IReadOnlyList<VereinKandidat> kandidaten, string kriterium, CancellationToken ct = default);
 }
+
+/// <summary>Ein Vereins-Kandidat aus der Link-Ernte: Webseite + (falls erkannt) Kategorie/Stärkeklasse.</summary>
+public record VereinKandidat(string Url, string? Kategorie);
 
 /// <summary>Eingabe für die Extraktion: was wurde gefunden und in welchem Kontext.</summary>
 public record ExtraktionsAnfrage(
@@ -21,7 +29,9 @@ public record ExtraktionsAnfrage(
     bool IstPdf,
     string? BandName = null,
     string? Hinweis = null,
-    string? LogoUrl = null);
+    string? LogoUrl = null,
+    bool VorstandGewuenscht = false,
+    bool MukoGewuenscht = false);
 
 /// <summary>Ein vom Extraktor vorgeschlagener Fund (Typ + serialisierter <c>DatenJson</c>-Vertrag).</summary>
 public record ExtrahierterFund(

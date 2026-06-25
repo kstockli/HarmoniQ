@@ -11,4 +11,9 @@ public class StubExtraktion : IExtraktion
     public Task<ExtraktionsErgebnis> ExtrahiereAsync(ExtraktionsAnfrage anfrage, CancellationToken ct = default) =>
         Task.FromResult(ExtraktionsErgebnis.Leer(
             "Kein LLM konfiguriert – automatische Extraktion deaktiviert (manuelle Erfassung im Review)."));
+
+    // Ohne LLM kein Filtern – alle Kandidaten durchreichen.
+    public Task<IReadOnlyList<string>> FiltereVereineAsync(
+        IReadOnlyList<VereinKandidat> kandidaten, string kriterium, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(kandidaten.Select(k => k.Url).ToList());
 }

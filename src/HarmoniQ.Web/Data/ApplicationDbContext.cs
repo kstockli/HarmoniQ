@@ -104,6 +104,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasOne(a => a.Band).WithMany(b => b.Aliase)
                 .HasForeignKey(a => a.BandId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(a => new { a.BandId, a.Name }).IsUnique();
+            // Wie BandLink/PersonLink: clientseitiger Guid-Key → ValueGeneratedNever, sonst hält EF
+            // einen via Navigation an eine getrackte Band gehängten Alias für „existierend" → UPDATE
+            // statt INSERT → „0 rows affected"-Concurrency-Fehler beim Anreichern.
+            e.Property(a => a.Id).ValueGeneratedNever();
         });
         builder.Entity<BandLink>(e =>
         {
