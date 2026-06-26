@@ -48,6 +48,15 @@ Beschreibung, **ohne LLM**, parallel geladen) an. **Kategorie/Stärkeklasse je V
 z. B. „Konzertmusik, Höchstklasse, Harmonie"; verifiziert: 472/472 Vereine auf emf26 zugeordnet). Liegt ein
 **Hinweis** vor, filtert das LLM (`IExtraktion.FiltereVereineAsync`, nummern-basiert, gechunkt) die Liste vor
 der Fund-Erzeugung (z. B. „Höchstklasse, Harmonie" → 11 statt 472). Beim **Übernehmen** entsteht eine
+
+**EMF-Vereinsverzeichnis = JSON-API statt Rendering (`EmfVereinImporter`):** Die emf26.ch/vereine-Seite ist
+eine schwere Wix-SPA, deren Daten aus einer **sauberen öffentlichen JSON-API** stammen
+(`https://emf26-api.ch/public/verein?locale=de`: Name, Kategorie/Klasse/Besetzung, Website, Direktion,
+Socials). Erkennt der Runner diese Quelle (`EmfVereinImporter.IstZustaendig`), holt er die **API direkt per
+HttpClient** (kein Chromium → kein OOM, läuft auch im 512-MB-Container) und legt je Verein **mit** Website einen
+Webseiten-Fund an. Der **Hinweis-Filter** ist hier **deterministisch** (auf der Kategorie-Zeichenkette, ohne
+LLM): „Höchstklasse, Harmonie" → genau 11 Vereine (verifiziert; 532 total, 468 mit Website). Schlägt die API
+fehl, **Fallback** auf den normalen (gerenderten) Seiten-Crawl.
 **inaktive BandDomain-Quelle (Vorschlag) mit gesetzter Ziel-Band** (find-or-create über Webseite/Name; Name
 aus Seitentitel bzw. Domain; **Kategorie/Stärkeklasse** aus dem Fund übernommen) – so kann der Folge-Crawl
 seine Konzerte direkt der richtigen Band zuordnen, und der Admin entscheidet je Verein in der Funde-Review.

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using HarmoniQ.Web.Data;
 using HarmoniQ.Web.Data.Models;
@@ -75,6 +76,8 @@ public class CrawlRunner(
         {
             if (quelle.Typ == CrawlQuelleTyp.BandDomain)
                 await BandDomainCrawlAsync(lauf, quelle, ct);
+            else if (EmfVereinImporter.IstZustaendig(quelle.StartUrl))
+                await EmfVereineImportierenAsync(lauf, quelle, ct);
             else
                 await EinzelAbrufAsync(lauf, quelle, quelle.StartUrl, einzelseiteImmerRelevant: true, ct);
 
@@ -286,6 +289,66 @@ public class CrawlRunner(
             lauf.FundeAnzahl++;
         }
         logger.LogInformation("{Count} Webseiten-Funde aus {Url} angelegt.", previews.Length, url);
+    }
+
+    /// <summary>EMF-Vereinsverzeichnis: Vereine aus der JSON-API holen (kein Rendering → kein OOM),
+    /// nach Hinweis filtern und je Verein mit Website einen <see cref="CrawlFundTyp.Webseite"/>-Fund
+    /// anlegen. Schlägt die API fehl, Fallback auf den normalen Seiten-Abruf.</summary>
+    private async Task EmfVereineImportierenAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
+    {
+        logger.LogInformation("EMF-Vereinsverzeichnis erkannt → JSON-API statt Rendering: {Api}", EmfVereinImporter.ApiUrl);
+        var res = await fetch.HoleAsync(EmfVereinImporter.ApiUrl, false, ct);
+        lauf.SeitenBesucht++;
+
+        List<EmfVereinImporter.Verein>? vereine = null;
+        if (res.Erfolg && !string.IsNullOrWhiteSpace(res.Text))
+            try { vereine = EmfVereinImporter.Parse(res.Text!); }
+            catch (Exception ex) { logger.LogWarning(ex, "EMF-API-JSON nicht lesbar."); }
+
+        if (vereine is null)
+        {
+            logger.LogWarning("EMF-API nicht nutzbar ({Fehler}) – Fallback auf Seiten-Crawl.", res.Fehler ?? "JSON-Fehler");
+            await EinzelAbrufAsync(lauf, quelle, quelle.StartUrl, einzelseiteImmerRelevant: true, ct);
+            return;
+        }
+
+        var gesamt = vereine.Count;
+        if (!string.IsNullOrWhiteSpace(_hinweis))
+            vereine = vereine.Where(v => EmfVereinImporter.PasstZuHinweis(v.kategorie, _hinweis)).ToList();
+
+        // Schon bekannte Domains (bestehende Quellen) überspringen.
+        var bekannt = (await db.CrawlQuellen.Where(q => q.Domain != null).Select(q => q.Domain!).ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int angelegt = 0, ohneWebsite = 0;
+        foreach (var v in vereine)
+        {
+            if (string.IsNullOrWhiteSpace(v.website)
+                || !Uri.TryCreate(v.website.Trim(), UriKind.Absolute, out var wu)
+                || (wu.Scheme != Uri.UriSchemeHttp && wu.Scheme != Uri.UriSchemeHttps))
+            { ohneWebsite++; continue; }
+            if (!bekannt.Add(wu.Host)) continue; // bekannt oder schon im Lauf angelegt
+
+            var daten = new WebseiteFundDaten(
+                $"{wu.Scheme}://{wu.Host}/", v.name ?? wu.Host, v.name, null, v.kategorie);
+            db.CrawlFunde.Add(new CrawlFund
+            {
+                LaufId = lauf.Id,
+                Typ = CrawlFundTyp.Webseite,
+                QuellUrl = daten.Url,
+                AbgerufenAm = DateTime.UtcNow,
+                DatenJson = CrawlDaten.Serialisiere(daten),
+                Status = CrawlFundStatus.Offen
+            });
+            lauf.FundeAnzahl++;
+            angelegt++;
+        }
+
+        logger.LogInformation(
+            "EMF-API: {Gesamt} Vereine, {Gefiltert} nach Hinweis '{Hinweis}', {Angelegt} Webseiten-Funde ({Ohne} ohne Website).",
+            gesamt, vereine.Count, _hinweis ?? "—", angelegt, ohneWebsite);
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Legt die CrawlSeite an oder aktualisiert sie. Gibt true zurück, wenn der Inhalt
