@@ -25,8 +25,9 @@ public static class MitwirkungService
         var name = e.PersonName.Trim();
         if (name.Length == 0) return;
 
-        // Person finden oder anlegen (+ passende Rolle ergänzen)
-        var person = await db.Personen.Include(p => p.Rollen).FirstOrDefaultAsync(p => p.Name == name);
+        // Person finden oder anlegen (+ passende Rolle ergänzen) – auch über Alias-Namen.
+        var person = await db.Personen.Include(p => p.Rollen).FirstOrDefaultAsync(p => p.Name == name)
+                     ?? await db.Personen.Include(p => p.Rollen).FirstOrDefaultAsync(p => p.Aliase.Any(a => a.Name == name));
         if (person == null)
         {
             person = new Person { Name = name, Sichtbarkeit = e.SichtbarkeitFuerNeu };

@@ -28,6 +28,8 @@ public class Person
     public ICollection<StueckBeitrag> StueckBeitraege { get; set; } = [];
     public ICollection<VideoMitwirkung> Mitwirkungen { get; set; } = [];
     public ICollection<BandMitgliedschaft> Bandmitgliedschaften { get; set; } = [];
+    /// <summary>Alternative Namen derselben Person (für Find-or-create &amp; Merge).</summary>
+    public ICollection<PersonAlias> Aliase { get; set; } = [];
 
     // ─── Read-only / Komfort-Properties (nicht in der DB gespeichert) ───────────
 

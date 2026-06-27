@@ -116,6 +116,7 @@ public static class KonzertErfassungService
             if (!personCache.TryGetValue(name, out var p))
             {
                 p = await db.Personen.Include(x => x.Rollen).FirstOrDefaultAsync(x => x.Name == name)
+                    ?? await db.Personen.Include(x => x.Rollen).FirstOrDefaultAsync(x => x.Aliase.Any(a => a.Name == name))
                     ?? db.Personen.Local.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
                 if (p == null)
                 {

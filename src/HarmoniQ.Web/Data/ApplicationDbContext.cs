@@ -24,6 +24,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PersonLink> PersonLinks => Set<PersonLink>();
     public DbSet<StueckBeitrag> StueckBeitraege => Set<StueckBeitrag>();
     public DbSet<StueckAlias> StueckAliase => Set<StueckAlias>();
+    public DbSet<PersonAlias> PersonAliase => Set<PersonAlias>();
     public DbSet<Instrument> Instrumente => Set<Instrument>();
     public DbSet<Stimme> Stimmen => Set<Stimme>();
     public DbSet<PersonInstrument> PersonInstrumente => Set<PersonInstrument>();
@@ -137,6 +138,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasIndex(a => new { a.StueckId, a.Name }).IsUnique();
             // Clientseitiger Guid-Key → ValueGeneratedNever (siehe BandAlias/BandLink): sonst hält EF
             // einen via Navigation angehängten Alias für „existierend" → „0 rows affected".
+            e.Property(a => a.Id).ValueGeneratedNever();
+        });
+
+        // Person-Aliase (alternative Namen) – analog StueckAlias.
+        builder.Entity<PersonAlias>(e =>
+        {
+            e.HasOne(a => a.Person).WithMany(p => p.Aliase)
+                .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(a => new { a.PersonId, a.Name }).IsUnique();
             e.Property(a => a.Id).ValueGeneratedNever();
         });
 

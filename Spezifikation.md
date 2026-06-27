@@ -204,8 +204,21 @@ Person                              (ersetzt „Komponist")
 ├── Rollen [n] → PersonRolle        ← Komponist / Dirigent / Musikant / Zuhörer
 ├── Instrumente [n:m] → Instrument  ← nur relevant für Musikant:innen (PersonInstrument)
 ├── Links [1:n] → PersonLink        ← mehrere Links statt einzelner Webseite
+├── Aliase [1:n] → PersonAlias      — NEU: alternative Namen (z. B. „J. Mackey")
 ├── StückBeiträge [1:n]
 └── VideoMitwirkungen [1:n]
+
+PersonAlias                         (NEU – alternativer Name einer Person, analog Band/StückAlias)
+├── Id (Guid) · PersonId (FK) · Name (string)
+└── UNIQUE (PersonId, Name)
+> Wird beim Find-or-create (Import/Crawler, `MitwirkungService`/`KonzertErfassungService`) und beim
+> **Merge** zur Erkennung derselben Person/Komponist:in genutzt.
+
+> **Person zusammenführen (Merge):** `PersonMergeService` schmilzt eine Quell-Person in eine Ziel-Person:
+> Stück-Beiträge, Mitwirkungen, Instrumente, Rollen, Links, Bandmitgliedschaften, Konzert-Mitwirkende,
+> Anträge, **Freundschaften** und **Feed**-Einträge werden umgehängt (dublettenfrei); Quell-Name + Aliase
+> bleiben als `PersonAlias`; Quelle gelöscht. Sind **beide** mit einem Konto verknüpft, wird der Merge
+> abgelehnt (zuerst eine Verknüpfung lösen). Bedienung im Personen-Admin („Zusammenführen").
 
 Sichtbarkeit (enum)                 (steuert, wie viel von einer Person öffentlich gezeigt wird)
 ├── Öffentlich       ← voller Name sichtbar (Default für Komponist:in / Dirigent:in)
@@ -712,7 +725,8 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
 
 — Admin (Rolle „Admin") —
 /admin                        → Dashboard (Zähler offener Anträge)
-/admin/personen, /admin/personen/{id}  → CRUD Personen (Stammdaten, Rollen, Instrumente, Bands, Mitwirkungen)
+/admin/personen, /admin/personen/{id}  → CRUD Personen (Stammdaten, Rollen, Instrumente, Bands, Mitwirkungen,
+                                 alternative Namen/Aliase, „Zusammenführen")
 /admin/benutzer               → Benutzer/Login-Verwaltung: Konten (E-Mail, bestätigt, Rolle), verknüpfte Person
                                  ändern/lösen
 /admin/konzerte (Filter: Suche/Band/Jahr, Datum absteigend), /admin/konzerte/erfassen,

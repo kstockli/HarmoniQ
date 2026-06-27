@@ -4,6 +4,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -16,6 +17,11 @@
                StartIcon="@Icons.Material.Filled.ArrowBack">Personen</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_name</MudText>
     <MudSpacer />
+    @if (_name != null)
+    {
+        <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#9B59B6;"
+                   StartIcon="@Icons.Material.Filled.Merge" OnClick="Zusammenfuehren">Zusammenführen</MudButton>
+    }
     <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"/personen/{Id}")"
                StartIcon="@Icons.Material.Filled.Visibility">Öffentliche Ansicht</MudButton>
 </MudStack>
@@ -79,6 +85,30 @@ else
         <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-3"
                    StartIcon="@Icons.Material.Filled.Save" OnClick="StammdatenSpeichern"
                    Disabled="@string.IsNullOrWhiteSpace(_m.Name)">Stammdaten speichern</MudButton>
+    </MudPaper>
+
+    @* Alternative Namen (Aliase) *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#F0E6FF;">Alternative Namen</MudText>
+        <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
+            Weitere Schreibweisen/Namen (z. B. „J. Mackey"). Werden beim Import und Zusammenführen zur Erkennung genutzt.
+        </MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-2">
+            @foreach (var a in _aliase)
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="@(() => AliasEntfernen(a.Id))"
+                         Style="background:#2d1657; color:#F0E6FF;">@a.Name</MudChip>
+            }
+            @if (_aliase.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Style="color:#6f5a86;">Keine.</MudText>
+            }
+        </MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudTextField @bind-Value="_neuerAlias" Label="Name hinzufügen" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudButton Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                       OnClick="AliasHinzufuegen" Disabled="@string.IsNullOrWhiteSpace(_neuerAlias)">Hinzufügen</MudButton>
+        </MudStack>
     </MudPaper>
 
     @* Bands *@
@@ -159,6 +189,8 @@ else
     private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
     private List<BandZeile> _bands = [];
     private List<MitwirkungZeile> _mitwirkungen = [];
+    private List<AliasZeile> _aliase = [];
+    private string? _neuerAlias;
 
     private string InstrName(Guid id) => _instrumente.FirstOrDefault(i => i.Id == id).Name ?? "?";
     private string InstrNamen(IReadOnlyList<string> vals) => string.Join(", ", vals.Select(v => InstrName(Guid.Parse(v))));
@@ -202,6 +234,46 @@ else
                 m.Instrument != null ? m.Instrument.Name : null,
                 m.Stimme != null ? m.Stimme.Bezeichnung : null, m.Status))
             .ToListAsync();
+
+        _aliase = await db.PersonAliase.Where(a => a.PersonId == Id).OrderBy(a => a.Name)
+            .Select(a => new AliasZeile(a.Id, a.Name)).ToListAsync();
+    }
+
+    private async Task AliasHinzufuegen()
+    {
+        var name = _neuerAlias?.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await db.PersonAliase.AnyAsync(a => a.PersonId == Id && a.Name == name))
+        {
+            db.PersonAliase.Add(new PersonAlias { PersonId = Id, Name = name });
+            await db.SaveChangesAsync();
+        }
+        _neuerAlias = null;
+        await Laden();
+    }
+
+    private async Task AliasEntfernen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var a = await db.PersonAliase.FindAsync(id);
+        if (a != null) { db.PersonAliase.Remove(a); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private async Task Zusammenfuehren()
+    {
+        var parameters = new DialogParameters<PersonMergeDialog> { { x => x.QuelleId, Id }, { x => x.QuelleName, _name ?? "" } };
+        var dialog = await DialogService.ShowAsync<PersonMergeDialog>("Person zusammenführen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var zielId = (Guid)result.Data!;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var (ok, meldung) = await PersonMergeService.MergeAsync(db, Id, zielId);
+        Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+        if (ok) Nav.NavigateTo($"/admin/personen/{zielId}");
     }
 
     private async Task StammdatenSpeichern()
@@ -340,6 +412,7 @@ else
         public string? Mobile { get; set; }
     }
 
+    private record AliasZeile(Guid Id, string Name);
     private record BandZeile(Guid Id, string BandName, string? Instrument, string? Funktion);
     private record MitwirkungZeile(Guid Id, Guid VideoId, string VideoLabel, MitwirkungRolle Rolle,
         string? Instrument, string? Stimme, VideoStatus Status)
