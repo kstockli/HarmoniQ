@@ -385,7 +385,12 @@ geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
   **uneinheitlichen** Seiten (manche Captions nennen Bandnamen, andere nur Selbstwahl-Titel) – verifiziert:
   korrekte Band↔Video-Paarung auf beiden Layouts. Die Videos (Plattform InfomaniakVod) hängen am Konzert-Fund
   (`KonzertVideoDaten`); Übernahme erzeugt `Video`-Datensätze (Stück via Titel, Band falls eindeutig).
-- **Schritt 3 (offen)** Konzert-Detailseite rendert die Rangliste (nach Rang) + eingebettete Videos.
+- **Schritt 3 ✅** Konzert-Detailseite rendert bei Wettbewerben (KonzertBand mit `Rang`) eine **Rangliste-Tabelle**
+  (Rang | Band | Dirigent:in | Stücke | Punkte, nach Rang sortiert); Band, **Dirigent:in** und **Komponist:in**
+  je Stück sind verlinkt/klickbar. Pro platzierter Band ein Video-Block mit **Standbild**: Infomaniak-VOD-Poster
+  ist aus der Embed-ID ableitbar (`https://api.infomaniak.com/2/vod/res/shares/<id>.preload.jpeg`) →
+  `VideoEinbettung.Thumbnail`. **Normale Konzerte** (ohne Rang) zeigen das Programm ebenfalls als **Tabelle**
+  (Stück | Komponist:in | Band, eine Zeile pro Stück, alles klickbar). Am echten SBBW-2025-Konzert verifiziert.
 
 ## 10. Offene Punkte / Risiken
 

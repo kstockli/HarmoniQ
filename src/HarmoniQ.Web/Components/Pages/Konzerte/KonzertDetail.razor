@@ -58,22 +58,41 @@ else
         <RichtigstellungMelden Typ="RichtigstellungTyp.Konzert" Id="_konzert.Id" />
     </MudStack>
 
-    @if (_programm.Count > 0)
+    @if (!_istWettbewerb && _programm.Count > 0)
     {
         <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Programm (@_programm.Count)</MudText>
-        <MudList T="string" Dense="true" Class="mb-6">
-            @foreach (var p in _programm)
-            {
-                <MudListItem T="string" Href="@($"/stuecke/{p.StueckId}")" Icon="@Icons.Material.Filled.MusicNote"
-                             Style="color:#F0E6FF;">
-                    @p.StueckTitel
-                    @if (p.BandName != null)
-                    {
-                        <MudText Typo="Typo.caption" Style="color:#A78FC0;"> · @p.BandName</MudText>
-                    }
-                </MudListItem>
-            }
-        </MudList>
+        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mb-6"
+                        Style="background:#1a0030; border:1px solid #3a1060;">
+            <thead>
+                <tr>
+                    <th style="color:#9B59B6;">Stück</th>
+                    <th style="color:#9B59B6;">Komponist:in</th>
+                    <th style="color:#9B59B6;">Band</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in _programm)
+                {
+                    <tr>
+                        <td><MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.StueckTitel</MudLink></td>
+                        <td>
+                            @if (_komponisten.TryGetValue(p.StueckId, out var ks) && ks.Count > 0)
+                            {
+                                @PersonenLinks(ks)
+                            }
+                            else { <span style="color:#A78FC0;">–</span> }
+                        </td>
+                        <td>
+                            @if (p.BandId is { } bid)
+                            {
+                                <MudLink Href="@($"/bands/{bid}")" Style="color:#A78FC0;" Underline="Underline.Hover">@p.BandName</MudLink>
+                            }
+                            else { <span style="color:#A78FC0;">–</span> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
     }
 
     @if (_mitwirkende.Count > 0)
@@ -101,19 +120,70 @@ else
     }
     else
     {
+        @if (_istWettbewerb)
+        {
+            <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Rangliste</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mb-6"
+                            Style="background:#1a0030; border:1px solid #3a1060;">
+                <thead>
+                    <tr style="color:#9B59B6;">
+                        <th style="color:#9B59B6;">Rang</th>
+                        <th style="color:#9B59B6;">Band</th>
+                        <th style="color:#9B59B6;">Dirigent:in</th>
+                        <th style="color:#9B59B6;">Stücke</th>
+                        <th style="color:#9B59B6;">Punkte</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in _bands)
+                    {
+                        <tr>
+                            <td style="color:#D4AF37;font-weight:600;">@(b.Rang?.ToString() ?? "–")</td>
+                            <td><MudLink Href="@($"/bands/{b.Id}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@b.Name</MudLink></td>
+                            <td>
+                                @if (b.Dirigent is { } d)
+                                {
+                                    <MudLink Href="@($"/personen/{d.Id}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@d.Name</MudLink>
+                                }
+                                else { <span style="color:#A78FC0;">–</span> }
+                            </td>
+                            <td>
+                                @foreach (var s in b.Stuecke)
+                                {
+                                    <div class="mb-1">
+                                        <MudLink Href="@($"/stuecke/{s.Id}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@s.Titel</MudLink>
+                                        @KomponistMarkup(s.Id)
+                                    </div>
+                                }
+                            </td>
+                            <td style="color:#A78FC0;">@(b.Punkte?.ToString() ?? "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+
         @foreach (var band in _bands)
         {
+            // Bei Wettbewerben sind alle Bands schon in der Rangliste – pro Band nur zeigen, wenn es Videos gibt.
+            var bandVideos = VideosVon(band.Id).ToList();
+            if (_istWettbewerb && bandVideos.Count == 0) { continue; }
+
             <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
                 <MudLink Href="@($"/bands/{band.Id}")" Style="color:#D4AF37;" Underline="Underline.Hover">@band.Name</MudLink>
+                @if (band.Rang is { } rang)
+                {
+                    <MudChip T="string" Size="Size.Small" Class="ml-2" Style="background:#D4AF37;color:#0e0018;">Rang @rang</MudChip>
+                }
             </MudText>
-            @if (!VideosVon(band.Id).Any())
+            @if (bandVideos.Count == 0)
             {
                 <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">(keine Videos an diesem Konzert)</MudText>
             }
             else
             {
                 <MudGrid Class="mb-4">
-                    @foreach (var v in VideosVon(band.Id))
+                    @foreach (var v in bandVideos)
                     {
                         <MudItem xs="12" sm="6" md="4">
                             <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
@@ -166,6 +236,8 @@ else
     private List<VideoZeile> _videos = [];
     private List<ProgrammZeile> _programm = [];
     private List<MitwirkendeZeile> _mitwirkende = [];
+    private Dictionary<Guid, List<PersonRef>> _komponisten = new();
+    private bool _istWettbewerb;
 
     private Guid? _eigenePersonId;
     private PersonRolleTyp _vorschlagRolle = PersonRolleTyp.Zuhoerer;
@@ -196,23 +268,23 @@ else
             .Select(v => new VideoZeile(v.Id, v.BandId, v.Plattform, v.ExternId, v.Titel, v.Stueck.Titel))
             .ToList();
 
-        // Teilnehmende Bands: alle aus KonzertBand (auch ohne Video), sortiert nach Name.
-        _bands = await db.KonzertBands
+        // Teilnehmende Bands inkl. Platzierung/Punkte (Wettbewerb) aus KonzertBand.
+        var bandRows = await db.KonzertBands
             .Where(kb => kb.KonzertId == Id)
-            .OrderBy(kb => kb.Band.Name)
-            .Select(kb => new BandZeile(kb.BandId, kb.Band.Name))
+            .Select(kb => new BandRoh(kb.BandId, kb.Band.Name, kb.Rang, kb.Punkte))
             .ToListAsync();
 
         // Falls ein Video eine Band hat, die (noch) nicht als Teilnehmerin geführt ist, ergänzen.
+        var bekannteBandIds = bandRows.Select(b => b.Id).ToHashSet();
         foreach (var bid in _videos.Where(v => v.BandId != null).Select(v => v.BandId!.Value).Distinct())
         {
-            if (_bands.All(b => b.Id != bid))
+            if (bekannteBandIds.Add(bid))
             {
                 var name = await db.Bands.Where(b => b.Id == bid).Select(b => b.Name).FirstOrDefaultAsync();
-                if (name != null) _bands.Add(new BandZeile(bid, name));
+                if (name != null) bandRows.Add(new BandRoh(bid, name, null, null));
             }
         }
-        _bands = _bands.OrderBy(b => b.Name).ToList();
+        _istWettbewerb = bandRows.Any(b => b.Rang != null);
 
         // Programm (Konzert↔Stück, optional je Band), nach Reihenfolge dann Titel.
         _programm = await db.KonzertStuecke
@@ -238,9 +310,36 @@ else
             {
                 var eff = PersonenSicht.Effektiv(kp.PersonId, kp.Person.Sichtbarkeit, vollSichtbar);
                 return new MitwirkendeZeile(kp.PersonId,
-                    PersonenSicht.AnzeigeName(kp.Person.Name, eff), kp.Rolle, kp.Band?.Name);
+                    PersonenSicht.AnzeigeName(kp.Person.Name, eff), kp.Rolle, kp.BandId, kp.Band?.Name);
             })
             .OrderBy(m => m.AnzeigeName)
+            .ToList();
+
+        // Komponist:innen je Stück (sichtbarkeitsabhängig) – für klickbare Komponisten in der Tabelle.
+        var stueckIds = _programm.Select(p => p.StueckId).Distinct().ToList();
+        var beitraege = await db.StueckBeitraege
+            .Where(b => stueckIds.Contains(b.StueckId) && b.Rolle == StueckRolle.Komponist)
+            .Include(b => b.Person)
+            .ToListAsync();
+        _komponisten = beitraege
+            .GroupBy(b => b.StueckId)
+            .ToDictionary(g => g.Key, g => g.Select(b =>
+            {
+                var eff = PersonenSicht.Effektiv(b.PersonId, b.Person.Sichtbarkeit, vollSichtbar);
+                return new PersonRef(b.PersonId, PersonenSicht.AnzeigeName(b.Person.Name, eff));
+            }).ToList());
+
+        // Bands anreichern: Dirigent:in (aus Mitwirkenden, klickbar) + gespielte Stücke (aus Programm),
+        // sortiert nach Rang (Wettbewerb), sonst nach Name.
+        _bands = bandRows
+            .Select(b =>
+            {
+                var dir = _mitwirkende.FirstOrDefault(m => m.Rolle == PersonRolleTyp.Dirigent && m.BandId == b.Id);
+                return new BandZeile(b.Id, b.Name, b.Rang, b.Punkte,
+                    dir == null ? null : new PersonRef(dir.PersonId, dir.AnzeigeName),
+                    _programm.Where(p => p.BandId == b.Id).Select(p => new StueckRef(p.StueckId, p.StueckTitel)).ToList());
+            })
+            .OrderBy(b => b.Rang == null).ThenBy(b => b.Rang).ThenBy(b => b.Name)
             .ToList();
 
         // „Ich war dabei": eigene verknüpfte Person + Rollen-Vorschlag.
@@ -309,12 +408,38 @@ else
         _ => r.ToString()
     };
 
+    /// <summary>Komma-getrennte, klickbare Personen-Links (z. B. Komponist:innen eines Stücks).</summary>
+    private RenderFragment PersonenLinks(List<PersonRef> personen) =>@<span>
+        @{ var erster = true; }
+        @foreach (var person in personen)
+        {
+            @if (!erster)
+            {
+                <span style="color:#A78FC0;">, </span>
+            }
+            <MudLink Href="@($"/personen/{person.Id}")" Style="color:#9B59B6;" Underline="Underline.Hover">@person.Name</MudLink>
+            erster = false;
+        }
+    </span>;
+
+    /// <summary>Hängt „ – Komponist:in(nen)" (klickbar) an einen Stück-Titel an, falls bekannt.</summary>
+    private RenderFragment KomponistMarkup(Guid stueckId) =>@<span>
+        @if (_komponisten.TryGetValue(stueckId, out var ks) && ks.Count > 0)
+        {
+            <span style="color:#A78FC0;"> – </span>
+            @PersonenLinks(ks)
+        }
+    </span>;
+
     private record KonzertKopf(Guid Id, DateOnly Datum, string? Name, string? Ort, string? Beschreibung, string? BildUrl)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }
-    private record BandZeile(Guid Id, string Name);
+    private record BandRoh(Guid Id, string Name, int? Rang, int? Punkte);
+    private record StueckRef(Guid Id, string Titel);
+    private record PersonRef(Guid Id, string Name);
+    private record BandZeile(Guid Id, string Name, int? Rang, int? Punkte, PersonRef? Dirigent, List<StueckRef> Stuecke);
     private record VideoZeile(Guid Id, Guid? BandId, VideoPlattform Plattform, string ExternId, string Titel, string StueckTitel);
     private record ProgrammZeile(Guid StueckId, string StueckTitel, Guid? BandId, string? BandName);
-    private record MitwirkendeZeile(Guid PersonId, string AnzeigeName, PersonRolleTyp Rolle, string? BandName);
+    private record MitwirkendeZeile(Guid PersonId, string AnzeigeName, PersonRolleTyp Rolle, Guid? BandId, string? BandName);
 }

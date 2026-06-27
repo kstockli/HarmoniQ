@@ -19,9 +19,13 @@ public static class VideoEinbettung
     /// <summary>Vorschaubild. YouTube liefert echte Thumbnails; andere Plattformen einen neutralen
     /// Platzhalter (damit Listen-Markup unverändert mit einem &lt;img&gt; funktioniert).</summary>
     public static string Thumbnail(VideoPlattform plattform, string? externId, string groesse = "hqdefault") =>
-        plattform == VideoPlattform.YouTube && !string.IsNullOrWhiteSpace(externId)
-            ? $"https://i.ytimg.com/vi/{externId}/{groesse}.jpg"
-            : Platzhalter;
+        string.IsNullOrWhiteSpace(externId) ? Platzhalter : plattform switch
+        {
+            VideoPlattform.YouTube => $"https://i.ytimg.com/vi/{externId}/{groesse}.jpg",
+            // Infomaniak VOD: das Poster/Standbild ist aus der Embed-ID ableitbar (= <video poster>).
+            VideoPlattform.InfomaniakVod => $"https://api.infomaniak.com/2/vod/res/shares/{externId}.preload.jpeg",
+            _ => Platzhalter
+        };
 
     /// <summary>Direktlink zum Ansehen (YouTube → youtu.be; sonst die Embed-/Player-URL).</summary>
     public static string? ExternLink(VideoPlattform plattform, string? externId) =>
