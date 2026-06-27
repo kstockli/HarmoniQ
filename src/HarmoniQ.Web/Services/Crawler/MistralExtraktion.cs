@@ -259,8 +259,9 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
           Startnr.=10, Endrang=1.
         - band: Vereinsname OHNE Kanton-Kürzel; kanton = das Kürzel in Klammern (z. B. "(VS)" → "VS"), sonst null.
         - dirigent: Name der Dirigentin/des Dirigenten.
-        - punkte: erreichte Punkte, falls die Kategorie Punkte ausweist (Elite/1.–4. Kat.), sonst null
-          (Höchstklasse nutzt Teilränge statt Punkte → punkte null).
+        - punkte: die Gesamtwertung der Zeile. In Elite und 1.–4. Kategorie = die erreichten Punkte
+          (höher = besser). In der Höchstklasse = die SUMME der Teilränge (Spalte „Total"/„Klassierung";
+          tiefer = besser), z. B. Zeile „… 1 1 2 1 …" → 2. Wenn keine Wertung ausgewiesen ist, null.
         - selbstwahlTitel: NUR Höchstklasse (Spalte "Pièce à choix"/"Selbstwahlstück"), sonst null.
         - selbstwahlKomponist: nur wenn du den Komponisten des Selbstwahlstücks SICHER kennst, sonst null (nicht raten).
         - Fakten wörtlich übernehmen, nichts erfinden. Keine Erklärungen, nur das JSON.
@@ -367,6 +368,43 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
     }
 
     private record SbbwVideoAntwort(List<SbbwVideo>? Videos);
+
+    public async Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(suchText)) return null;
+        var sys = "Du ermittelst aus Web-Suchergebnissen den Komponisten/die Komponistin eines Blasmusik-/" +
+            "Brass-Band-Stücks. Antworte AUSSCHLIESSLICH mit dem Namen (Vorname Nachname) – oder mit dem Wort " +
+            "unbekannt, wenn die Suchergebnisse den Komponisten nicht klar belegen. Nicht raten, keine Erklärung.";
+        var text = suchText.Length > 6000 ? suchText[..6000] : suchText;
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            messages = new object[]
+            {
+                new { role = "system", content = sys },
+                new { role = "user", content = $"Stück: \"{stueckTitel}\"\n\nSuchergebnisse:\n{text}" }
+            }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var name = chat?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            name = name.Trim('"', '.', ' ', '\n', '\r');
+            // Nur einen plausiblen Namen akzeptieren (nicht „unbekannt", keine Sätze).
+            if (name.Length is < 3 or > 60) return null;
+            if (name.Contains("unbekannt", StringComparison.OrdinalIgnoreCase)) return null;
+            return name;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "Komponist-Extraktion fehlgeschlagen für {Titel}", stueckTitel); return null; }
+    }
 
     // ── Chunking großer Seiten + Zusammenführung der Teil-Antworten ──────────
     private const int ChunkUeberlappung = 1500;

@@ -1,5 +1,6 @@
 @page "/admin/crawler/funde"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using System.Text.Json
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
@@ -82,7 +83,14 @@ else
                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@f.DublettHinweis</MudAlert>
                 }
 
-                <!-- Benutzerfreundliche Zusammenfassung -->
+                @if (!f.JsonGueltig)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">
+                        JSON ungültig – Übernahme nicht möglich. @f.JsonFehler
+                    </MudAlert>
+                }
+
+                <!-- Benutzerfreundliche Zusammenfassung (aus dem aktuellen JSON berechnet) -->
                 <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@f.FriendlyTitel</MudText>
                 @if (!string.IsNullOrWhiteSpace(f.FriendlySub))
                 {
@@ -102,7 +110,8 @@ else
                 {
                     <MudStack Row="true" Class="mt-2">
                         <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => Uebernehmen(f))">Übernehmen</MudButton>
+                                   StartIcon="@Icons.Material.Filled.Check" Disabled="@(!f.JsonGueltig)"
+                                   OnClick="@(() => Uebernehmen(f))">Übernehmen</MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => Verwerfen(f))">Verwerfen</MudButton>
                     </MudStack>
@@ -111,9 +120,24 @@ else
                 <!-- Rohdaten nur bei Bedarf einblendbar/editierbar -->
                 <MudExpansionPanels Elevation="0" Class="mt-2">
                     <MudExpansionPanel Text="JSON anzeigen / bearbeiten" Style="background:#12001f;">
-                        <MudTextField @bind-Value="f.Json" Variant="Variant.Outlined" Lines="6"
+                        <MudTextField @bind-Value="f.Json" @bind-Value:after="@(() => BefuelleAnzeige(f))"
+                                      Variant="Variant.Outlined" Lines="6"
                                       Style="font-family:monospace;font-size:0.8rem;"
-                                      HelperText="Beim Übernehmen werden diese Daten verwendet (z. B. fehlendes Datum hier ergänzen)." />
+                                      HelperText="Änderungen werden in die Vorschau übernommen (Feld verlassen oder Button unten). Beim Übernehmen gelten genau diese Daten." />
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2" Spacing="2">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#3a1060;"
+                                       StartIcon="@Icons.Material.Filled.Calculate" OnClick="@(() => Neuberechnen(f))">
+                                Vorschau neu berechnen
+                            </MudButton>
+                            @if (f.JsonGueltig)
+                            {
+                                <MudText Typo="Typo.caption" Style="color:#4caf50;">✓ JSON gültig</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Style="color:#f44336;">✗ JSON ungültig</MudText>
+                            }
+                        </MudStack>
                     </MudExpansionPanel>
                 </MudExpansionPanels>
             </MudPaper>
@@ -155,9 +179,25 @@ else
         foreach (var fe in _funde) BefuelleAnzeige(fe);
     }
 
-    /// <summary>Bereitet aus dem DatenJson eine lesbare Zusammenfassung je Fund-Typ auf.</summary>
+    /// <summary>Berechnet die Vorschau aus dem (ggf. von Hand geänderten) JSON neu und meldet das Ergebnis.</summary>
+    private void Neuberechnen(FundEdit fe)
+    {
+        BefuelleAnzeige(fe);
+        StateHasChanged();
+        Snackbar.Add(fe.JsonGueltig ? "Vorschau aktualisiert." : "JSON ungültig – siehe Meldung beim Fund.",
+            fe.JsonGueltig ? Severity.Success : Severity.Error);
+    }
+
+    /// <summary>Bereitet aus dem DatenJson eine lesbare Zusammenfassung je Fund-Typ auf und setzt
+    /// <see cref="FundEdit.JsonGueltig"/>/<see cref="FundEdit.JsonFehler"/> (klare Meldung bei kaputtem JSON).</summary>
     private static void BefuelleAnzeige(FundEdit fe)
     {
+        // Zurücksetzen, damit eine erneute Berechnung keine alten Werte stehen lässt.
+        fe.FriendlyTitel = "";
+        fe.FriendlySub = null;
+        fe.FriendlyZeilen = [];
+        fe.JsonGueltig = true;
+        fe.JsonFehler = null;
         try
         {
             switch (fe.Typ)
@@ -245,7 +285,16 @@ else
                     break;
             }
         }
-        catch { /* unsauberes JSON → nur Typ anzeigen */ }
+        catch (JsonException jx)
+        {
+            fe.JsonGueltig = false;
+            fe.JsonFehler = "Ungültiges JSON: " + jx.Message;
+        }
+        catch (Exception ex)
+        {
+            fe.JsonGueltig = false;
+            fe.JsonFehler = "Daten nicht lesbar: " + ex.Message;
+        }
         if (string.IsNullOrWhiteSpace(fe.FriendlyTitel)) fe.FriendlyTitel = fe.Typ.ToString();
     }
 
@@ -271,6 +320,11 @@ else
 
     private async Task Uebernehmen(FundEdit f)
     {
+        if (!f.JsonGueltig)
+        {
+            Snackbar.Add("JSON ungültig – bitte korrigieren. " + f.JsonFehler, Severity.Error);
+            return;
+        }
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
@@ -296,6 +350,9 @@ else
     {
         var offene = _funde.Where(f => f.Status == CrawlFundStatus.Offen).ToList();
         if (offene.Count == 0) { Snackbar.Add("Keine offenen Funde im aktuellen Filter.", Severity.Info); return; }
+        var ungueltig = offene.Count(f => !f.JsonGueltig);
+        offene = offene.Where(f => f.JsonGueltig).ToList();
+        if (offene.Count == 0) { Snackbar.Add("Alle offenen Funde haben ungültiges JSON.", Severity.Error); return; }
 
         var parameters = new DialogParameters<ConfirmDialog>
         {
@@ -312,8 +369,9 @@ else
             try { await CrawlUebernahmeService.UebernehmenAsync(db, f.Id, f.Json); ok++; }
             catch { fehler++; }
         }
-        Snackbar.Add($"{ok} übernommen{(fehler > 0 ? $", {fehler} mit Fehler (z. B. fehlendes Datum)" : "")}.",
-            fehler > 0 ? Severity.Warning : Severity.Success);
+        Snackbar.Add($"{ok} übernommen{(fehler > 0 ? $", {fehler} mit Fehler (z. B. fehlendes Datum)" : "")}" +
+            $"{(ungueltig > 0 ? $", {ungueltig} mit ungültigem JSON übersprungen" : "")}.",
+            fehler > 0 || ungueltig > 0 ? Severity.Warning : Severity.Success);
         await Laden();
     }
 
@@ -368,9 +426,11 @@ else
         public string Json { get; set; } = "";
         public CrawlFundStatus Status { get; set; }
 
-        // Aufbereitete Anzeige (aus Json berechnet beim Laden)
+        // Aufbereitete Anzeige (aus Json berechnet beim Laden und nach jeder JSON-Änderung)
         public string FriendlyTitel { get; set; } = "";
         public string? FriendlySub { get; set; }
         public List<string> FriendlyZeilen { get; set; } = [];
+        public bool JsonGueltig { get; set; } = true;
+        public string? JsonFehler { get; set; }
     }
 }

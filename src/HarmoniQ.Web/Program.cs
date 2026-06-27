@@ -51,6 +51,9 @@ if (string.Equals(llmProvider, "mistral", StringComparison.OrdinalIgnoreCase) &&
 else
     builder.Services.AddScoped<IExtraktion, StubExtraktion>();
 
+// Komponist-Suche (Web + LLM) für fehlende Selbstwahlstück-Komponist:innen (SBBW §4.2).
+builder.Services.AddHttpClient<KomponistSuche>(c => c.Timeout = TimeSpan.FromSeconds(20));
+
 // Orchestrator: In-Memory-Queue (Singleton) + Hintergrund-Dienst, der Läufe sequenziell abarbeitet.
 builder.Services.AddSingleton<CrawlLaufQueue>();
 builder.Services.AddScoped<CrawlRunner>();

@@ -15,6 +15,7 @@ public class CrawlRunner(
     ApplicationDbContext db,
     CrawlFetchService fetch,
     IExtraktion extraktion,
+    KomponistSuche komponistSuche,
     ILogger<CrawlRunner> logger)
 {
     private string? _bandName;
@@ -358,6 +359,9 @@ public class CrawlRunner(
     /// Zusätzlich (Teil 2b) die Infomaniak-Videos der Video-Unterseiten zuordnen und mitführen.</summary>
     private async Task SbbwImportierenAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
     {
+        // Komponist-Suche je Titel zwischenspeichern (mehrere Bands spielen evtl. dasselbe Selbstwahlstück).
+        var komponistCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
         // PDF-URLs bestimmen: direkte Jahres-PDF-URL ODER die Resultate-Übersicht (verlinkt die PDFs).
         List<string> pdfUrls;
         if (SbbwImporter.JahrAusUrl(quelle.StartUrl) is not null)
@@ -410,8 +414,13 @@ public class CrawlRunner(
                         programm.Add(new ProgrammZeileDaten(kat.AufgabestueckTitel!.Trim(),
                             Leer2(kat.AufgabestueckKomponist), band, z.Rang));
                     if (!string.IsNullOrWhiteSpace(z.SelbstwahlTitel))
-                        programm.Add(new ProgrammZeileDaten(z.SelbstwahlTitel!.Trim(),
-                            Leer2(z.SelbstwahlKomponist), band, z.Rang));
+                    {
+                        var swTitel = z.SelbstwahlTitel!.Trim();
+                        // Komponist:in fehlt im PDF → per Web-Suche + LLM best-effort ergänzen (gecacht).
+                        var swKomp = Leer2(z.SelbstwahlKomponist)
+                                     ?? await KomponistFuerAsync(swTitel, komponistCache, ct);
+                        programm.Add(new ProgrammZeileDaten(swTitel, swKomp, band, z.Rang));
+                    }
                     raenge.Add(new RangZeileDaten(band, z.Rang, z.Punkte, Leer2(z.Dirigent), Leer2(z.Kanton)));
                 }
                 if (raenge.Count == 0) continue;
@@ -460,6 +469,15 @@ public class CrawlRunner(
     }
 
     private static string? Leer2(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>Komponist:in zu einem Stück-Titel ermitteln (Web-Suche + LLM), je Titel gecacht.</summary>
+    private async Task<string?> KomponistFuerAsync(string titel, Dictionary<string, string?> cache, CancellationToken ct)
+    {
+        if (cache.TryGetValue(titel, out var vorhanden)) return vorhanden;
+        var name = await komponistSuche.KomponistAsync(titel, ct);
+        cache[titel] = name;
+        return name;
+    }
 
     /// <summary>Holt die 3 SBBW-Video-Unterseiten eines Jahres (ch-elite / 1st-2nd / 3rd-4th), lässt sie
     /// vom LLM zu (Video → Kategorie/Band/Stück) auswerten und gruppiert das Ergebnis je Kategorie.</summary>

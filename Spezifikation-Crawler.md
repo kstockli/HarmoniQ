@@ -310,7 +310,10 @@ CrawlFund                           (Kandidat zur Übernahme)
   **benutzerfreundliche Zusammenfassung** je Typ (Dirigent:in mit Band/Zeitraum; Konzert mit Datum/Ort und
   Programmzeilen „Stück — Komponist, arr. … · Band" in Reihenfolge; Stück; Komponist:in), Quell-Link,
   Dublett-Hinweis, **Übernehmen** / **Verwerfen**. Das rohe **JSON** ist nur noch einblendbar und dort
-  editierbar (z. B. fehlendes Datum ergänzen) – diese Daten werden beim Übernehmen verwendet.
+  editierbar (z. B. fehlendes Datum ergänzen) – diese Daten werden beim Übernehmen verwendet. Nach jeder
+  JSON-Änderung wird die **Vorschau neu berechnet** (Feld verlassen oder Button „Vorschau neu berechnen");
+  ist das JSON **kaputt**, erscheint eine klare Fehlermeldung, „Übernehmen" ist gesperrt und Massen-Übernahme
+  überspringt solche Funde – so ist immer sichtbar, was beim Übernehmen tatsächlich gilt.
 - **Volltext-Suche** über die Funde (Name/Ort/URL – ILIKE auf DatenJson/QuellUrl), um z. B. Webseiten-Funde
   einzugrenzen. **Massen-Aktionen** (auf den aktuellen Filter): „Alle angezeigten übernehmen",
   „Alle offenen verwerfen", „Alle angezeigten löschen".
@@ -400,9 +403,14 @@ geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
 - **Rechtliches** – robots.txt, Quellen-Provenienz, kein Mitglieder-Scraping vorerst.
 - **Heterogene Seiten** – manche Vereine haben kein brauchbares HTML (PDF-Programme, Social-only) → out of scope.
 - **Wartung** – Seiten ändern sich; Heuristiken müssen pflegbar/abschaltbar bleiben.
-- **Selbstwahlstück-Komponist:in (SBBW, §4.2)** – steht nirgends in den Quellen → muss extern aufgelöst werden.
-  **Offener Entscheid:** Provider der Suche – (a) Google Programmable Search / SerpAPI (eigener Key, kostet),
-  (b) reines LLM-Wissen (gratis, aber Halluzinations-Risiko → nur als Vorschlag), (c) später/leer lassen.
-  Empfehlung: (b) als niedrig-konfidenter Vorschlag mit Pflicht-Review; (a) optional nachrüstbar via `IKomponistSuche`.
+- **Selbstwahlstück-Komponist:in (SBBW, §4.2) – umgesetzt (`KomponistSuche`):** Web-Suche → Snippets →
+  LLM-Extraktion (grounded, kein Raten). **Provider = Google Programmable Search JSON API**, aktiv sobald
+  API-Key + Such-ID gesetzt sind (Gratis-Kontingent 100/Tag genügt). Config: `Crawler:KomponistSuche:GoogleCx`
+  (Pflicht) + API-Key `Crawler:KomponistSuche:GoogleApiKey` **oder ersatzweise der vorhandene `YouTube:ApiKey`**
+  (gleiches Google-Projekt; Custom Search API aktivieren + für den Key erlauben). In **Railway** mit `__` statt
+  `:` (z. B. `Crawler__KomponistSuche__GoogleCx`). Ohne Key/CX ist die Suche inaktiv → Komponist bleibt leer. **Verworfene Alternativen (getestet):** reines LLM-Wissen
+  halluziniert (3× „Peter Graham"); DuckDuckGo-Scraping wird bot-geblockt (HTTP 202 Challenge); MusicBrainz/
+  Wikipedia liefern für Wettstücke falsche Treffer. Grounded-LLM mit echtem Such-Snippet liefert dagegen korrekt
+  (z. B. „Mnemosyne Phrases" → Torstein Aagaard-Nilsen). Aufgabestück-Komponist kommt weiter direkt aus dem PDF.
 - **SBBW-Video-Lizenz/Einbettung** – Infomaniak-VOD-iframes sind öffentlich einbettbar; Provenienz (Quell-URL)
   wird wie bei YouTube geführt. Falls der Anbieter Einbettung sperrt, bleibt der Link als Verweis.

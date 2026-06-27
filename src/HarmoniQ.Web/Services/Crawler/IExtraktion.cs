@@ -24,6 +24,10 @@ public interface IExtraktion
     /// <summary>SBBW (§4.2 Teil 2b): ordnet die Videos einer linearisierten Video-Seite (Marker
     /// [[VIDEO:id]] im Textfluss) je Kategorie/Band/Stück zu. Ohne LLM (Stub): leer.</summary>
     Task<IReadOnlyList<SbbwVideo>> SbbwVideosAsync(string seitenOutline, CancellationToken ct = default);
+
+    /// <summary>Liest aus Web-Suchergebnis-Text den Komponisten/die Komponistin eines Stücks heraus
+    /// (nur wenn klar belegt, sonst null – nicht raten). Ohne LLM (Stub): null.</summary>
+    Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default);
 }
 
 /// <summary>Ein Video der SBBW-Video-Seite mit (best-effort) Zuordnung zu Kategorie/Band/Stück.</summary>

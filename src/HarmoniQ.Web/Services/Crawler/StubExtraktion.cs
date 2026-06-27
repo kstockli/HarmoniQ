@@ -23,4 +23,7 @@ public class StubExtraktion : IExtraktion
 
     public Task<IReadOnlyList<SbbwVideo>> SbbwVideosAsync(string seitenOutline, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SbbwVideo>>([]);
+
+    public Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
 }
