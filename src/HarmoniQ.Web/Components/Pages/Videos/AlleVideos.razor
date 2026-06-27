@@ -45,7 +45,7 @@
             <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                 <MudLink Href="@($"/videos/{v.Id}")">
                     <div style="position:relative;">
-                        <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                        <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
                              style="width:100%;display:block;" alt="@v.Titel" />
                         <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
                                  Style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;opacity:0.85;"
@@ -118,7 +118,7 @@
             .ToListAsync();
 
         _alle = videos.Select(v => new Zeile(
-            v.Id, v.YouTubeVideoId, v.Titel,
+            v.Id, v.Plattform, v.ExternId, v.Titel,
             v.StueckId, v.Stueck.Titel,
             v.Stueck.Komponisten.Select(p => p.Id).ToHashSet(), v.Stueck.KomponistenText,
             v.BandId, v.Band?.Name ?? "Unbekannt", v.Band?.Land,
@@ -141,7 +141,7 @@
             .ToList();
     }
 
-    private record Zeile(Guid Id, string YouTubeVideoId, string Titel,
+    private record Zeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel,
         Guid StueckId, string StueckTitel, HashSet<Guid> KomponistIds, string KomponistName,
         Guid? BandId, string BandName, string? BandLand, int Anzahl, double Schnitt);
 }

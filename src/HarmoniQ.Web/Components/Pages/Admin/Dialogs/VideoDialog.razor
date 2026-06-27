@@ -22,9 +22,9 @@
         <MudTextField @bind-Value="_youTubeEingabe" @bind-Value:after="ExtrahiereId"
                       Label="YouTube-Link oder Video-ID" Variant="Variant.Outlined" Class="mb-1"
                       Placeholder="https://youtu.be/… oder 11-stellige ID" />
-        @if (!string.IsNullOrWhiteSpace(_model.YouTubeVideoId))
+        @if (!string.IsNullOrWhiteSpace(_model.ExternId))
         {
-            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkannte Video-ID: <b>@_model.YouTubeVideoId</b></MudText>
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkannte Video-ID: <b>@_model.ExternId</b></MudText>
         }
 
         <MudTextField @bind-Value="_model.Ort" Label="Aufnahme-Ort (optional)" Variant="Variant.Outlined" Class="mt-3"
@@ -84,7 +84,7 @@
 
     private bool IstGueltig =>
         _model.StueckId != Guid.Empty &&
-        !string.IsNullOrWhiteSpace(_model.YouTubeVideoId) &&
+        !string.IsNullOrWhiteSpace(_model.ExternId) &&
         (!_neuKonzert || _neuDatum is not null);
 
     protected override void OnInitialized()
@@ -96,7 +96,8 @@
                 Id = Vorhanden.Id,
                 StueckId = Vorhanden.StueckId,
                 BandId = Vorhanden.BandId,
-                YouTubeVideoId = Vorhanden.YouTubeVideoId,
+                Plattform = Vorhanden.Plattform,
+                ExternId = Vorhanden.ExternId,
                 Titel = Vorhanden.Titel,
                 AufnahmeDatum = Vorhanden.AufnahmeDatum,
                 Ort = Vorhanden.Ort,
@@ -107,7 +108,7 @@
             };
             _stueck = Stuecke.FirstOrDefault(s => s.Id == Vorhanden.StueckId);
             _konzert = Konzerte.FirstOrDefault(k => k.Id == Vorhanden.KonzertId);
-            _youTubeEingabe = Vorhanden.YouTubeVideoId;
+            _youTubeEingabe = Vorhanden.ExternId;
         }
     }
 
@@ -146,7 +147,7 @@
         _model.StueckId = s?.Id ?? Guid.Empty;
     }
 
-    private void ExtrahiereId() => _model.YouTubeVideoId = YouTubeId.Extrahiere(_youTubeEingabe);
+    private void ExtrahiereId() => _model.ExternId = YouTubeId.Extrahiere(_youTubeEingabe);
 
     private void Speichern()
     {

@@ -28,7 +28,7 @@
     <Columns>
         <TemplateColumn Title="" Sortable="false">
             <CellTemplate>
-                <img src="@($"https://i.ytimg.com/vi/{context.Item.YouTubeVideoId}/default.jpg")"
+                <img src="@VideoEinbettung.Thumbnail(context.Item.Plattform, context.Item.ExternId, "default")"
                      style="width:64px;border-radius:4px;" alt="" />
             </CellTemplate>
         </TemplateColumn>
@@ -104,7 +104,7 @@
 
         // Duplikat-Prüfung: gleiche YouTube-ID am gleichen Stück nicht doppelt erfassen.
         var duplikat = await db.Videos.AnyAsync(x =>
-            x.YouTubeVideoId == model.YouTubeVideoId && x.StueckId == model.StueckId && x.Id != model.Id);
+            x.ExternId == model.ExternId && x.StueckId == model.StueckId && x.Id != model.Id);
         if (duplikat)
         {
             Snackbar.Add("Dieses Video ist für dieses Stück bereits erfasst.", Severity.Warning);
@@ -113,7 +113,7 @@
 
         // Titel automatisch aus dem YouTube-Video übernehmen, falls leer gelassen.
         if (string.IsNullOrWhiteSpace(model.Titel))
-            model.Titel = await YouTube.HoleTitelAsync(model.YouTubeVideoId) ?? "(ohne Titel)";
+            model.Titel = await YouTube.HoleTitelAsync(model.ExternId) ?? "(ohne Titel)";
 
         // Neues Konzert (aus dem Dialog) anlegen und verknüpfen.
         if (data.NeuesKonzert is { } nk)
@@ -135,7 +135,8 @@
             entity.StueckId = model.StueckId;
             entity.BandId = model.BandId;
             entity.KonzertId = model.KonzertId;
-            entity.YouTubeVideoId = model.YouTubeVideoId;
+            entity.Plattform = model.Plattform;
+            entity.ExternId = model.ExternId;
             entity.Ort = model.Ort;
             entity.Anlass = model.Anlass;
             entity.Status = model.Status;

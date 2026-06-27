@@ -121,7 +121,7 @@ else
                 <MudItem xs="12" sm="6" md="4">
                     <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                         <MudLink Href="@($"/videos/{v.Id}")">
-                            <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                            <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
                                  style="width:100%;display:block;" alt="@v.Titel" />
                         </MudLink>
                         <MudCardContent>
@@ -289,7 +289,7 @@ else
             .OrderBy(v => v.Stueck.Titel)
             .ToListAsync();
 
-        _videos = videos.Select(v => new VideoZeile(v.Id, v.YouTubeVideoId, v.Titel, v.StueckId, v.Stueck.Titel)).ToList();
+        _videos = videos.Select(v => new VideoZeile(v.Id, v.Plattform, v.ExternId, v.Titel, v.StueckId, v.Stueck.Titel)).ToList();
 
         // Gespielte Stücke = aus Videos UND aus Konzertprogrammen dieser Band (Union, ohne Dubletten).
         var konzertStuecke = await db.KonzertStuecke
@@ -343,7 +343,7 @@ else
             .ToList();
     }
 
-    private record VideoZeile(Guid Id, string YouTubeVideoId, string Titel, Guid StueckId, string StueckTitel);
+    private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel, Guid StueckId, string StueckTitel);
     private record StueckZeile(Guid Id, string Titel, int? Jahr);
     private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort)
     {

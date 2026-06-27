@@ -66,7 +66,7 @@ else
                     <MudCardContent>
                         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
                             <MudLink Href="@($"/stuecke/{z.StueckId}")" Style="flex-shrink:0;">
-                                <img src="@($"https://i.ytimg.com/vi/{z.YouTubeVideoId}/mqdefault.jpg")"
+                                <img src="@VideoEinbettung.Thumbnail(z.Plattform, z.ExternId, "mqdefault")"
                                      style="width:120px;border-radius:8px;display:block;" alt="@z.StueckTitel" />
                             </MudLink>
                             <div style="flex:1;min-width:0;">
@@ -156,14 +156,15 @@ else
             .Select(b => new Zeile(
                 b.Video.StueckId,
                 b.Video.Stueck.Titel,
-                b.Video.YouTubeVideoId,
+                b.Video.Plattform,
+                b.Video.ExternId,
                 b.Video.Band != null ? b.Video.Band.Name : "Unbekannte Band",
                 b.GesamtEindruck, b.Praezision, b.Musikalitaet,
                 b.AkustischeQualitaet, b.VideoQualitaet, b.Kommentar, b.ErstelltAm))
             .ToListAsync();
     }
 
-    private record Zeile(Guid StueckId, string StueckTitel, string YouTubeVideoId, string BandName,
+    private record Zeile(Guid StueckId, string StueckTitel, VideoPlattform Plattform, string ExternId, string BandName,
         int GesamtEindruck, int Praezision, int Musikalitaet,
         int AkustischeQualitaet, int VideoQualitaet, string? Kommentar, DateTime ErstelltAm);
 

@@ -154,7 +154,7 @@
                 <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                     <MudLink Href="@($"/videos/{v.Id}")">
                         <div style="position:relative;">
-                            <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                            <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
                                  style="width:100%;display:block;" alt="@v.StueckTitel" />
                             <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
                                      Style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;opacity:0.85;"
@@ -346,7 +346,7 @@
         _neueVideos = await db.Videos
             .Where(v => v.Status == VideoStatus.Genehmigt)
             .OrderByDescending(v => v.ErstelltAm)
-            .Select(v => new VideoZeile(v.Id, v.YouTubeVideoId, v.Stueck.Titel,
+            .Select(v => new VideoZeile(v.Id, v.Plattform, v.ExternId, v.Stueck.Titel,
                 v.Band != null ? v.Band.Name : null))
             .Take(4)
             .ToListAsync();
@@ -381,7 +381,7 @@
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
     private record BandZeile(Guid Id, string Name, string? Land, int MitgliederCount, int VideosCount);
-    private record VideoZeile(Guid Id, string YouTubeVideoId, string StueckTitel, string? BandName);
+    private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string StueckTitel, string? BandName);
     private record KalenderZeile(Guid Id, DateOnly Datum, string? Name, string? Ort,
         string RelativLabel, bool IstHeute, bool IstVergangen)
     {

@@ -118,7 +118,7 @@ else
                         <MudItem xs="12" sm="6" md="4">
                             <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                                 <MudLink Href="@($"/videos/{v.Id}")">
-                                    <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                                    <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
                                          style="width:100%;display:block;" alt="@v.Titel" />
                                 </MudLink>
                                 <MudCardContent>
@@ -142,7 +142,7 @@ else
                     <MudItem xs="12" sm="6" md="4">
                         <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                             <MudLink Href="@($"/videos/{v.Id}")">
-                                <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/hqdefault.jpg")"
+                                <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
                                      style="width:100%;display:block;" alt="@v.Titel" />
                             </MudLink>
                             <MudCardContent>
@@ -193,7 +193,7 @@ else
             .OrderBy(v => v.Stueck.Titel)
             .ToListAsync();
         _videos = videos
-            .Select(v => new VideoZeile(v.Id, v.BandId, v.YouTubeVideoId, v.Titel, v.Stueck.Titel))
+            .Select(v => new VideoZeile(v.Id, v.BandId, v.Plattform, v.ExternId, v.Titel, v.Stueck.Titel))
             .ToList();
 
         // Teilnehmende Bands: alle aus KonzertBand (auch ohne Video), sortiert nach Name.
@@ -314,7 +314,7 @@ else
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }
     private record BandZeile(Guid Id, string Name);
-    private record VideoZeile(Guid Id, Guid? BandId, string YouTubeVideoId, string Titel, string StueckTitel);
+    private record VideoZeile(Guid Id, Guid? BandId, VideoPlattform Plattform, string ExternId, string Titel, string StueckTitel);
     private record ProgrammZeile(Guid StueckId, string StueckTitel, Guid? BandId, string? BandName);
     private record MitwirkendeZeile(Guid PersonId, string AnzeigeName, PersonRolleTyp Rolle, string? BandName);
 }

@@ -397,15 +397,15 @@
 
                 foreach (var vid in videoIds.Distinct())
                 {
-                    var existiert = await db.Videos.AnyAsync(v => v.YouTubeVideoId == vid && v.Stueck.Titel == p.Titel)
-                                    || stueck.Videos.Any(v => v.YouTubeVideoId == vid);
+                    var existiert = await db.Videos.AnyAsync(v => v.ExternId == vid && v.Stueck.Titel == p.Titel)
+                                    || stueck.Videos.Any(v => v.ExternId == vid);
                     if (existiert) { _log.Add($"   ⏭ Video {vid} bereits vorhanden."); continue; }
 
                     var meta = await YouTubeMeta.HoleAsync(vid);
                     var band = await FindeOderErstelleBandAsync(db, meta);
                     stueck.Videos.Add(new Video
                     {
-                        YouTubeVideoId = vid,
+                        ExternId = vid,
                         Titel = meta?.Titel ?? "(ohne Titel)",
                         Band = band,
                         Status = VideoStatus.Genehmigt

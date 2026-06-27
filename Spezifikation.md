@@ -319,8 +319,11 @@ Video
 ├── StückId (FK)
 ├── BandId (FK?)                   ← nullable, falls Band unbekannt
 ├── KonzertId (FK?)               ← NEU, nullable: optionaler Verweis auf das Konzert/den Auftritt
-├── YouTubeVideoId (string)        ← nur die 11-stellige ID (aus URL extrahiert)
-├── Titel (string)                 ← optional bei Eingabe; sonst autom. via YouTube-oEmbed
+├── Plattform (enum: YouTube / InfomaniakVod / Vimeo / Andere)  ← NEU: Video-Quelle (Default YouTube)
+├── ExternId (string)              ← plattform-spez. ID; ersetzt YouTubeVideoId (YouTube: 11-stellig;
+│                                     InfomaniakVod: Embed-ID aus player.vod2.infomaniak.com/embed/<id>)
+├── EmbedUrl [NotMapped]           ← berechnete Einbett-URL je Plattform (für den Player-Iframe)
+├── Titel (string)                 ← optional bei Eingabe; bei YouTube autom. via oEmbed
 ├── AufnahmeDatum (DateOnly?)
 ├── Ort (string?)                  ← optional, Aufnahme-Ort (z. B. "KKL Luzern")
 ├── Anlass (string?)               ← optional (z. B. "WMC Kerkrade 2022")
@@ -413,7 +416,14 @@ Konzert                             (NEU – ein Auftritt/Event, an dem eine ode
 KonzertBand                         (n:m – welche Bands beim Konzert mitwirken)
 ├── KonzertId (FK)
 ├── BandId (FK)
+├── Rang (int?)                     ← NEU: Platzierung (1 = Sieger) bei Wettbewerbs-Konzerten
+├── Punkte (int?)                   ← NEU: erreichte Punkte (falls auf der Rangliste vorhanden)
 └── PK (KonzertId, BandId)
+
+> **Rangliste (NEU):** Bei Wettbewerbs-Konzerten (z. B. SBBW) trägt `KonzertBand` die Platzierung.
+> Die Konzert-Detailseite rendert die Teilnehmer dann **nach `Rang` sortiert** (1. Rang oben) mit
+> Band, Dirigent:in (aus `KonzertPerson`/`BandMitgliedschaft`) und gespielten Stücken (`KonzertStueck`:
+> Aufgabe- und – falls vorhanden – Selbstwahlstück). `Rang`/`Punkte` bleiben für Nicht-Wettbewerbe leer.
 
 KonzertStueck                       (NEU – Programm: welches Stück wurde von welcher Band gespielt)
 ├── Id (Guid)                       ← Surrogat-PK (ein Stück kann mehrfach vorkommen, z. B. zwei Bands)
@@ -427,6 +437,13 @@ KonzertStueck                       (NEU – Programm: welches Stück wurde von 
 > ob eine Aufnahme existiert. Ein `Video` (mit `KonzertId`, `StueckId`, `BandId`) ist die konkrete
 > Aufnahme eines Programmpunkts; nicht jeder Programmpunkt hat ein Video, und das Programm bleibt
 > auch ohne Videos erfasst.
+
+> **Video-Plattform (NEU – nicht nur YouTube):** Videos können auch von anderen Anbietern stammen
+> (z. B. **Infomaniak VOD** beim SBBW: `https://player.vod2.infomaniak.com/embed/<id>` im iframe).
+> Daher `Plattform` + `ExternId` statt fix `YouTubeVideoId`. Eine zentrale Helfer-/Player-Komponente
+> liefert je Plattform die **Einbett-URL** (`EmbedUrl`) und rendert den passenden Iframe. **Migration:**
+> bestehende `YouTubeVideoId` → `ExternId` mit `Plattform=YouTube`. YouTube-Suche/-oEmbed gelten nur für
+> `Plattform=YouTube`; bei anderen Plattformen werden Titel/Anlass manuell bzw. vom Crawler gesetzt.
 
 KonzertPerson                       (NEU – n:m Person ↔ Konzert mit Rolle)
 ├── Id (Guid)

@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using HarmoniQ.Web.Services;
+
 namespace HarmoniQ.Web.Data.Models;
 
 public class Video
@@ -7,7 +10,10 @@ public class Video
     public Guid? BandId { get; set; }
     /// <summary>Optionaler Verweis auf das Konzert/den Auftritt, an dem die Aufnahme entstand.</summary>
     public Guid? KonzertId { get; set; }
-    public string YouTubeVideoId { get; set; } = string.Empty;
+    /// <summary>Video-Quelle (Default YouTube). Bestimmt die Einbettung (siehe <see cref="EmbedUrl"/>).</summary>
+    public VideoPlattform Plattform { get; set; } = VideoPlattform.YouTube;
+    /// <summary>Plattform-spezifische ID (YouTube: 11-stellig; InfomaniakVod: Embed-ID). Früher YouTubeVideoId.</summary>
+    public string ExternId { get; set; } = string.Empty;
     public string Titel { get; set; } = string.Empty;
     public DateOnly? AufnahmeDatum { get; set; }
     /// <summary>Optionaler Aufnahme-Ort (z. B. „KKL Luzern“).</summary>
@@ -18,6 +24,10 @@ public class Video
     public string? VorgeschlagenVonId { get; set; }
     /// <summary>Zeitpunkt der Erfassung (für „zuletzt hinzugefügt“).</summary>
     public DateTime ErstelltAm { get; set; } = DateTime.UtcNow;
+
+    // ─── Berechnete Einbettung je Plattform (nicht in der DB) ───
+    [NotMapped] public string? EmbedUrl => VideoEinbettung.Embed(Plattform, ExternId);
+    [NotMapped] public string ThumbnailUrl => VideoEinbettung.Thumbnail(Plattform, ExternId);
 
     public Stueck Stueck { get; set; } = null!;
     public Band? Band { get; set; }

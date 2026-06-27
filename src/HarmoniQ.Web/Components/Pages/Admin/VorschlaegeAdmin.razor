@@ -26,7 +26,7 @@ else
             <MudItem xs="12" md="6">
                 <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                     <MudStack Row="true">
-                        <img src="@($"https://i.ytimg.com/vi/{v.YouTubeVideoId}/mqdefault.jpg")"
+                        <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId, "mqdefault")"
                              style="width:160px;flex-shrink:0;" alt="" />
                         <MudCardContent>
                             <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@v.Titel</MudText>
@@ -35,8 +35,8 @@ else
                             <MudText Typo="Typo.caption" Style="color:#6f5a86;">
                                 Vorgeschlagen von: @(v.VorgeschlagenVon?.Email ?? "unbekannt")
                             </MudText>
-                            <MudLink Href="@($"https://youtu.be/{v.YouTubeVideoId}")" Target="_blank"
-                                     Typo="Typo.caption" Style="color:#9B59B6;">Auf YouTube ansehen ↗</MudLink>
+                            <MudLink Href="@VideoEinbettung.ExternLink(v.Plattform, v.ExternId)" Target="_blank"
+                                     Typo="Typo.caption" Style="color:#9B59B6;">Video ansehen ↗</MudLink>
                         </MudCardContent>
                     </MudStack>
                     <MudCardActions>

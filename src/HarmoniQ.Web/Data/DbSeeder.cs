@@ -170,7 +170,7 @@ public static class DbSeeder
     {
         StueckId = s.Id,
         BandId = b.Id,
-        YouTubeVideoId = youtubeId,
+        ExternId = youtubeId,
         Titel = titel,
         Status = VideoStatus.Genehmigt
     };

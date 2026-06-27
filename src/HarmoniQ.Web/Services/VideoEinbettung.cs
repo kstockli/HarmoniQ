@@ -1,0 +1,40 @@
+using HarmoniQ.Web.Data.Models;
+
+namespace HarmoniQ.Web.Services;
+
+/// <summary>Bildet je <see cref="VideoPlattform"/> aus der externen ID die Einbett-, Thumbnail- und
+/// Verweis-URL. Zentral, damit Komponenten nicht plattform-spezifische URLs inline bauen.</summary>
+public static class VideoEinbettung
+{
+    /// <summary>Iframe-Quelle für den Player (null, wenn keine ID).</summary>
+    public static string? Embed(VideoPlattform plattform, string? externId) =>
+        string.IsNullOrWhiteSpace(externId) ? null : plattform switch
+        {
+            VideoPlattform.YouTube => $"https://www.youtube.com/embed/{externId}",
+            VideoPlattform.InfomaniakVod => $"https://player.vod2.infomaniak.com/embed/{externId}",
+            VideoPlattform.Vimeo => $"https://player.vimeo.com/video/{externId}",
+            _ => null
+        };
+
+    /// <summary>Vorschaubild. YouTube liefert echte Thumbnails; andere Plattformen einen neutralen
+    /// Platzhalter (damit Listen-Markup unverändert mit einem &lt;img&gt; funktioniert).</summary>
+    public static string Thumbnail(VideoPlattform plattform, string? externId, string groesse = "hqdefault") =>
+        plattform == VideoPlattform.YouTube && !string.IsNullOrWhiteSpace(externId)
+            ? $"https://i.ytimg.com/vi/{externId}/{groesse}.jpg"
+            : Platzhalter;
+
+    /// <summary>Direktlink zum Ansehen (YouTube → youtu.be; sonst die Embed-/Player-URL).</summary>
+    public static string? ExternLink(VideoPlattform plattform, string? externId) =>
+        string.IsNullOrWhiteSpace(externId) ? null : plattform switch
+        {
+            VideoPlattform.YouTube => $"https://youtu.be/{externId}",
+            _ => Embed(plattform, externId)
+        };
+
+    /// <summary>Neutrales Video-Platzhalterbild (inline SVG data-URI, dunkel mit Play-Dreieck).</summary>
+    public const string Platzhalter =
+        "data:image/svg+xml;utf8," +
+        "%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180'%3E" +
+        "%3Crect width='320' height='180' fill='%231a0030'/%3E" +
+        "%3Cpolygon points='135,65 135,115 180,90' fill='%239B59B6'/%3E%3C/svg%3E";
+}

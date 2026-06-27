@@ -159,6 +159,7 @@ Eine `CrawlQuelle` hat einen **Typ**, der das Vorgehen bestimmt:
 | **BandDomain** | Vereins-Webseite | Auf Domain crawlen, Heuristik/LLM, Leitung & Konzerte |
 | **Dokument** | Rangliste-/Spielplan-**PDF** | PDF-Text extrahieren → LLM strukturiert zu Zeilen |
 | **Event** | Festival-Spielplan (HTML/JS) | Seite **rendern** (JS) → Programm-Tabelle extrahieren |
+| **Wettbewerb** | SBBW (swissbrass.ch) | Spezial-Handler: Jahres-PDF (Rangliste je Kategorie) **+** Video-Seiten zusammenführen → je Jahr/Kategorie ein **Konzert mit Rangliste & Videos** (siehe §4.2) |
 
 **Fähigkeiten der Fetch-Stufe:**
 - **PDF:** Dokument laden (Admin gibt Link **oder** Upload; Links können Ablauf-Token haben → frischer Link
@@ -198,16 +199,60 @@ sondern erst auf der **eigenen Vereins-Webseite**. Ablauf:
 - **Region („Innerschweiz")** ist **kein** Feld auf den Listen → nur via **Ort→Kanton-Anreicherung**
   (Mapping LU/UR/SZ/OW/NW/ZG) oder indem der Admin aus den extrahierten Treffern auswählt.
 
-> **Modell-Lücke (bewusst):** HarmoniQ kennt **kein Rang-/Wettbewerbs-Kategorie-Feld**. Rang & Klasse aus
-> Ranglisten werden daher **nicht gespeichert** (höchstens als Notiz) – relevant nur als *Filterkriterium*
-> bei der Übernahme, nicht als Zielfeld. Für den Kern (Konzerte + Vereine + Stücke) ist das ohne Belang.
+> **Rang jetzt speicherbar (Update 2026-06-26):** Für Wettbewerbs-Konzerte (SBBW, §4.2) wurde `KonzertBand`
+> um **`Rang`** (+ optional `Punkte`) ergänzt (siehe Spezifikation.md). Die **Stärkeklasse/Kategorie** bleibt
+> wie gehabt ein Band-Feld. Außerhalb von Wettbewerben bleibt `Rang` leer; für reine Spielplan-Events ist
+> Rang weiter nur Filterkriterium.
+
+### 4.2 Wettbewerb: Schweizer Brass Band Wettbewerb (SBBW) — Spezial-Crawler
+
+**Ziel:** Pro **Jahr × Kategorie** ein `Konzert` mit **vollständiger Rangliste** (1. Rang oben) – je Band:
+Platzierung, Dirigent:in, Aufgabestück (+ Komponist:in) und – nur **Höchstklasse** – Selbstwahlstück; dazu die
+zugehörigen **Videos** eingebettet. Begründung für eigenen Typ/Handler: die Daten verteilen sich über **zwei
+strukturierte Quellen**, die zusammengeführt werden müssen – das passt nicht in den generischen Seiten-Extraktor.
+Aufbau analog `EmfVereinImporter` (dedizierter Handler, per URL erkannt), darf intern das **LLM** nutzen.
+
+**Quellen (verifiziert an swissbrass.ch, 2025):**
+- **Übersicht** `…/resultate-sbbw`: verlinkt je **Jahr** ein Ergebnis-PDF
+  (`…/data/files/documents/resultate_sbbw/results_<jahr>.pdf`, 2021–2025).
+- **Jahres-PDF** (z. B. `results_2025.pdf`): je **Kategorie** eine Seite (Höchstklasse/Excellence, Elite,
+  1.–4. Kategorie). Kopf: Wettbewerbsnummer/-titel, **Datum** (Sa/So), Halle; **Aufgabestück + Komponist:in**.
+  Tabelle: Startnr., **Band** (+ Kanton), **Dirigent:in**, Teilränge/Punkte, **Endrang**; in Höchstklasse
+  zusätzlich je Band der **Selbstwahlstück-Titel** (Spalte „Pièce à choix" – **ohne Komponist:in**).
+- **Video-Index** `…/videos-sbbw`: verlinkt **Unterseiten je Jahr + Kategoriegruppe**
+  (`<jahr>-ch-elite`, `<jahr>-1st-2nd`, `<jahr>-3rd-4th`). Jede Unterseite: Abschnitts-Überschrift
+  (Kategorie + Jahr), **Aufgabestück + Komponist:in** im Klartext, und je Video ein **Infomaniak-VOD-iframe**
+  (`https://player.vod2.infomaniak.com/embed/<id>`) mit Band-/Stück-Beschriftung (Aufgabe- vs. Selbstwahlstück).
+
+**Pipeline (Handler):**
+1. **Jahre ermitteln** aus `…/resultate-sbbw` (PDF-Links) – bzw. Admin gibt Jahr/PDF gezielt vor.
+2. **PDF je Kategorie → LLM:** PDF-Text (PdfPig, `-layout`-ähnlich) pro Kategorie-Abschnitt ans LLM →
+   strukturiertes JSON: `{ kategorie, datum, ort?, aufgabestueck{titel,komponist}, zeilen:[{rang, band,
+   kanton, dirigent, punkte?, selbstwahlstueck?}] }`. Das LLM gleicht die in der PDF **spaltenversetzten**
+   Selbstwahl-Titel den Rang-Zeilen zu (deterministisch zu brüchig → LLM ist hier stabiler).
+3. **Video-Unterseite je Jahr/Gruppe** (HTML, kein Rendering nötig): iframes + Beschriftungen extrahieren
+   (DOM/LLM) → Liste `{kategorie, band, stueckTyp(Aufgabe|Selbstwahl), embedId}`.
+4. **Join** PDF ↔ Video über **(Jahr, Kategorie, Band-Name)** (Normalisierung + `BandAlias`, Kanton-Suffix
+   wie „(VS)" abtrennen). Video wird dem passenden Stück (Aufgabe/Selbstwahl) der Band zugeordnet.
+5. **Selbstwahlstück-Komponist:in fehlt** → **best-effort Auflösung** (Web-/Google-Suche + LLM, oder LLM-Wissen)
+   als **niedrig-konfidenter Vorschlag**, den der Admin bestätigt; ohne Treffer bleibt das Feld leer (nicht raten).
+   Provider ist **pluggable** (`IKomponistSuche`), Default „leer + Review-Flag" wenn kein Such-Provider gesetzt.
+6. **Ergebnis = je (Jahr, Kategorie) ein Konzert-Fund** (`CrawlFundTyp.Konzert`, erweiterte Daten): Datum,
+   Name (z. B. „SBBW <Jahr> – <Kategorie>"), Bands **mit Rang/Punkte/Dirigent:in**, Stücke (Aufgabe + Selbstwahl
+   inkl. Komponist:in) und **Video-Referenzen** (Plattform InfomaniakVod). Bei der **Übernahme** baut
+   `KonzertErfassungService` daraus Konzert + `KonzertBand`(Rang/Punkte) + `KonzertStueck` + `KonzertPerson`
+   (Dirigent:in) + `Video`. Find-or-create für Band/Stück/Person wie gehabt (Alias-/Merge-fähig).
+
+**Modell-Anpassungen (in Spezifikation.md gepflegt):** `KonzertBand.Rang`/`.Punkte`; `Video.Plattform`/`.ExternId`
+(+ `EmbedUrl`). Die Erfassungs-Eingabe (`KonzertFundDaten`/`KonzertErfassungService.Eingabe`) wird um Rang/Punkte
+und Dirigent:in je Band sowie Video-Referenzen erweitert.
 
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```
 CrawlQuelle                         (Seed: Band-Domain, Dokument/PDF oder Event)
 ├── Id (Guid)
-├── Typ (enum: BandDomain / Dokument / Event)
+├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb)   ← Wettbewerb = SBBW-Spezial-Handler (§4.2)
 ├── BandId (FK → Band?)             ← Zielband (bei BandDomain; sonst optional)
 ├── StartUrl (string)               ← Domain-Start, PDF-/Dokument-Link oder Event-Seite
 ├── Domain (string?)                ← bei BandDomain; Crawler bleibt darauf
@@ -326,6 +371,12 @@ zweiten Durchgang gefundenen Stücke ans passende (Lokal,Datum)-Konzert; automat
 Feldfilter-UI (Rang/Kategorie/Land); Discovery-Vorschläge anderer Bands; Verbands-/Verzeichnis-Quellen;
 geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
 
+**Phase C5 – Wettbewerb SBBW (geplant, §4.2):** Quelltyp **Wettbewerb** + Spezial-Handler `SbbwImporter`
+(Jahres-PDF je Kategorie via LLM strukturieren; Video-Unterseiten parsen; Join Band↔Video; Selbstwahl-Komponist:in
+best-effort). Datenmodell: `KonzertBand.Rang/Punkte`, `Video.Plattform/ExternId` (+ Migration), Konzert-Detail
+rendert Rangliste; generischer **Video-Player je Plattform** (YouTube/InfomaniakVod). Übernahme = Konzert-Fund →
+`KonzertErfassungService` (Konzert + KonzertBand[Rang] + KonzertStueck + KonzertPerson[Dirigent] + Video).
+
 ## 10. Offene Punkte / Risiken
 
 - **LLM-Anbieter & Budget** – **entschieden:** Mistral `mistral-large-latest`; Kosten gering
@@ -334,3 +385,9 @@ geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
 - **Rechtliches** – robots.txt, Quellen-Provenienz, kein Mitglieder-Scraping vorerst.
 - **Heterogene Seiten** – manche Vereine haben kein brauchbares HTML (PDF-Programme, Social-only) → out of scope.
 - **Wartung** – Seiten ändern sich; Heuristiken müssen pflegbar/abschaltbar bleiben.
+- **Selbstwahlstück-Komponist:in (SBBW, §4.2)** – steht nirgends in den Quellen → muss extern aufgelöst werden.
+  **Offener Entscheid:** Provider der Suche – (a) Google Programmable Search / SerpAPI (eigener Key, kostet),
+  (b) reines LLM-Wissen (gratis, aber Halluzinations-Risiko → nur als Vorschlag), (c) später/leer lassen.
+  Empfehlung: (b) als niedrig-konfidenter Vorschlag mit Pflicht-Review; (a) optional nachrüstbar via `IKomponistSuche`.
+- **SBBW-Video-Lizenz/Einbettung** – Infomaniak-VOD-iframes sind öffentlich einbettbar; Provenienz (Quell-URL)
+  wird wie bei YouTube geführt. Falls der Anbieter Einbettung sperrt, bleibt der Link als Verweis.

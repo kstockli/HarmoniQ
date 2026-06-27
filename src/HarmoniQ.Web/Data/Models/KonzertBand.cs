@@ -10,4 +10,9 @@ public class KonzertBand
 
     public Guid BandId { get; set; }
     public Band Band { get; set; } = null!;
+
+    /// <summary>Platzierung bei Wettbewerbs-Konzerten (1 = Sieger); sonst null.</summary>
+    public int? Rang { get; set; }
+    /// <summary>Erreichte Punkte (falls auf der Rangliste vorhanden); sonst null.</summary>
+    public int? Punkte { get; set; }
 }
