@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
@@ -10,6 +11,24 @@ namespace HarmoniQ.Web.Services.Crawler;
 /// </summary>
 public static class CrawlHtmlHelfer
 {
+    /// <summary>Linearisiert eine Video-Seite (SBBW §4.2b) für die LLM-Zuordnung: ersetzt jeden
+    /// Embed-iframe durch einen Marker <c>[[VIDEO:id]]</c> und gibt den Textfluss (Überschriften +
+    /// Beschriftungen in Dokumentreihenfolge) zurück. So kann das LLM jedes Video Kategorie/Band/Stück
+    /// zuordnen, egal wie uneinheitlich die Captions ausgezeichnet sind.</summary>
+    public static string VideoSeiteOutline(string html)
+    {
+        if (string.IsNullOrEmpty(html)) return "";
+        var s = Regex.Replace(html, @"<iframe[^>]*embed/([a-z0-9]+)[^>]*>", "\n[[VIDEO:$1]]\n", RegexOptions.IgnoreCase);
+        s = Regex.Replace(s, @"(?is)<script.*?</script>|<style.*?</style>", " ");
+        s = Regex.Replace(s, @"(?i)</(div|p|section|h[1-6]|li|tr|td)>", "\n");
+        s = Regex.Replace(s, "<[^>]+>", " ");
+        s = WebUtility.HtmlDecode(s);
+        var zeilen = s.Split('\n')
+            .Select(l => Regex.Replace(l, @"\s+", " ").Trim())
+            .Where(l => l.Length > 0);
+        return string.Join("\n", zeilen);
+    }
+
     /// <summary>Absolute, interne (gleiche Host) Links aus dem HTML – dedupliziert, ohne Fragmente.</summary>
     public static List<string> InterneLinks(string html, Uri basis)
     {

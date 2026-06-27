@@ -239,6 +239,135 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record FilterAntwort(List<int>? Treffer);
 
+    private const string SbbwSystemPrompt = """
+        Du strukturierst den Text eines Ergebnis-PDFs des Schweizerischen Brass Band Wettbewerbs (SBBW).
+        Das PDF hat pro Wettbewerbs-KATEGORIE eine Seite: Höchstklasse (Excellence), Elite, 1.–4. Kategorie.
+        Gib AUSSCHLIESSLICH ein JSON-Objekt zurück:
+        {"kategorien":[{"kategorie":"...","datum":"YYYY-MM-DD","ort":"...","aufgabestueckTitel":"...",
+        "aufgabestueckKomponist":"...","zeilen":[{"rang":1,"band":"...","kanton":"VS","dirigent":"...",
+        "punkte":null,"selbstwahlTitel":null,"selbstwahlKomponist":null}]}]}
+
+        Regeln:
+        - kategorie: deutscher Name (Höchstklasse, Elite, 1. Kategorie, 2. Kategorie, 3. Kategorie, 4. Kategorie).
+        - datum: das Datum DIESER Kategorie-Seite (z. B. "Samstag 29. November 2025" → 2025-11-29).
+        - ort: der Saal/Ort aus dem Seitenkopf, falls vorhanden, sonst null.
+        - aufgabestueckTitel / aufgabestueckKomponist: aus dem Kopf ("Pièce imposée"/"Aufgabestück").
+          Komponist OHNE Länder-Kürzel in Klammern (z. B. "Thomas Doss", nicht "Thomas Doss (AU)").
+        - zeilen: je Band eine Zeile, in der Reihenfolge der ENDPLATZIERUNG.
+        - rang = offizielle ENDplatzierung (Spalte "Rang"/"Klassierung"/"Total"), NICHT die Startnummer
+          (Prog. Nr./Startnr.) am Zeilenanfang. Beispiel "10 Valaisia ... 6 5 1 1 2 1 Mnemosyne Phrases":
+          Startnr.=10, Endrang=1.
+        - band: Vereinsname OHNE Kanton-Kürzel; kanton = das Kürzel in Klammern (z. B. "(VS)" → "VS"), sonst null.
+        - dirigent: Name der Dirigentin/des Dirigenten.
+        - punkte: erreichte Punkte, falls die Kategorie Punkte ausweist (Elite/1.–4. Kat.), sonst null
+          (Höchstklasse nutzt Teilränge statt Punkte → punkte null).
+        - selbstwahlTitel: NUR Höchstklasse (Spalte "Pièce à choix"/"Selbstwahlstück"), sonst null.
+        - selbstwahlKomponist: nur wenn du den Komponisten des Selbstwahlstücks SICHER kennst, sonst null (nicht raten).
+        - Fakten wörtlich übernehmen, nichts erfinden. Keine Erklärungen, nur das JSON.
+        """;
+
+    public async Task<SbbwRangliste?> SbbwRanglisteAsync(string pdfText, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(pdfText)) return null;
+        var text = pdfText.Length > MaxTextZeichen ? pdfText[..MaxTextZeichen] : pdfText;
+
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[]
+            {
+                new { role = "system", content = SbbwSystemPrompt },
+                new { role = "user", content = "Strukturiere dieses SBBW-Ergebnis-PDF:\n\n" + text }
+            }
+        };
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Mistral(SBBW) HTTP {Code}: {Body}", (int)resp.StatusCode,
+                    Kurz(await resp.Content.ReadAsStringAsync(ct)));
+                return null;
+            }
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(inhalt)) return null;
+            if (_llm.LogCalls) logger.LogInformation("Mistral(SBBW)-RESULT:\n{Content}", inhalt);
+            return JsonSerializer.Deserialize<SbbwRangliste>(inhalt, MistralJson);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Mistral(SBBW)-Strukturierung fehlgeschlagen.");
+            return null;
+        }
+    }
+
+    private const string SbbwVideoSystemPrompt = """
+        Das ist die Video-Galerie eines Brass-Band-Wettbewerbs (SBBW) als Text in Dokumentreihenfolge.
+        Jede Zeile [[VIDEO:id]] ist ein eingebettetes Video. Ordne jedem Video anhand der umgebenden
+        Überschriften (Kategorie + Aufgabestück) und Beschriftungen (evtl. Bandname und/oder
+        Selbstwahlstück-Titel) eine Zuordnung zu. Gib AUSSCHLIESSLICH JSON zurück:
+        {"videos":[{"id":"...","kategorie":"...","band":null,"stueckTitel":null,"stueckTyp":"Aufgabe|Selbstwahl"}]}
+        Regeln:
+        - id: exakt die id aus [[VIDEO:id]].
+        - kategorie: Höchstklasse, Elite, 1. Kategorie, 2. Kategorie, 3. Kategorie oder 4. Kategorie
+          (aus der nächstgelegenen Abschnitts-Überschrift).
+        - band: Verein, falls aus Beschriftung/Reihenfolge ableitbar, sonst null. OHNE Kanton-Kürzel.
+        - stueckTyp: "Aufgabe" (Pflicht-/Aufgabestück) oder "Selbstwahl" (Pièce à choix).
+        - stueckTitel: NUR der reine Werktitel OHNE Komponist und OHNE Länder-Kürzel (z. B. "Genetic Code",
+          nicht "Genetic Code - Thomas Doss (AU)"). Bei Selbstwahl der genannte Titel; bei Aufgabe der
+          Aufgabestück-Titel der Kategorie. Falls unklar null. Nichts erfinden.
+        """;
+
+    public async Task<IReadOnlyList<SbbwVideo>> SbbwVideosAsync(string seitenOutline, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(seitenOutline)) return [];
+        var text = seitenOutline.Length > MaxTextZeichen ? seitenOutline[..MaxTextZeichen] : seitenOutline;
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[]
+            {
+                new { role = "system", content = SbbwVideoSystemPrompt },
+                new { role = "user", content = text }
+            }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Mistral(SBBW-Video) HTTP {Code}", (int)resp.StatusCode);
+                return [];
+            }
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(inhalt)) return [];
+            var antwort = JsonSerializer.Deserialize<SbbwVideoAntwort>(inhalt, MistralJson);
+            return antwort?.Videos ?? [];
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Mistral(SBBW-Video)-Zuordnung fehlgeschlagen.");
+            return [];
+        }
+    }
+
+    private record SbbwVideoAntwort(List<SbbwVideo>? Videos);
+
     // ── Chunking großer Seiten + Zusammenführung der Teil-Antworten ──────────
     private const int ChunkUeberlappung = 1500;
     private const int MaxChunks = 8;

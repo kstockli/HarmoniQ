@@ -16,10 +16,48 @@ public interface IExtraktion
     /// (z. B. „Höchstklasse, Harmonie") und gibt die passenden URLs zurück. Ohne LLM: alle (Passthrough).</summary>
     Task<IReadOnlyList<string>> FiltereVereineAsync(
         IReadOnlyList<VereinKandidat> kandidaten, string kriterium, CancellationToken ct = default);
+
+    /// <summary>SBBW (§4.2): strukturiert den Text eines Jahres-Ergebnis-PDFs in Kategorien mit Rangliste.
+    /// Ohne LLM (Stub): leer/null.</summary>
+    Task<SbbwRangliste?> SbbwRanglisteAsync(string pdfText, CancellationToken ct = default);
+
+    /// <summary>SBBW (§4.2 Teil 2b): ordnet die Videos einer linearisierten Video-Seite (Marker
+    /// [[VIDEO:id]] im Textfluss) je Kategorie/Band/Stück zu. Ohne LLM (Stub): leer.</summary>
+    Task<IReadOnlyList<SbbwVideo>> SbbwVideosAsync(string seitenOutline, CancellationToken ct = default);
 }
+
+/// <summary>Ein Video der SBBW-Video-Seite mit (best-effort) Zuordnung zu Kategorie/Band/Stück.</summary>
+public record SbbwVideo(
+    string? Id,
+    string? Kategorie,
+    string? Band,
+    string? StueckTitel,
+    string? StueckTyp);
 
 /// <summary>Ein Vereins-Kandidat aus der Link-Ernte: Webseite + (falls erkannt) Kategorie/Stärkeklasse.</summary>
 public record VereinKandidat(string Url, string? Kategorie);
+
+/// <summary>Eine Kategorie-Seite eines SBBW-Jahres-PDFs als strukturierte Rangliste.</summary>
+public record SbbwKategorie(
+    string? Kategorie,
+    DateOnly? Datum,
+    string? Ort,
+    string? AufgabestueckTitel,
+    string? AufgabestueckKomponist,
+    List<SbbwZeile>? Zeilen);
+
+/// <summary>Eine Band-Zeile der SBBW-Rangliste.</summary>
+public record SbbwZeile(
+    int? Rang,
+    string? Band,
+    string? Kanton,
+    string? Dirigent,
+    int? Punkte,
+    string? SelbstwahlTitel,
+    string? SelbstwahlKomponist);
+
+/// <summary>Alle Kategorien eines SBBW-Jahres-PDFs.</summary>
+public record SbbwRangliste(List<SbbwKategorie>? Kategorien);
 
 /// <summary>Eingabe für die Extraktion: was wurde gefunden und in welchem Kontext.</summary>
 public record ExtraktionsAnfrage(

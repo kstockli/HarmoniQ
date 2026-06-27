@@ -371,11 +371,21 @@ zweiten Durchgang gefundenen Stücke ans passende (Lokal,Datum)-Konzert; automat
 Feldfilter-UI (Rang/Kategorie/Land); Discovery-Vorschläge anderer Bands; Verbands-/Verzeichnis-Quellen;
 geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
 
-**Phase C5 – Wettbewerb SBBW (geplant, §4.2):** Quelltyp **Wettbewerb** + Spezial-Handler `SbbwImporter`
-(Jahres-PDF je Kategorie via LLM strukturieren; Video-Unterseiten parsen; Join Band↔Video; Selbstwahl-Komponist:in
-best-effort). Datenmodell: `KonzertBand.Rang/Punkte`, `Video.Plattform/ExternId` (+ Migration), Konzert-Detail
-rendert Rangliste; generischer **Video-Player je Plattform** (YouTube/InfomaniakVod). Übernahme = Konzert-Fund →
-`KonzertErfassungService` (Konzert + KonzertBand[Rang] + KonzertStueck + KonzertPerson[Dirigent] + Video).
+**Phase C5 – Wettbewerb SBBW (§4.2):** Quelltyp **Wettbewerb** + Spezial-Handler `SbbwImporter`.
+- **Schritt 1 ✅** Datenmodell + Migration `VideoPlattformUndKonzertRang`: `KonzertBand.Rang/Punkte`,
+  `Video.Plattform/ExternId` (+ `EmbedUrl`); zentraler `VideoEinbettung`-Helper (Player je Plattform).
+- **Schritt 2a ✅** PDF → Rangliste: `IExtraktion.SbbwRanglisteAsync` (Mistral, JSON-Modus) strukturiert das
+  Jahres-PDF (PdfPig-Text) je Kategorie; `CrawlRunner.SbbwImportierenAsync` legt je (Jahr, Kategorie) einen
+  **Konzert-Fund** an (Datum, Aufgabestück+Komponist, Rang/Band/Kanton/Dirigent/Punkte, Selbstwahl-Titel
+  best-effort). Übernahme: `KonzertErfassungService` + `RaengeUebernehmenAsync` → Konzert + KonzertBand[Rang/Punkte]
+  + KonzertStueck + KonzertPerson[Dirigent]. Verifiziert an results_2025.pdf (6 Kategorien, Endränge korrekt).
+- **Schritt 2b ✅** Video-Unterseiten (`<jahr>-ch-elite|1st-2nd|3rd-4th`) werden zu einem Outline
+  **linearisiert** (`CrawlHtmlHelfer.VideoSeiteOutline`: iframe → `[[VIDEO:id]]`-Marker im Textfluss) und vom
+  **LLM** (`IExtraktion.SbbwVideosAsync`) je Video zu Kategorie/Band/Stück zugeordnet. Das ist robust gegen die
+  **uneinheitlichen** Seiten (manche Captions nennen Bandnamen, andere nur Selbstwahl-Titel) – verifiziert:
+  korrekte Band↔Video-Paarung auf beiden Layouts. Die Videos (Plattform InfomaniakVod) hängen am Konzert-Fund
+  (`KonzertVideoDaten`); Übernahme erzeugt `Video`-Datensätze (Stück via Titel, Band falls eindeutig).
+- **Schritt 3 (offen)** Konzert-Detailseite rendert die Rangliste (nach Rang) + eingebettete Videos.
 
 ## 10. Offene Punkte / Risiken
 

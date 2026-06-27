@@ -16,4 +16,11 @@ public class StubExtraktion : IExtraktion
     public Task<IReadOnlyList<string>> FiltereVereineAsync(
         IReadOnlyList<VereinKandidat> kandidaten, string kriterium, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<string>>(kandidaten.Select(k => k.Url).ToList());
+
+    // Ohne LLM keine SBBW-Strukturierung.
+    public Task<SbbwRangliste?> SbbwRanglisteAsync(string pdfText, CancellationToken ct = default) =>
+        Task.FromResult<SbbwRangliste?>(null);
+
+    public Task<IReadOnlyList<SbbwVideo>> SbbwVideosAsync(string seitenOutline, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SbbwVideo>>([]);
 }

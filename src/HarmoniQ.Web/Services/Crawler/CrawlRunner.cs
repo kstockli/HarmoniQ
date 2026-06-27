@@ -76,6 +76,8 @@ public class CrawlRunner(
         {
             if (quelle.Typ == CrawlQuelleTyp.BandDomain)
                 await BandDomainCrawlAsync(lauf, quelle, ct);
+            else if (quelle.Typ == CrawlQuelleTyp.Wettbewerb || SbbwImporter.IstZustaendig(quelle.StartUrl))
+                await SbbwImportierenAsync(lauf, quelle, ct);
             else if (EmfVereinImporter.IstZustaendig(quelle.StartUrl))
                 await EmfVereineImportierenAsync(lauf, quelle, ct);
             else
@@ -349,6 +351,156 @@ public class CrawlRunner(
             gesamt, vereine.Count, _hinweis ?? "—", angelegt, ohneWebsite);
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>SBBW (§4.2): Jahres-Ergebnis-PDF(s) holen, je Kategorie via LLM zur Rangliste strukturieren
+    /// und je (Jahr, Kategorie) einen Konzert-Fund (Datum, Aufgabestück, Rang/Band/Dirigent) anlegen.
+    /// Zusätzlich (Teil 2b) die Infomaniak-Videos der Video-Unterseiten zuordnen und mitführen.</summary>
+    private async Task SbbwImportierenAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
+    {
+        // PDF-URLs bestimmen: direkte Jahres-PDF-URL ODER die Resultate-Übersicht (verlinkt die PDFs).
+        List<string> pdfUrls;
+        if (SbbwImporter.JahrAusUrl(quelle.StartUrl) is not null)
+            pdfUrls = [quelle.StartUrl];
+        else
+        {
+            var idx = await fetch.HoleAsync(quelle.StartUrl, false, ct);
+            lauf.SeitenBesucht++;
+            pdfUrls = idx.Erfolg && !string.IsNullOrEmpty(idx.Text)
+                ? SbbwImporter.PdfLinks(idx.Text!, new Uri(quelle.StartUrl))
+                : [];
+            logger.LogInformation("SBBW: {Anzahl} Jahres-PDF(s) gefunden.", pdfUrls.Count);
+            if (pdfUrls.Count == 0) return;
+        }
+
+        foreach (var pdfUrl in pdfUrls)
+        {
+            ct.ThrowIfCancellationRequested();
+            var jahr = SbbwImporter.JahrAusUrl(pdfUrl);
+            var res = await fetch.HoleAsync(pdfUrl, false, ct);
+            lauf.SeitenBesucht++;
+            if (!res.Erfolg || !res.IstPdf || string.IsNullOrWhiteSpace(res.Text))
+            {
+                logger.LogWarning("SBBW: PDF nicht lesbar: {Url} ({Fehler})", pdfUrl, res.Fehler ?? "kein Text");
+                continue;
+            }
+
+            var rangliste = await extraktion.SbbwRanglisteAsync(res.Text!, ct);
+            var kategorien = rangliste?.Kategorien ?? [];
+            if (kategorien.Count == 0)
+            {
+                logger.LogWarning("SBBW: keine Kategorien aus {Url} extrahiert.", pdfUrl);
+                continue;
+            }
+
+            // Videos des Jahres (3 Unterseiten) holen + je Kategorie zuordnen (Teil 2b).
+            var videosProKat = await SbbwVideosFuerJahrAsync(pdfUrl, jahr, ct);
+
+            var fundeVorher = lauf.FundeAnzahl;
+            foreach (var kat in kategorien)
+            {
+                var zeilen = kat.Zeilen ?? [];
+                var programm = new List<ProgrammZeileDaten>();
+                var raenge = new List<RangZeileDaten>();
+                foreach (var z in zeilen)
+                {
+                    if (string.IsNullOrWhiteSpace(z.Band)) continue;
+                    var band = z.Band!.Trim();
+                    if (!string.IsNullOrWhiteSpace(kat.AufgabestueckTitel))
+                        programm.Add(new ProgrammZeileDaten(kat.AufgabestueckTitel!.Trim(),
+                            Leer2(kat.AufgabestueckKomponist), band, z.Rang));
+                    if (!string.IsNullOrWhiteSpace(z.SelbstwahlTitel))
+                        programm.Add(new ProgrammZeileDaten(z.SelbstwahlTitel!.Trim(),
+                            Leer2(z.SelbstwahlKomponist), band, z.Rang));
+                    raenge.Add(new RangZeileDaten(band, z.Rang, z.Punkte, Leer2(z.Dirigent), Leer2(z.Kanton)));
+                }
+                if (raenge.Count == 0) continue;
+
+                // Videos dieser Kategorie zuordnen: Aufgabe-Videos → Aufgabestück-Titel (autoritativ aus
+                // dem PDF), Selbstwahl-Videos → der vom LLM gelesene Titel; Band best-effort.
+                var videos = new List<KonzertVideoDaten>();
+                if (videosProKat.TryGetValue(KatKey(kat.Kategorie), out var vids))
+                    foreach (var v in vids)
+                    {
+                        if (string.IsNullOrWhiteSpace(v.Id)) continue;
+                        var istAufgabe = string.Equals(v.StueckTyp, "Aufgabe", StringComparison.OrdinalIgnoreCase);
+                        var titel = istAufgabe ? Leer2(kat.AufgabestueckTitel) ?? Leer2(v.StueckTitel)
+                                               : Leer2(v.StueckTitel);
+                        videos.Add(new KonzertVideoDaten(
+                            HarmoniQ.Web.Data.Models.VideoPlattform.InfomaniakVod, v.Id!.Trim(),
+                            Leer2(v.Band), titel));
+                    }
+
+                var name = $"SBBW {jahr?.ToString() ?? ""} – {kat.Kategorie}".Replace("  ", " ").Trim();
+                var daten = new KonzertFundDaten(
+                    Datum: kat.Datum,
+                    Name: name,
+                    Ort: Leer2(kat.Ort),
+                    Programm: programm,
+                    Raenge: raenge,
+                    Videos: videos.Count > 0 ? videos : null);
+
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    LaufId = lauf.Id,
+                    Typ = CrawlFundTyp.Konzert,
+                    QuellUrl = pdfUrl,
+                    AbgerufenAm = DateTime.UtcNow,
+                    DatenJson = CrawlDaten.Serialisiere(daten),
+                    Konfidenz = Konfidenz.Mittel,
+                    Status = CrawlFundStatus.Offen
+                });
+                lauf.FundeAnzahl++;
+            }
+
+            logger.LogInformation("SBBW {Jahr}: {Kat} Kategorien, {Funde} Konzert-Funde aus {Url}.",
+                jahr, kategorien.Count, lauf.FundeAnzahl - fundeVorher, pdfUrl);
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    private static string? Leer2(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>Holt die 3 SBBW-Video-Unterseiten eines Jahres (ch-elite / 1st-2nd / 3rd-4th), lässt sie
+    /// vom LLM zu (Video → Kategorie/Band/Stück) auswerten und gruppiert das Ergebnis je Kategorie.</summary>
+    private async Task<Dictionary<string, List<SbbwVideo>>> SbbwVideosFuerJahrAsync(
+        string pdfUrl, int? jahr, CancellationToken ct)
+    {
+        var proKat = new Dictionary<string, List<SbbwVideo>>();
+        if (jahr is null || !Uri.TryCreate(pdfUrl, UriKind.Absolute, out var u)) return proKat;
+
+        foreach (var suffix in new[] { "ch-elite", "1st-2nd", "3rd-4th" })
+        {
+            ct.ThrowIfCancellationRequested();
+            var url = $"{u.Scheme}://{u.Host}/{jahr}-{suffix}";
+            var res = await fetch.HoleAsync(url, false, ct);
+            if (!res.Erfolg || string.IsNullOrWhiteSpace(res.Text)) continue;
+
+            var outline = CrawlHtmlHelfer.VideoSeiteOutline(res.Text!);
+            var videos = await extraktion.SbbwVideosAsync(outline, ct);
+            foreach (var v in videos)
+            {
+                if (string.IsNullOrWhiteSpace(v.Id)) continue;
+                var key = KatKey(v.Kategorie);
+                if (key.Length == 0) continue;
+                (proKat.TryGetValue(key, out var list) ? list : proKat[key] = []).Add(v);
+            }
+        }
+        var gesamt = proKat.Values.Sum(l => l.Count);
+        if (gesamt > 0) logger.LogInformation("SBBW {Jahr}: {Anzahl} Videos zugeordnet.", jahr, gesamt);
+        return proKat;
+    }
+
+    /// <summary>Kanonischer Schlüssel für eine SBBW-Kategorie (Höchst/Excellence, Elite, 1.–4. Kat.).</summary>
+    private static string KatKey(string? s)
+    {
+        var t = (s ?? "").ToLowerInvariant();
+        if (t.Contains("höchst") || t.Contains("hoechst") || t.Contains("excellence")) return "hoechst";
+        if (t.Contains("elite")) return "elite";
+        foreach (var (z, k) in new[] { ("1", "k1"), ("2", "k2"), ("3", "k3"), ("4", "k4") })
+            if (t.Contains(z + ".") || t.StartsWith(z + " ") || t.Contains(z + "e ") || t.Contains(z + "st")
+                || t.Contains(z + "nd") || t.Contains(z + "rd") || t.Contains(z + "th")) return k;
+        return "";
     }
 
     /// <summary>Legt die CrawlSeite an oder aktualisiert sie. Gibt true zurück, wenn der Inhalt

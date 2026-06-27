@@ -35,6 +35,7 @@
                 <MudSelectItem Value="CrawlQuelleTyp.BandDomain">BandDomain (Vereinsseite)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Dokument">Dokument / PDF</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Event">Event (JS – C2)</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.Wettbewerb">Wettbewerb (SBBW)</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="5">
@@ -60,6 +61,16 @@
                 <MudAlert Severity="Severity.Info" Dense="true">
                     Event-Seiten werden automatisch per JS gerendert (für SPA/Wix). Erfordert
                     <code>Crawler:RenderingAktiv=true</code> – lokal aktiv, in Produktion siehe DEPLOY.md.
+                </MudAlert>
+            </MudItem>
+        }
+        @if (_neu.Typ == CrawlQuelleTyp.Wettbewerb)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    SBBW: Start-URL = Resultate-Übersicht (<code>https://swissbrass.ch/resultate-sbbw</code>, alle Jahre)
+                    oder ein einzelnes Jahres-PDF (<code>…/results_2025.pdf</code>). Erzeugt je Jahr/Kategorie einen
+                    Konzert-Fund mit Rangliste (Videos folgen). Keine Ziel-Band nötig.
                 </MudAlert>
             </MudItem>
         }

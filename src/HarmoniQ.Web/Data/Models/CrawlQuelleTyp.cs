@@ -12,5 +12,9 @@ public enum CrawlQuelleTyp
     Dokument = 1,
 
     /// <summary>Event-Seite (Festival-Spielplan, oft JS/SPA): rendern → Programm extrahieren.</summary>
-    Event = 2
+    Event = 2,
+
+    /// <summary>Wettbewerb (SBBW, swissbrass.ch): Spezial-Handler – Jahres-PDF (Rangliste je Kategorie)
+    /// + Video-Seiten → je Jahr/Kategorie ein Konzert mit Rangliste &amp; Videos (Spec §4.2).</summary>
+    Wettbewerb = 3
 }

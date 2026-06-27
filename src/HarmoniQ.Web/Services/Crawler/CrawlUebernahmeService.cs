@@ -88,6 +88,11 @@ public static class CrawlUebernahmeService
 
         var konzertId = await KonzertErfassungService.ErfasseAsync(db, eingabe);
 
+        // Wettbewerbs-Rangliste (SBBW §4.2): Platzierung/Punkte je Band + Dirigent:in nachtragen.
+        await RaengeUebernehmenAsync(db, konzertId, d.Raenge);
+        // Zugehörige Videos (z. B. SBBW Infomaniak-VOD) anlegen und mit Stück/Band verknüpfen.
+        await VideosUebernehmenAsync(db, konzertId, d.Videos);
+
         // BandDomain-Funde: Konzert immer der Quell-Band zuordnen (auch ohne Programm-Band).
         var bandId = await db.CrawlLaeufe
             .Where(l => l.Id == fund.LaufId)
@@ -95,6 +100,51 @@ public static class CrawlUebernahmeService
             .FirstOrDefaultAsync();
         if (bandId is { } bid && !await db.KonzertBands.AnyAsync(kb => kb.KonzertId == konzertId && kb.BandId == bid))
             db.KonzertBands.Add(new KonzertBand { KonzertId = konzertId, BandId = bid });
+    }
+
+    /// <summary>Setzt je Rangliste-Zeile <see cref="KonzertBand.Rang"/>/<see cref="KonzertBand.Punkte"/> und
+    /// trägt die Dirigentin/den Dirigenten als <see cref="KonzertPerson"/> (Rolle Dirigent) ein. Die Bands
+    /// wurden bereits durch das Programm (Find-or-create) als <see cref="KonzertBand"/> angelegt.</summary>
+    private static async Task RaengeUebernehmenAsync(ApplicationDbContext db, Guid konzertId,
+        IReadOnlyList<RangZeileDaten>? raenge)
+    {
+        if (raenge is not { Count: > 0 }) return;
+        await db.SaveChangesAsync(); // KonzertBands aus ErfasseAsync sichtbar machen
+        var konzertBands = await db.KonzertBands.Where(kb => kb.KonzertId == konzertId).ToListAsync();
+
+        foreach (var r in raenge)
+        {
+            var name = r.Band?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var band = await db.Bands.FirstOrDefaultAsync(b => b.Name == name || b.Aliase.Any(a => a.Name == name));
+            if (band == null) { band = new Band { Name = name }; db.Bands.Add(band); }
+
+            var kb = konzertBands.FirstOrDefault(x => x.BandId == band.Id);
+            if (kb == null)
+            {
+                kb = new KonzertBand { KonzertId = konzertId, Band = band };
+                db.KonzertBands.Add(kb);
+                konzertBands.Add(kb);
+            }
+            kb.Rang = r.Rang;
+            kb.Punkte = r.Punkte;
+
+            var dir = r.Dirigent?.Trim();
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                var person = await db.Personen.Include(p => p.Rollen).FirstOrDefaultAsync(p => p.Name == dir);
+                if (person == null) { person = new Person { Name = dir, Sichtbarkeit = Sichtbarkeit.Oeffentlich }; db.Personen.Add(person); }
+                if (person.Rollen.All(x => x.Rolle != PersonRolleTyp.Dirigent))
+                    person.Rollen.Add(new PersonRolle { Rolle = PersonRolleTyp.Dirigent });
+                var existiert = await db.KonzertPersonen.AnyAsync(kp =>
+                    kp.KonzertId == konzertId && kp.Person.Name == dir && kp.Rolle == PersonRolleTyp.Dirigent);
+                if (!existiert)
+                    db.KonzertPersonen.Add(new KonzertPerson
+                    {
+                        KonzertId = konzertId, Person = person, Rolle = PersonRolleTyp.Dirigent, Band = band
+                    });
+            }
+        }
     }
 
     private static async Task LeitungUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)
@@ -150,6 +200,53 @@ public static class CrawlUebernahmeService
                 VonJahr = d.VonJahr,
                 BisJahr = d.BisJahr
             });
+    }
+
+    /// <summary>Legt die Konzert-Videos an (Plattform + ExternId), verknüpft mit dem (bereits angelegten)
+    /// Stück und – falls eindeutig auffindbar – der Band. Ohne passendes Stück kein Video (FK-Pflicht).
+    /// Dubletten (gleiche ExternId am selben Konzert) werden übersprungen.</summary>
+    private static async Task VideosUebernehmenAsync(ApplicationDbContext db, Guid konzertId,
+        IReadOnlyList<KonzertVideoDaten>? videos)
+    {
+        if (videos is not { Count: > 0 }) return;
+        await db.SaveChangesAsync(); // Stücke/Bands aus den vorigen Schritten sichtbar machen
+
+        foreach (var v in videos)
+        {
+            var externId = v.ExternId?.Trim();
+            if (string.IsNullOrWhiteSpace(externId)) continue;
+            if (await db.Videos.AnyAsync(x => x.KonzertId == konzertId && x.Plattform == v.Plattform && x.ExternId == externId))
+                continue;
+
+            var titel = v.StueckTitel?.Trim();
+            Stueck? stueck = null;
+            if (!string.IsNullOrWhiteSpace(titel))
+                stueck = await db.Stuecke.FirstOrDefaultAsync(s => s.Titel == titel || s.Aliase.Any(a => a.Name == titel))
+                         ?? db.Stuecke.Local.FirstOrDefault(s => string.Equals(s.Titel, titel, StringComparison.OrdinalIgnoreCase))
+                         ?? new Stueck { Titel = titel };
+            if (stueck == null) continue; // ohne Stück kein Video
+            if (db.Entry(stueck).State == EntityState.Detached) db.Stuecke.Add(stueck);
+
+            Guid? bandId = null;
+            var bn = v.Band?.Trim();
+            if (!string.IsNullOrWhiteSpace(bn))
+            {
+                var band = await db.Bands.FirstOrDefaultAsync(b => b.Name == bn || b.Aliase.Any(a => a.Name == bn))
+                           ?? db.Bands.Local.FirstOrDefault(b => string.Equals(b.Name, bn, StringComparison.OrdinalIgnoreCase));
+                bandId = band?.Id; // nicht neu anlegen – Band stammt aus der Rangliste
+            }
+
+            db.Videos.Add(new Video
+            {
+                Plattform = v.Plattform,
+                ExternId = externId,
+                KonzertId = konzertId,
+                Stueck = stueck,
+                BandId = bandId,
+                Titel = string.Join(" – ", new[] { bn, titel }.Where(x => !string.IsNullOrWhiteSpace(x))),
+                Status = VideoStatus.Genehmigt
+            });
+        }
     }
 
     private static async Task BandUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)

@@ -45,7 +45,26 @@ public record KonzertFundDaten(
     string? Ort = null,
     string? Beschreibung = null,
     IReadOnlyList<ProgrammZeileDaten>? Programm = null,
-    string? Notiz = null);
+    string? Notiz = null,
+    IReadOnlyList<RangZeileDaten>? Raenge = null,
+    IReadOnlyList<KonzertVideoDaten>? Videos = null);
+
+/// <summary>Eine Rangliste-Zeile eines Wettbewerbs-Konzerts (SBBW §4.2): Band + Platzierung/Punkte
+/// + Dirigent:in. Mappt beim Übernehmen auf <c>KonzertBand.Rang/Punkte</c> + <c>KonzertPerson</c> (Dirigent).</summary>
+public record RangZeileDaten(
+    string Band,
+    int? Rang = null,
+    int? Punkte = null,
+    string? Dirigent = null,
+    string? Kanton = null);
+
+/// <summary>Video-Referenz eines Konzert-Funds (z. B. SBBW Infomaniak-VOD): wird beim Übernehmen zu
+/// einem <c>Video</c> (Plattform + ExternId), verknüpft mit Stück und – falls bekannt – Band.</summary>
+public record KonzertVideoDaten(
+    HarmoniQ.Web.Data.Models.VideoPlattform Plattform,
+    string ExternId,
+    string? Band = null,
+    string? StueckTitel = null);
 
 /// <summary>
 /// Leitung-Fund (Typ <see cref="HarmoniQ.Web.Data.Models.CrawlFundTyp.Leitung"/>): mappt beim
