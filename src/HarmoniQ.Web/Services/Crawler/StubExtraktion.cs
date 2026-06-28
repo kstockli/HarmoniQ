@@ -26,4 +26,12 @@ public class StubExtraktion : IExtraktion
 
     public Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default) =>
         Task.FromResult<string?>(null);
+
+    // Ohne LLM kein Stil-Filter (alles durchlassen) und keine Band-Erkennung.
+    public Task<KklEventInfo> KklEventAsync(string titel, string? beschreibung, string? stilKriterium, CancellationToken ct = default) =>
+        Task.FromResult(new KklEventInfo(true, null));
+
+    // Ohne LLM keine Programm-Strukturierung.
+    public Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default) =>
+        Task.FromResult(new KklProgramm([], [], null));
 }

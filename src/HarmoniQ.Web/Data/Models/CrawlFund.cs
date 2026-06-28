@@ -18,6 +18,12 @@ public class CrawlFund
 
     /// <summary>Provenienz: Quell-URL des Funds.</summary>
     public string QuellUrl { get; set; } = string.Empty;
+
+    /// <summary>Stabiler, quellen-eigener Schlüssel des Fund-Gegenstands (z. B. vivenu-Event-ID).
+    /// Ermöglicht Dedup über Läufe hinweg: ist dieser Schlüssel schon als Übernommen/Verworfen
+    /// bekannt, erzeugt ein erneuter Lauf keinen neuen Fund. <c>null</c> = kein stabiler Schlüssel.</summary>
+    public string? ExternKey { get; set; }
+
     public DateTime AbgerufenAm { get; set; } = DateTime.UtcNow;
 
     /// <summary>Strukturierter Vorschlag als JSON (z. B. Konzert + Programmzeilen bzw. Person + Band).</summary>

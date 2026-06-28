@@ -16,6 +16,7 @@ public class CrawlRunner(
     CrawlFetchService fetch,
     IExtraktion extraktion,
     KomponistSuche komponistSuche,
+    ISeitenRenderer renderer,
     ILogger<CrawlRunner> logger)
 {
     private string? _bandName;
@@ -79,6 +80,8 @@ public class CrawlRunner(
                 await BandDomainCrawlAsync(lauf, quelle, ct);
             else if (quelle.Typ == CrawlQuelleTyp.Wettbewerb || SbbwImporter.IstZustaendig(quelle.StartUrl))
                 await SbbwImportierenAsync(lauf, quelle, ct);
+            else if (quelle.Typ == CrawlQuelleTyp.Veranstalter || KklImporter.IstZustaendig(quelle.StartUrl))
+                await KklImportierenAsync(lauf, quelle, ct);
             else if (EmfVereinImporter.IstZustaendig(quelle.StartUrl))
                 await EmfVereineImportierenAsync(lauf, quelle, ct);
             else
@@ -519,6 +522,113 @@ public class CrawlRunner(
             if (t.Contains(z + ".") || t.StartsWith(z + " ") || t.Contains(z + "e ") || t.Contains(z + "st")
                 || t.Contains(z + "nd") || t.Contains(z + "rd") || t.Contains(z + "th")) return k;
         return "";
+    }
+
+    /// <summary>KKL/Veranstalter (§4.3): Eventliste rendern + vivenu-API-Antworten mitschneiden. Passt der
+    /// Stil-Hinweis zu einer KKL-Kategorie, filtert die Website selbst (<c>?genre=</c>), sonst filtert der
+    /// LLM. Je passendem Event wird die <b>Detailseite gerendert</b> (Tabs „Programm"/„Mitwirkende") und per
+    /// LLM in Stücke + Band + Dirigent:in strukturiert. Dedup über Läufe via vivenu-Event-ID (<see cref="CrawlFund.ExternKey"/>).</summary>
+    private async Task KklImportierenAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
+    {
+        var basisUrl = string.IsNullOrWhiteSpace(quelle.StartUrl) ? KklImporter.EventsUrl : quelle.StartUrl;
+        var genre = KklImporter.GenreAusHinweis(_hinweis);   // Hinweis → KKL-Kategorie (sonst null = LLM-Filter)
+        var startUrl = KklImporter.ListeUrl(basisUrl, genre);
+        logger.LogInformation("KKL/Veranstalter → Eventliste rendern (Kategorie: {Genre}): {Url}",
+            genre ?? "(LLM-Filter)", startUrl);
+        // Liste rendern: vivenu-Event-JSONs + die echten KKL-Detail-Links („/events/…") mitschneiden.
+        var sammlung = await renderer.RenderUndSammleAsync(startUrl, KklImporter.VivenuApiFilter, "/events/", ct);
+        lauf.SeitenBesucht++;
+        if (sammlung.ApiKoerper.Count == 0)
+        {
+            logger.LogWarning("KKL: keine vivenu-Event-Daten erfasst (Rendering nicht verfügbar / Vercel-Block?).");
+            return;
+        }
+
+        var events = new Dictionary<string, KklImporter.Event>();
+        foreach (var j in sammlung.ApiKoerper)
+        {
+            var ev = KklImporter.Parse(j);
+            if (ev != null) events[ev.Id] = ev; // dieselbe Antwort kann mehrfach kommen → dedupe nach ID
+        }
+        logger.LogInformation("KKL: {N} Events aus {M} API-Antworten, {L} Detail-Links.",
+            events.Count, sammlung.ApiKoerper.Count, sammlung.Links.Count);
+
+        int angelegt = 0, gefiltert = 0, uebersprungen = 0;
+        foreach (var ev in events.Values)
+        {
+            ct.ThrowIfCancellationRequested();
+            // Dedup über Läufe: bereits entschieden (übernommen/verworfen) → nicht erneut zeigen.
+            var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(f => f.ExternKey == ev.Id, ct);
+            if (bestehend is { Status: not CrawlFundStatus.Offen }) { uebersprungen++; continue; }
+
+            // Stil-Filter: über die Site-Kategorie bereits erledigt; nur ohne Kategorie via LLM nachfiltern.
+            string? llmBand = null;
+            if (genre == null)
+            {
+                var info = await extraktion.KklEventAsync(ev.Name, ev.Beschreibung, _hinweis, ct);
+                if (!info.Passt) { gefiltert++; continue; }
+                llmBand = info.Band;
+            }
+
+            // Detailseite rendern → Programm + Mitwirkende auslesen und strukturieren.
+            // Echte KKL-URL aus den Listen-Links bestimmen (vivenu-Slug passt nicht, s. KklImporter.DetailUrl).
+            var quellUrl = KklImporter.DetailUrl(ev, sammlung.Links);
+            var tabs = await renderer.RenderUndTabsAsync(quellUrl, ["Programm", "Mitwirkende"], ct);
+            lauf.SeitenBesucht++;
+            var programmText = KklImporter.Abschnitt(tabs.GetValueOrDefault("Programm"),
+                "Programm", "Mitwirkende", "Tickets", "Veranstalter", "Event teilen");
+            var mitwText = KklImporter.Abschnitt(tabs.GetValueOrDefault("Mitwirkende"),
+                "Mitwirkende", "Tickets", "Veranstalter", "Event teilen", "Beschreibung", "Kulinarik");
+            var prog = await extraktion.KklProgrammAsync(ev.Name, programmText, mitwText, ct);
+
+            // Bands aus dem Detail (bei Wettbewerben mehrere), sonst der LLM-Stilfilter-Hinweis als Einzelband.
+            var bands = prog.Bands.Select(Leer2).Where(b => b != null).Select(b => b!).ToList();
+            if (bands.Count == 0 && Leer2(llmBand) is { } fb) bands.Add(fb);
+            var einzelBand = bands.Count == 1 ? bands[0] : null; // Stück-/Dirigent-Zuordnung nur bei genau einer Band
+
+            var programm = prog.Stuecke.Count == 0 ? null
+                : prog.Stuecke.Select((s, i) => new ProgrammZeileDaten(s.Titel, s.Komponist, einzelBand, i + 1)).ToList();
+            // Bands (+ Dirigent:in nur bei genau einer Band) über rangslose „Rang"-Zeilen mitführen
+            // (mappt auf KonzertBand + KonzertPerson Dirigent).
+            var raenge = bands.Count == 0 ? null
+                : bands.Select(b => new RangZeileDaten(b, Dirigent: einzelBand != null ? Leer2(prog.Dirigent) : null)).ToList();
+
+            var daten = new KonzertFundDaten(
+                Datum: ev.Datum,
+                Name: ev.Name,
+                Ort: ev.Saal != null ? $"KKL Luzern, {ev.Saal}" : "KKL Luzern",
+                Beschreibung: ev.Beschreibung,
+                Programm: programm,
+                Raenge: raenge,
+                BildUrl: ev.Bild);
+            var json = CrawlDaten.Serialisiere(daten);
+
+            if (bestehend != null) // Offen → aktualisieren statt verdoppeln
+            {
+                bestehend.DatenJson = json;
+                bestehend.QuellUrl = quellUrl;
+                bestehend.AbgerufenAm = DateTime.UtcNow;
+            }
+            else
+            {
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    LaufId = lauf.Id,
+                    Typ = CrawlFundTyp.Konzert,
+                    ExternKey = ev.Id,
+                    QuellUrl = quellUrl,
+                    AbgerufenAm = DateTime.UtcNow,
+                    DatenJson = json,
+                    Konfidenz = Konfidenz.Mittel,
+                    Status = CrawlFundStatus.Offen
+                });
+                lauf.FundeAnzahl++;
+                angelegt++;
+            }
+        }
+        logger.LogInformation("KKL: {Angelegt} neue Konzert-Funde, {Gefiltert} per Stil-Filter aussortiert, {Skip} schon entschieden.",
+            angelegt, gefiltert, uebersprungen);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Legt die CrawlSeite an oder aktualisiert sie. Gibt true zurück, wenn der Inhalt

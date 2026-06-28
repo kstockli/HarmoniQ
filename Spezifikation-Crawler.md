@@ -160,6 +160,7 @@ Eine `CrawlQuelle` hat einen **Typ**, der das Vorgehen bestimmt:
 | **Dokument** | Rangliste-/Spielplan-**PDF** | PDF-Text extrahieren → LLM strukturiert zu Zeilen |
 | **Event** | Festival-Spielplan (HTML/JS) | Seite **rendern** (JS) → Programm-Tabelle extrahieren |
 | **Wettbewerb** | SBBW (swissbrass.ch) | Spezial-Handler: Jahres-PDF (Rangliste je Kategorie) **+** Video-Seiten zusammenführen → je Jahr/Kategorie ein **Konzert mit Rangliste & Videos** (siehe §4.2) |
+| **Veranstalter** | KKL Luzern (vivenu) | Spezial-Handler: Eventliste rendern → vivenu-API-Daten je Event, **LLM-Stilfilter** (z. B. Blasmusik) + Band-Erkennung → Konzert-Funde (siehe §4.3) |
 
 **Fähigkeiten der Fetch-Stufe:**
 - **PDF:** Dokument laden (Admin gibt Link **oder** Upload; Links können Ablauf-Token haben → frischer Link
@@ -247,12 +248,54 @@ Aufbau analog `EmfVereinImporter` (dedizierter Handler, per URL erkannt), darf i
 (+ `EmbedUrl`). Die Erfassungs-Eingabe (`KonzertFundDaten`/`KonzertErfassungService.Eingabe`) wird um Rang/Punkte
 und Dirigent:in je Band sowie Video-Referenzen erweitert.
 
+### 4.3 Veranstalter: KKL Luzern (vivenu) — Spezial-Crawler
+
+**Quelle:** `kkl-luzern.ch/events` (Next.js/Vercel mit Bot-Schutz → **Rendering nötig**). Die Events kommen vom
+Ticketing-Anbieter **vivenu**; pro Event eine öffentliche JSON-API `vivenu.com/api/events/info/<id>`.
+
+> **Wichtig – Render-User-Agent:** Vercel liefert bei **Bot-UA** (z. B. `HarmoniQBot/1.0`) nur den
+> „Vercel Security Checkpoint" und unterdrückt die Client-XHR → **0 Funde**. Der Renderer tritt deshalb mit
+> realem Browser-UA auf (`Crawler:RenderUserAgent`, Default Chrome). HTTP-Fetches identifizieren sich weiter
+> ehrlich als `Crawler:UserAgent`. Lokal verifiziert: Bot-UA → 0, Chrome-UA → 10 Events erfasst.
+
+**Pipeline (`KklImporter` + `CrawlRunner.KklImportierenAsync`):**
+1. **Stil-Filter über die Site-Kategorie:** Passt der Stil-Hinweis zu einer KKL-Kategorie
+   (`KklImporter.GenreAusHinweis`: „Blasmusik / Brassband" → **Blasmusik**; weitere: Klassik, Jazz, Rock & Pop,
+   Comedy, Filmmusik, Weltmusik, Volksmusik, Musical, Weihnachtsmusik), wird die Liste direkt als
+   `…/events?genre=<Kategorie>` gecrawlt — die **Website filtert selbst**, kein LLM-Filter nötig. Passt der
+   Hinweis zu keiner Kategorie, wird die Default-Liste geladen und je Event per LLM (`KklEventAsync`) gefiltert.
+2. **Discovery:** Liste rendern und die clientseitig nachgeladenen **vivenu-API-Antworten mitschneiden**
+   (`ISeitenRenderer.RenderUndSammleAsync`, Filter `vivenu.com/api/events/info`). Direkt-Navigation zur
+   `?genre=`-URL löst die gefilterten vivenu-Calls aus (verifiziert: `?genre=Blasmusik` → 10 Blasmusik-Events).
+3. **Mapping** (`KklImporter.Parse`, verifiziert): je Event → Titel (`name`), **Datum** (`start`, in CH-Zeit),
+   **Saal** (`meta.venue`: konzertsaal → **„Weisser Saal"**, luzernersaal → „Luzerner Saal"), **Bild** (`image`),
+   **Beschreibung** (`description` Rich-Text → Klartext), Slug (`url`) für die klickbare Quell-URL.
+4. **Detailseite rendern → Programm + Besetzung:** je Event die Detailseite rendern, die Tabs **„Programm"** und
+   **„Mitwirkende"** anklicken (`ISeitenRenderer.RenderUndTabsAsync`, akzeptiert Cookie-Banner) und den
+   Abschnittstext herausschneiden (`KklImporter.Abschnitt` – Überschrift muss auf **eigener Zeile** stehen,
+   längster Treffer → ignoriert „Programm" im Fließtext, „Programm & Tickets"-Navigation und „Programmänderungen").
+   Den Text strukturiert der LLM (`IExtraktion.KklProgrammAsync`) in **Stücke (mit Komponist:in)**, **alle
+   auftretenden Bands** und – nur bei genau einer Band – die **Dirigent:in**. Erkennt beide Komponisten-Formate
+   („Name (1898–1937)" mit Lebensdaten und „Komponist: Titel" mit Doppelpunkt); Kategorie-Überschriften
+   („TESTSTÜCK", „SELBSTWAHLSTÜCKE"), Gespräche/Pausen/Vorspann sind keine Stücke. **Wettbewerbe/Contests** (mehrere
+   Bands, gemeinsames Teststück + Selbstwahlstücke) werden so korrekt erfasst.
+5. **Konzert-Fund** je Event: Datum, Name, Ort „KKL Luzern, <Saal>" (ohne Saal nur „KKL Luzern"), Beschreibung,
+   Bild, **Programm** (`ProgrammZeileDaten`; Stück-Band-Zuordnung nur bei genau einer Band), **alle Bands**
+   (+ Dirigent:in bei Einzelband) als rangslose `RangZeileDaten` → mappt auf `KonzertBand` (+ `KonzertPerson`
+   Dirigent). **ExternKey = vivenu-Event-ID** → Dedup über Läufe (§7).
+
+**Grenzen:** nur **zukünftige** Events (kein öffentliches Archiv); pro Event ein zusätzlicher Detail-Render
+(~5–10 s); Solist:innen werden (noch) nicht als eigene Mitwirkende übernommen (nur Bands + Dirigent:in bei
+Einzelband); auf Railway noch im Betrieb zu prüfen (realer Render-UA umgeht den Vercel-Checkpoint lokal; Vercel
+könnte zusätzlich Headless fingerprinten). Hinweis: Ein bereits **übernommener** Fund wird beim erneuten Lauf per
+ExternKey übersprungen – um ihn mit verbesserter Extraktion neu zu ziehen, den Fund löschen und neu crawlen.
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```
 CrawlQuelle                         (Seed: Band-Domain, Dokument/PDF oder Event)
 ├── Id (Guid)
-├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb)   ← Wettbewerb = SBBW-Spezial-Handler (§4.2)
+├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb / Veranstalter)   ← Wettbewerb=SBBW (§4.2), Veranstalter=KKL (§4.3)
 ├── BandId (FK → Band?)             ← Zielband (bei BandDomain; sonst optional)
 ├── StartUrl (string)               ← Domain-Start, PDF-/Dokument-Link oder Event-Seite
 ├── Domain (string?)                ← bei BandDomain; Crawler bleibt darauf
@@ -317,6 +360,16 @@ CrawlFund                           (Kandidat zur Übernahme)
 - **Volltext-Suche** über die Funde (Name/Ort/URL – ILIKE auf DatenJson/QuellUrl), um z. B. Webseiten-Funde
   einzugrenzen. **Massen-Aktionen** (auf den aktuellen Filter): „Alle angezeigten übernehmen",
   „Alle offenen verwerfen", „Alle angezeigten löschen".
+- **Dedup über Läufe (`CrawlFund.ExternKey`):** Hat ein Fund einen stabilen Quell-Schlüssel (z. B. vivenu-Event-ID),
+  überspringt ein erneuter Lauf bereits **übernommene oder verworfene** Gegenstände und **aktualisiert** offene
+  statt sie zu verdoppeln. So zeigt ein Wiederholungslauf nur wirklich Neues; „nicht übernehmen" bleibt respektiert.
+- **Konzert-Dedup generell:** `KonzertErfassungService.ErfasseOderAktualisiereAsync` macht Find-or-create.
+  Identität = **Datum + Name + Ort**; hat die Eingabe zusätzlich Band-Angaben, muss auch **mindestens eine Band
+  übereinstimmen** – sonst sind es verschiedene Konzerte (z. B. mehrere „Jahreskonzerte" am selben Samstag, ob in
+  verschiedenen Sälen/Orten oder gar im selben Saal mit anderen Bands). Wiederholtes Übernehmen verdoppelt nichts.
+- **Reaktivieren:** Ein entschiedener Fund lässt sich **wieder öffnen** und **erneut übernehmen** – verworfene
+  („doch übernehmen") wie auch bereits übernommene (z. B. wenn das Ziel im CRUD gelöscht wurde). Idempotent.
+- **Anzahl im Crawler-Fenster** = nur **offene** Funde je Lauf (übernommene/verworfene zählen nicht mehr mit).
 - **Übernehmen** ruft die Find-or-create-Services → keine Dubletten; Quell-URL bleibt als Provenienz erhalten.
   Übernahme-Pfade: Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft` (Funktion „Dirigent",
   optional Von/Bis-Jahr); Stück → `Stueck` (+ `StueckBeitrag` Komponist/Arrangeur); Komponist:in → `Person`;

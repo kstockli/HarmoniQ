@@ -31,11 +31,13 @@
     <MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Neue Quelle</MudText>
     <MudGrid>
         <MudItem xs="12" md="3">
-            <MudSelect T="CrawlQuelleTyp" @bind-Value="_neu.Typ" Label="Typ" Variant="Variant.Outlined" Dense="true">
+            <MudSelect T="CrawlQuelleTyp" @bind-Value="_neu.Typ" @bind-Value:after="TypGewechselt"
+                       Label="Typ" Variant="Variant.Outlined" Dense="true">
                 <MudSelectItem Value="CrawlQuelleTyp.BandDomain">BandDomain (Vereinsseite)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Dokument">Dokument / PDF</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Event">Event (JS – C2)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Wettbewerb">Wettbewerb (SBBW)</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.Veranstalter">Veranstalter (KKL Luzern)</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="5">
@@ -74,6 +76,17 @@
                 </MudAlert>
             </MudItem>
         }
+        @if (_neu.Typ == CrawlQuelleTyp.Veranstalter)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    KKL Luzern: URL + Stil-Hinweis sind vorbelegt. Die Eventliste wird gerendert, die Event-Daten
+                    kommen aus der vivenu-API; nur Events, die zum Stil-Hinweis passen, werden als Konzert-Funde
+                    angelegt (Konzertsaal = „Weisser Saal"). Nur zukünftige Events; erneute Läufe blenden bereits
+                    Entschiedenes aus.
+                </MudAlert>
+            </MudItem>
+        }
         <MudItem xs="12">
             <MudTextField @bind-Value="_neu.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2"
                           Label="Zusatz-Hinweis an die Extraktion (optional, wirkt auch als Filter)"
@@ -106,7 +119,7 @@ else
 {
     <MudSimpleTable Dense="true" Hover="true" Class="mb-6" Style="background:#1a0030;">
         <thead>
-            <tr><th>Start</th><th>Quelle</th><th>Status</th><th>Seiten</th><th>Funde</th><th>Meldung</th><th></th></tr>
+            <tr><th>Start</th><th>Quelle</th><th>Status</th><th>Seiten</th><th>Offene Funde</th><th>Meldung</th><th></th></tr>
         </thead>
         <tbody>
             @foreach (var l in _laeufe)
@@ -116,7 +129,7 @@ else
                     <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">@l.QuelleUrl</td>
                     <td><MudChip T="string" Size="Size.Small" Color="@StatusFarbe(l.Status)">@l.Status</MudChip></td>
                     <td>@l.SeitenBesucht</td>
-                    <td>@l.FundeAnzahl</td>
+                    <td>@l.OffeneFunde</td>
                     <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;color:#A78FC0;">@l.Meldung</td>
                     <td style="white-space:nowrap;">
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#3a1060;"
@@ -231,10 +244,34 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _quellen = await db.CrawlQuellen.Include(q => q.Band)
             .OrderByDescending(q => q.Aktiv).ThenByDescending(q => q.ErstelltAm).ToListAsync();
-        _laeufe = await db.CrawlLaeufe
+        var rohe = await db.CrawlLaeufe
             .OrderByDescending(l => l.StartAm).Take(20)
-            .Select(l => new LaufZeile(l.Id, l.Quelle.StartUrl, l.Status, l.SeitenBesucht, l.FundeAnzahl, l.StartAm, l.Meldung))
+            .Select(l => new { l.Id, Url = l.Quelle.StartUrl, l.Status, l.SeitenBesucht, l.StartAm, l.Meldung })
             .ToListAsync();
+        var laufIds = rohe.Select(r => r.Id).ToList();
+        // Anzahl = nur OFFENE Funde je Lauf (übernommene/verworfene zählen nicht mehr mit).
+        var offenProLauf = (await db.CrawlFunde
+                .Where(f => f.LaufId != null && laufIds.Contains(f.LaufId.Value) && f.Status == CrawlFundStatus.Offen)
+                .GroupBy(f => f.LaufId!.Value)
+                .Select(g => new { LaufId = g.Key, Anzahl = g.Count() })
+                .ToListAsync())
+            .ToDictionary(x => x.LaufId, x => x.Anzahl);
+        _laeufe = rohe.Select(l => new LaufZeile(l.Id, l.Url, l.Status, l.SeitenBesucht,
+            offenProLauf.GetValueOrDefault(l.Id), l.StartAm, l.Meldung)).ToList();
+    }
+
+    /// <summary>Belegt bei Spezial-Quelltypen sinnvolle Defaults vor (nur wenn Feld noch leer).</summary>
+    private void TypGewechselt()
+    {
+        if (_neu.Typ == CrawlQuelleTyp.Veranstalter)
+        {
+            if (string.IsNullOrWhiteSpace(_neu.StartUrl)) _neu.StartUrl = KklImporter.EventsUrl;
+            if (string.IsNullOrWhiteSpace(_neu.ExtraktionsHinweis)) _neu.ExtraktionsHinweis = "Blasmusik / Brassband";
+        }
+        else if (_neu.Typ == CrawlQuelleTyp.Wettbewerb)
+        {
+            if (string.IsNullOrWhiteSpace(_neu.StartUrl)) _neu.StartUrl = "https://swissbrass.ch/resultate-sbbw";
+        }
     }
 
     private async Task<IEnumerable<Band>> BandSuche(string? wert, CancellationToken ct)
@@ -460,5 +497,5 @@ else
     }
 
     private record LaufZeile(Guid Id, string QuelleUrl, CrawlLaufStatus Status, int SeitenBesucht,
-        int FundeAnzahl, DateTime StartAm, string? Meldung);
+        int OffeneFunde, DateTime StartAm, string? Meldung);
 }

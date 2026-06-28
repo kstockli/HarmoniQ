@@ -28,7 +28,30 @@ public interface IExtraktion
     /// <summary>Liest aus Web-Suchergebnis-Text den Komponisten/die Komponistin eines Stücks heraus
     /// (nur wenn klar belegt, sonst null – nicht raten). Ohne LLM (Stub): null.</summary>
     Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default);
+
+    /// <summary>Veranstalter-Event (KKL §4.3): klassifiziert anhand Titel/Beschreibung, ob das Event zum
+    /// Stil-Kriterium passt (z. B. „Blasmusik/Brassband"), und liest die auftretende Band/Ensemble heraus.
+    /// Ohne LLM (Stub): passt=true (kein Filter), Band=null. Wird nur als Fallback gebraucht, wenn der
+    /// Stil-Hinweis zu keiner KKL-Kategorie (<c>?genre=</c>) passt.</summary>
+    Task<KklEventInfo> KklEventAsync(string titel, string? beschreibung, string? stilKriterium, CancellationToken ct = default);
+
+    /// <summary>Veranstalter-Detail (KKL §4.3): strukturiert den Text der Detailseiten-Tabs „Programm" und
+    /// „Mitwirkende" in Stücke (mit Komponist:in), die auftretenden Bands/Ensembles und – bei genau einer
+    /// Band – die Dirigentin/den Dirigenten. Bei Wettbewerben treten mehrere Bands auf (dann kein einzelner
+    /// Dirigent). Vorspann-Texte, Pausen, Kategorie-Überschriften und Gesprächs-/Moderations-Einträge sind
+    /// keine Stücke. Ohne LLM (Stub): leeres Programm.</summary>
+    Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default);
 }
+
+/// <summary>LLM-Einschätzung zu einem Veranstalter-Event (KKL): passt zum Stil-Kriterium + erkannte Band.</summary>
+public record KklEventInfo(bool Passt, string? Band);
+
+/// <summary>Strukturiertes Programm/Besetzung eines KKL-Events: Stücke, auftretende Bands/Ensembles
+/// (bei Wettbewerben mehrere) und – nur bei genau einer Band – die Dirigentin/der Dirigent.</summary>
+public record KklProgramm(IReadOnlyList<KklStueck> Stuecke, IReadOnlyList<string> Bands, string? Dirigent);
+
+/// <summary>Ein Programm-Stück eines KKL-Events: Titel + (falls genannt) Komponist:in.</summary>
+public record KklStueck(string Titel, string? Komponist);
 
 /// <summary>Ein Video der SBBW-Video-Seite mit (best-effort) Zuordnung zu Kategorie/Band/Stück.</summary>
 public record SbbwVideo(

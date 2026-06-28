@@ -106,16 +106,28 @@ else
                     </div>
                 }
 
-                @if (f.Status == CrawlFundStatus.Offen)
-                {
-                    <MudStack Row="true" Class="mt-2">
+                <MudStack Row="true" Class="mt-2">
+                    @if (f.Status == CrawlFundStatus.Offen)
+                    {
                         <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Check" Disabled="@(!f.JsonGueltig)"
                                    OnClick="@(() => Uebernehmen(f))">Übernehmen</MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => Verwerfen(f))">Verwerfen</MudButton>
-                    </MudStack>
-                }
+                    }
+                    else
+                    {
+                        @* Reaktivieren: verworfene ODER bereits übernommene Funde erneut übernehmen
+                           (z. B. wenn das Ziel im CRUD-Fenster gelöscht wurde) bzw. wieder öffnen. *@
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Replay" Disabled="@(!f.JsonGueltig)"
+                                   OnClick="@(() => Uebernehmen(f))">
+                            @(f.Status == CrawlFundStatus.Verworfen ? "Doch übernehmen" : "Erneut übernehmen")
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Style="color:#9B59B6;border-color:#3a1060;"
+                                   StartIcon="@Icons.Material.Filled.LockOpen" OnClick="@(() => WiederOeffnen(f))">Wieder öffnen</MudButton>
+                    }
+                </MudStack>
 
                 <!-- Rohdaten nur bei Bedarf einblendbar/editierbar -->
                 <MudExpansionPanels Elevation="0" Class="mt-2">
@@ -343,6 +355,14 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         await CrawlUebernahmeService.VerwerfenAsync(db, f.Id);
         Snackbar.Add("Verworfen.", Severity.Info);
+        await Laden();
+    }
+
+    private async Task WiederOeffnen(FundEdit f)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await CrawlUebernahmeService.WiederOeffnenAsync(db, f.Id);
+        Snackbar.Add("Wieder geöffnet.", Severity.Info);
         await Laden();
     }
 

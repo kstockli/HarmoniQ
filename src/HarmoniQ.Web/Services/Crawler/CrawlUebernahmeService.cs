@@ -21,8 +21,9 @@ public static class CrawlUebernahmeService
     {
         var fund = await db.CrawlFunde.FirstOrDefaultAsync(f => f.Id == fundId)
             ?? throw new InvalidOperationException("Fund nicht gefunden.");
-        if (fund.Status != CrawlFundStatus.Offen)
-            throw new InvalidOperationException("Fund ist bereits entschieden.");
+        // Hinweis: kein Status-Guard – ein Fund darf auch erneut übernommen werden (Reaktivieren eines
+        // verworfenen ODER eines bereits übernommenen Funds, z. B. wenn das Ziel im CRUD gelöscht wurde).
+        // Die Übernahme-Pfade sind find-or-create → idempotent, es entstehen keine Dubletten.
 
         switch (fund.Typ)
         {
@@ -64,6 +65,17 @@ public static class CrawlUebernahmeService
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Setzt einen entschiedenen Fund (verworfen ODER übernommen) wieder auf „Offen" –
+    /// z. B. um eine Entscheidung rückgängig zu machen.</summary>
+    public static async Task WiederOeffnenAsync(ApplicationDbContext db, Guid fundId)
+    {
+        var fund = await db.CrawlFunde.FirstOrDefaultAsync(f => f.Id == fundId)
+            ?? throw new InvalidOperationException("Fund nicht gefunden.");
+        fund.Status = CrawlFundStatus.Offen;
+        fund.EntschiedenAm = null;
+        await db.SaveChangesAsync();
+    }
+
     private static async Task KonzertUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)
     {
         var d = CrawlDaten.Deserialisiere<KonzertFundDaten>(datenJson)
@@ -82,11 +94,12 @@ public static class CrawlUebernahmeService
             Name: d.Name,
             Ort: d.Ort,
             Beschreibung: d.Beschreibung,
-            BildUrl: null,
+            BildUrl: d.BildUrl,
             Programm: programm,
             Mitwirkende: []);
 
-        var konzertId = await KonzertErfassungService.ErfasseAsync(db, eingabe);
+        // Find-or-create: derselbe (Datum,Name) wird aktualisiert statt verdoppelt (idempotenter Re-Import).
+        var konzertId = await KonzertErfassungService.ErfasseOderAktualisiereAsync(db, eingabe);
 
         // Wettbewerbs-Rangliste (SBBW §4.2): Platzierung/Punkte je Band + Dirigent:in nachtragen.
         await RaengeUebernehmenAsync(db, konzertId, d.Raenge);

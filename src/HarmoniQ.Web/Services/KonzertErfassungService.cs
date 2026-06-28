@@ -42,6 +42,55 @@ public static class KonzertErfassungService
         return konzert.Id;
     }
 
+    /// <summary>Find-or-create für Konzerte (verhindert Dubletten bei wiederholtem Crawler-Import).
+    /// Identität = gleiches <b>Datum + Name + Ort</b>; gibt es zusätzlich Band-Angaben in der Eingabe, muss
+    /// auch mindestens <b>eine Band übereinstimmen</b> (sonst sind es verschiedene Konzerte – z. B. mehrere
+    /// „Jahreskonzerte" am selben Samstag im selben Saal). Ohne Namen wird immer neu angelegt. Gibt die Id zurück.</summary>
+    public static async Task<Guid> ErfasseOderAktualisiereAsync(ApplicationDbContext db, Eingabe e)
+    {
+        var name = Leer(e.Name);
+        if (name != null)
+        {
+            var ort = Leer(e.Ort);
+            var kandidaten = await db.Konzerte
+                .Where(k => k.Datum == e.Datum && k.Name == name && (ort == null || k.Ort == ort))
+                .Select(k => k.Id)
+                .ToListAsync();
+
+            if (kandidaten.Count > 0)
+            {
+                // Bandnamen der Eingabe (aus Programm + Mitwirkenden), normalisiert.
+                var bands = e.Programm.Select(p => p.BandName)
+                    .Concat(e.Mitwirkende.Select(m => m.BandName))
+                    .Where(b => !string.IsNullOrWhiteSpace(b))
+                    .Select(b => b!.Trim().ToLowerInvariant())
+                    .ToHashSet();
+
+                Guid? treffer = null;
+                if (bands.Count == 0)
+                {
+                    treffer = kandidaten[0]; // keine Band-Info → über (Datum, Name, Ort) identifizieren
+                }
+                else
+                {
+                    foreach (var kid in kandidaten)
+                    {
+                        var vorhandeneBands = await db.KonzertBands.Where(kb => kb.KonzertId == kid)
+                            .Select(kb => kb.Band.Name).ToListAsync();
+                        if (vorhandeneBands.Any(n => bands.Contains(n.Trim().ToLowerInvariant()))) { treffer = kid; break; }
+                    }
+                }
+
+                if (treffer is { } id)
+                {
+                    await EditAsync(db, id, e);
+                    return id;
+                }
+            }
+        }
+        return await ErfasseAsync(db, e);
+    }
+
     /// <summary>Bearbeitet ein bestehendes Konzert: Kopf, Programm und Mitwirkende werden ersetzt.</summary>
     public static async Task EditAsync(ApplicationDbContext db, Guid konzertId, Eingabe e)
     {

@@ -369,6 +369,99 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record SbbwVideoAntwort(List<SbbwVideo>? Videos);
 
+    public async Task<KklEventInfo> KklEventAsync(string titel, string? beschreibung, string? stilKriterium, CancellationToken ct = default)
+    {
+        var sys = "Du beurteilst ein Konzert/Event eines Veranstaltungshauses. Gib AUSSCHLIESSLICH JSON zurück: " +
+            "{\"passt\":true|false,\"band\":\"...\"|null}. passt=true nur, wenn das Event dem Stil-Kriterium " +
+            "entspricht (anhand Titel/Beschreibung). band = der auftretende Verein/das Ensemble/Orchester " +
+            "(z. B. Blasorchester, Brass Band) als Name, falls erkennbar, sonst null. Personen (Dirigent:in, " +
+            "Solist:in) sind KEINE Band. Nichts erfinden.";
+        var krit = string.IsNullOrWhiteSpace(stilKriterium) ? "(kein Kriterium – passt=true)" : stilKriterium.Trim();
+        var besch = beschreibung is { Length: > 1200 } ? beschreibung[..1200] : beschreibung;
+        var user = $"Stil-Kriterium: {krit}\n\nTitel: {titel}\n\nBeschreibung: {besch}";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return new KklEventInfo(true, null); // im Zweifel behalten (Review entscheidet)
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(inhalt)) return new KklEventInfo(true, null);
+            var a = JsonSerializer.Deserialize<KklAntwort>(inhalt, MistralJson);
+            return new KklEventInfo(a?.Passt ?? true, Leer(a?.Band));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "KKL-Event-Klassifikation fehlgeschlagen: {Titel}", titel); return new KklEventInfo(true, null); }
+    }
+
+    private record KklAntwort(bool? Passt, string? Band);
+
+    public async Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default)
+    {
+        var leer = new KklProgramm([], [], null);
+        if (string.IsNullOrWhiteSpace(programmText) && string.IsNullOrWhiteSpace(mitwirkendeText)) return leer;
+
+        var sys = "Du strukturierst Programm und Besetzung eines Konzerts aus zwei Textabschnitten einer " +
+            "Veranstaltungs-Detailseite. Gib AUSSCHLIESSLICH JSON zurück: " +
+            "{\"stuecke\":[{\"titel\":\"...\",\"komponist\":\"...\"|null}],\"bands\":[\"...\"],\"dirigent\":\"...\"|null}. " +
+            "Regeln: stuecke = nur echte Musikstücke aus dem Programm (mit Komponist:in, falls genannt). Der " +
+            "Komponist steht je nach Seite mit Lebensdaten vor dem Titel (z. B. 'George Gershwin (1898-1937)' dann " +
+            "neue Zeile 'Cuban Overture') ODER als 'Komponist: Titel' mit Doppelpunkt (z. B. 'Bert Appermont: A " +
+            "Brussels Requiem' -> komponist='Bert Appermont', titel='A Brussels Requiem'). KEINE Stücke sind: " +
+            "Kategorie-/Abschnitts-Überschriften (z. B. 'TESTSTUECK (Vormittag)', 'SELBSTWAHLSTUECKE (Nachmittag)'), " +
+            "Vorspann-/Werbetexte, Pausen, Einführungen sowie Gespräche/Moderationen (z. B. 'X im Gespräch mit Y'). " +
+            "bands = ALLE auftretenden Bands/Ensembles/Orchester als Namen (bei einem normalen Konzert genau eine; " +
+            "bei einem Wettbewerb/Contest mehrere – dann jede gelistete Band aufnehmen). Einzelpersonen (Solist:in, " +
+            "Instrumentalist:in mit Instrument) sind KEINE Band. dirigent = Name der Dirigentin/des Dirigenten NUR " +
+            "wenn genau eine Band auftritt und er klar genannt ist (Zeile endet oft auf '- Dirigent'/'Leitung'); " +
+            "bei mehreren Bands null. Nichts erfinden; fehlt etwas, null bzw. leere Liste.";
+        string K(string? s, int max) => string.IsNullOrWhiteSpace(s) ? "(keiner)" : (s.Length > max ? s[..max] : s);
+        var user = $"Event: {titel}\n\n=== Programm ===\n{K(programmText, 4000)}\n\n=== Mitwirkende ===\n{K(mitwirkendeText, 2000)}";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return leer;
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(inhalt)) return leer;
+            var a = JsonSerializer.Deserialize<KklProgrammAntwort>(inhalt, MistralJson);
+            var stuecke = (a?.Stuecke ?? [])
+                .Where(s => !string.IsNullOrWhiteSpace(s.Titel))
+                .Select(s => new KklStueck(s.Titel!.Trim(), Leer(s.Komponist)))
+                .ToList();
+            var bands = (a?.Bands ?? [])
+                .Select(Leer).Where(b => b != null).Select(b => b!)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // Dirigent nur sinnvoll bei genau einer Band.
+            var dirigent = bands.Count == 1 ? Leer(a?.Dirigent) : null;
+            return new KklProgramm(stuecke, bands, dirigent);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "KKL-Programm-Strukturierung fehlgeschlagen: {Titel}", titel); return leer; }
+    }
+
+    private record KklProgrammAntwort(List<KklStueckAntwort>? Stuecke, List<string>? Bands, string? Dirigent);
+    private record KklStueckAntwort(string? Titel, string? Komponist);
+
     public async Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(suchText)) return null;

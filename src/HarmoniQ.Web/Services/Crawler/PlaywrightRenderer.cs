@@ -18,6 +18,122 @@ public sealed class PlaywrightRenderer(IOptions<CrawlerOptions> opt, ILogger<Pla
     private IBrowser? _browser;
     private bool _fehlgeschlagen;
 
+    public async Task<GerenderteSammlung> RenderUndSammleAsync(string url, string apiUrlEnthaelt, string? linkEnthaelt = null, CancellationToken ct = default)
+    {
+        var browser = await BrowserHolenAsync(ct);
+        if (browser == null) return GerenderteSammlung.Leer;
+
+        IBrowserContext? context = null;
+        var koerper = new List<string>();
+        try
+        {
+            context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = _opt.RenderUserAgent });
+            var page = await context.NewPageAsync();
+            // Bilder/Medien/Fonts/CSS blocken (Speicher), aber XHR/fetch (die API-Daten!) durchlassen.
+            await page.RouteAsync("**/*", async route =>
+            {
+                var typ = route.Request.ResourceType;
+                if (typ is "image" or "media" or "font" or "stylesheet") await route.AbortAsync();
+                else await route.ContinueAsync();
+            });
+            page.Response += async (_, resp) =>
+            {
+                if (!resp.Url.Contains(apiUrlEnthaelt, StringComparison.OrdinalIgnoreCase)) return;
+                try { koerper.Add(await resp.TextAsync()); } catch { }
+            };
+            var timeout = Math.Max(_opt.RequestTimeoutSekunden * 1000f, 45000f);
+            await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = timeout });
+            await WartenBisStabilAsync(page);
+            await page.WaitForTimeoutAsync(2500); // Nachzügler-XHR abwarten
+
+            IReadOnlyList<string> links = [];
+            if (!string.IsNullOrEmpty(linkEnthaelt))
+            {
+                var hrefs = await page.Locator($"a[href*='{linkEnthaelt}']")
+                    .EvaluateAllAsync<string[]>("els => els.map(e => e.getAttribute('href')).filter(h => h)");
+                links = hrefs.Distinct().ToList();
+            }
+            logger.LogInformation("Gerendert+gesammelt: {Url} – {N} API-Antworten, {L} Links ({Filter}).",
+                url, koerper.Count, links.Count, apiUrlEnthaelt);
+            return new GerenderteSammlung(koerper, links);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Rendern+Sammeln fehlgeschlagen: {Url}", url);
+            return new GerenderteSammlung(koerper, []);
+        }
+        finally { if (context != null) await context.CloseAsync(); }
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> RenderUndTabsAsync(
+        string url, IReadOnlyList<string> tabBeschriftungen, CancellationToken ct = default)
+    {
+        var ergebnis = new Dictionary<string, string>();
+        var browser = await BrowserHolenAsync(ct);
+        if (browser == null) return ergebnis;
+
+        IBrowserContext? context = null;
+        try
+        {
+            context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = _opt.RenderUserAgent });
+            var page = await context.NewPageAsync();
+            await page.RouteAsync("**/*", async route =>
+            {
+                var typ = route.Request.ResourceType;
+                if (typ is "image" or "media" or "font" or "stylesheet") await route.AbortAsync();
+                else await route.ContinueAsync();
+            });
+            var timeout = Math.Max(_opt.RequestTimeoutSekunden * 1000f, 45000f);
+            await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = timeout });
+            await WartenBisStabilAsync(page);
+            await CookiesAkzeptierenAsync(page);
+
+            foreach (var tab in tabBeschriftungen)
+            {
+                try
+                {
+                    // Exakter Text-Treffer; der Tab ist meist der letzte (die ersten Treffer sind Navigation).
+                    var loc = page.GetByText(tab, new PageGetByTextOptions { Exact = true });
+                    var n = await loc.CountAsync();
+                    if (n > 0)
+                    {
+                        await loc.Nth(n - 1).ClickAsync(new LocatorClickOptions { Timeout = 5000 });
+                        await page.WaitForTimeoutAsync(1200); // Tab-Inhalt einblenden lassen
+                    }
+                    ergebnis[tab] = await page.Locator("body").InnerTextAsync();
+                }
+                catch (Exception ex) { logger.LogDebug(ex, "Tab '{Tab}' nicht lesbar: {Url}", tab, url); }
+            }
+            logger.LogInformation("Detail gerendert: {Url} – Tabs: {Tabs}.", url, string.Join(", ", ergebnis.Keys));
+            return ergebnis;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Tab-Rendern fehlgeschlagen: {Url}", url);
+            return ergebnis;
+        }
+        finally { if (context != null) await context.CloseAsync(); }
+    }
+
+    /// <summary>Klickt einen vorhandenen Cookie-Zustimmen-Button weg (sonst überlagert der Banner die Tabs).</summary>
+    private static async Task CookiesAkzeptierenAsync(IPage page)
+    {
+        foreach (var label in new[] { "Zustimmen", "Alle akzeptieren", "Akzeptieren", "Accept all", "Accept" })
+        {
+            try
+            {
+                var b = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameString = label });
+                if (await b.CountAsync() > 0)
+                {
+                    await b.First.ClickAsync(new LocatorClickOptions { Timeout = 3000 });
+                    await page.WaitForTimeoutAsync(800);
+                    return;
+                }
+            }
+            catch { /* kein/anderer Banner → ignorieren */ }
+        }
+    }
+
     public async Task<string?> RenderAsync(string url, CancellationToken ct = default)
     {
         var browser = await BrowserHolenAsync(ct);
@@ -26,7 +142,7 @@ public sealed class PlaywrightRenderer(IOptions<CrawlerOptions> opt, ILogger<Pla
         IBrowserContext? context = null;
         try
         {
-            context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = _opt.UserAgent });
+            context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = _opt.RenderUserAgent });
             var page = await context.NewPageAsync();
 
             // Schwere Ressourcen blocken (Bilder/Medien/Fonts/CSS): Für die Link-/Text-Ernte brauchen
