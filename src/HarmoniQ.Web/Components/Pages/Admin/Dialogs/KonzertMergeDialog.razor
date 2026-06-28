@@ -1,0 +1,91 @@
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            „<b>@QuelleName</b>" wird in das gewählte Konzert <b>hineingeschmolzen</b>: Bands, Programm,
+            Mitwirkende und Videos werden übernommen (ohne Dubletten), danach wird „@QuelleName" gelöscht.
+            <b>Nicht umkehrbar.</b>
+        </MudAlert>
+        <MudAutocomplete T="KonzertRef" Label="Ziel-Konzert suchen" Variant="Variant.Outlined" Required="true"
+                         Value="_ziel" ValueChanged="@(v => _ziel = v)" SearchFunc="Suche"
+                         ToStringFunc="@(k => k?.Label ?? "")" MaxItems="40" ResetValueOnEmptyText="true"
+                         HelperText="Suche nach Datum, Name, Ort, beteiligter Band oder gespieltem Stück (mehrere Begriffe kombinierbar).">
+            <ItemTemplate Context="k">
+                <div>
+                    <MudText Typo="Typo.body2" Style="color:#F0E6FF;">@k.Label</MudText>
+                    @if (!string.IsNullOrEmpty(k.Bands))
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">Bands: @k.Bands</MudText>
+                    }
+                    @if (!string.IsNullOrEmpty(k.Stuecke))
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block" Style="color:#6f5a86;">Stücke: @k.Stuecke</MudText>
+                    }
+                </div>
+            </ItemTemplate>
+        </MudAutocomplete>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   OnClick="Bestaetigen" Disabled="@(_ziel is null)">Zusammenführen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid QuelleId { get; set; }
+    [Parameter] public string QuelleName { get; set; } = "";
+
+    private KonzertRef? _ziel;
+    private List<KonzertRef> _konzerte = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var roh = await db.Konzerte.Where(k => k.Id != QuelleId)
+            .OrderByDescending(k => k.Datum)
+            .Select(k => new
+            {
+                k.Id, k.Name, k.Datum, k.Ort,
+                Bands = k.Bands.Select(b => b.Band.Name).ToList(),
+                Stuecke = k.Programm.Select(ks => ks.Stueck.Titel).Distinct().ToList()
+            })
+            .ToListAsync();
+
+        _konzerte = roh.Select(k =>
+        {
+            var bands = string.Join(", ", k.Bands.OrderBy(n => n));
+            var stuecke = string.Join(", ", k.Stuecke.OrderBy(n => n));
+            var label = $"{k.Datum:dd.MM.yyyy} – {(k.Name ?? "(ohne Name)")}{(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")}";
+            // Durchsuchbarer Heuristik-Text über alle Dimensionen (klein geschrieben).
+            var such = string.Join(" ", new[]
+            {
+                k.Datum.ToString("dd.MM.yyyy"), k.Datum.Year.ToString(),
+                k.Name ?? "", k.Ort ?? "", bands, stuecke
+            }).ToLowerInvariant();
+            return new KonzertRef(k.Id, label, bands, stuecke, such);
+        }).ToList();
+    }
+
+    // Mehrere Suchbegriffe werden UND-verknüpft (jeder muss in irgendeiner Dimension vorkommen).
+    private Task<IEnumerable<KonzertRef>> Suche(string? v, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return Task.FromResult(_konzerte.Take(40));
+        var tokens = v.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        IEnumerable<KonzertRef> r = _konzerte.Where(k => tokens.All(t => k.Such.Contains(t)));
+        return Task.FromResult(r.Take(40));
+    }
+
+    private void Bestaetigen()
+    {
+        if (_ziel is null) return;
+        MudDialog.Close(DialogResult.Ok(_ziel.Id));
+    }
+
+    public record KonzertRef(Guid Id, string Label, string Bands, string Stuecke, string Such);
+}

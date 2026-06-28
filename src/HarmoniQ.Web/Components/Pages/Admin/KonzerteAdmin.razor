@@ -54,6 +54,8 @@
                                title="Ansehen" Href="@($"/konzerte/{context.Item.Id}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                title="Bearbeiten (Wizard)" Href="@($"/admin/konzerte/{context.Item.Id}/bearbeiten")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Merge" Size="Size.Small" Style="color:#9B59B6;"
+                               title="Mit anderem Konzert zusammenführen" OnClick="@(() => Zusammenfuehren(context.Item))" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => Loeschen(context.Item))" />
             </CellTemplate>
@@ -102,6 +104,21 @@
                     || k.Bands.Any(kb => kb.Band != null && kb.Band.Name.Contains(_bandText, StringComparison.OrdinalIgnoreCase))))
             .OrderByDescending(k => k.Datum)
             .ToList();
+    }
+
+    private async Task Zusammenfuehren(Konzert k)
+    {
+        var parameters = new DialogParameters<KonzertMergeDialog> { { x => x.QuelleId, k.Id }, { x => x.QuelleName, Bez(k) } };
+        var dialog = await DialogService.ShowAsync<KonzertMergeDialog>("Konzert zusammenführen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+        var zielId = (Guid)result.Data!;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var (ok, meldung) = await HarmoniQ.Web.Services.KonzertMergeService.MergeAsync(db, k.Id, zielId);
+        Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+        await Laden();
     }
 
     private async Task Loeschen(Konzert k)

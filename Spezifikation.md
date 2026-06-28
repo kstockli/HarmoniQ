@@ -103,7 +103,8 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
 > **Hinweis Login (aktualisiert):** Implementiert sind **lokale Konten** (E-Mail/Passwort) sowie
 > **Google-** und **Microsoft-Login**. E-Mail-Bestätigung ist **aktiv** (`RequireConfirmedAccount = true`);
 > Login erst nach Bestätigung, externe (verifizierte) Logins werden auto-bestätigt. Mailversand in
-> Produktion via **Resend HTTPS-API** (Railway blockt SMTP).
+> Produktion via **Resend HTTPS-API** (Railway blockt SMTP). Alle Passwort-Felder haben einen
+> **„anzeigen"-Schalter** (👁), der das Getippte sichtbar macht (`wwwroot/js/pwreveal.js`, global).
 
 ### 4.3 Admin-Bereich (`/admin`)
 
@@ -488,6 +489,11 @@ KonzertPerson                       (NEU – n:m Person ↔ Konzert mit Rolle)
 > des Videos automatisch** als `KonzertBand`-Teilnehmerin eingetragen (idempotent, keine Dublette).
 > Zusätzliche Bands ohne Video können im `/admin/konzerte`-CRUD manuell ergänzt werden.
 >
+> **Konzert zusammenführen (Merge):** `KonzertMergeService` schmilzt ein Quell-Konzert in ein Ziel-Konzert:
+> Bands (`KonzertBand`), Programm (`KonzertStueck`), Mitwirkende (`KonzertPerson`) und Videos werden umgehängt
+> (dublettenfrei je Unique-Key); leere Ziel-Stammdaten aus der Quelle gefüllt; Quelle gelöscht. Konzerte
+> brauchen **keine** Aliase. Bedienung in `/admin/konzerte` („Zusammenführen"-Icon je Zeile).
+>
 > **Konzert-Erfassungs-Wizard (umgesetzt):** Ein eigenes GUI (`/admin/konzerte/erfassen`), mit dem
 > man ein **ganzes Konzert in einem Rutsch** erfasst – fehlende Stammdaten werden dabei **bei Bedarf
 > angelegt** (Find-or-create, keine Dubletten):
@@ -729,7 +735,7 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
                                  alternative Namen/Aliase, „Zusammenführen")
 /admin/benutzer               → Benutzer/Login-Verwaltung: Konten (E-Mail, bestätigt, Rolle), verknüpfte Person
                                  ändern/lösen
-/admin/konzerte (Filter: Suche/Band/Jahr, Datum absteigend), /admin/konzerte/erfassen,
+/admin/konzerte (Filter: Suche/Band/Jahr, Datum absteigend, „Zusammenführen"), /admin/konzerte/erfassen,
                 /admin/konzerte/{id}/bearbeiten → Liste + Erfassungs-Wizard
 /admin/instrumente            → Instrumente & Stimmen
 /admin/stuecke, /admin/videos, /admin/bewertungen → CRUD/Verwaltung
