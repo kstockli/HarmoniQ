@@ -10,5 +10,6 @@ public enum BandKategorie
     JugendmusikHarmonie = 4,
     JugendmusikBrassband = 5,
     Blaeserensemble = 6,
+    Perkussion = 7,
     Sonstige = 99
 }

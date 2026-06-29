@@ -54,6 +54,9 @@ else
 // Komponist-Suche (Web + LLM) für fehlende Selbstwahlstück-Komponist:innen (SBBW §4.2).
 builder.Services.AddHttpClient<KomponistSuche>(c => c.Timeout = TimeSpan.FromSeconds(20));
 
+// Einmaliger WMC-2026-Import (Admin-Seite /admin/wmc-import, Dry-run → Übernehmen).
+builder.Services.AddHttpClient<HarmoniQ.Web.Services.Wmc.WmcImportService>(c => c.Timeout = TimeSpan.FromSeconds(40));
+
 // Orchestrator: In-Memory-Queue (Singleton) + Hintergrund-Dienst, der Läufe sequenziell abarbeitet.
 builder.Services.AddSingleton<CrawlLaufQueue>();
 builder.Services.AddScoped<CrawlRunner>();

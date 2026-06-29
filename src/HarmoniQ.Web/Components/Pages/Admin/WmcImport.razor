@@ -1,0 +1,156 @@
+@page "/admin/wmc-import"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using HarmoniQ.Web.Services.Wmc
+@inject WmcImportService Wmc
+@inject ISnackbar Snackbar
+
+<PageTitle>WMC 2026 – Import</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-2">WMC 2026 – Einmaliger Import</MudText>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+    World Music Contest Kerkrade 2026: <b>ein Konzert pro Tag und Veranstaltungsort</b> (alle Bands der Session),
+    je Band Programm (Stück + Komponist:in) und Dirigent:in. Zuerst <b>Vorschau</b> (schreibt nichts), dann
+    einzelne Konzerte oder alle übernehmen. Läuft gegen die aktuelle DB (lokal = Dev, Railway = Prod).
+    Band-Stammdaten (Bio, Kategorie, Stärkeklasse, Land) werden nur bei <b>neuen</b> Bands gesetzt.
+</MudAlert>
+
+<div class="d-flex gap-3 mb-4 align-center flex-wrap">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SammelnAsync" Disabled="_busy">
+        Daten sammeln (Vorschau)
+    </MudButton>
+    @if (_rows.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="AlleImportierenAsync" Disabled="_busy">
+            Alle @_rows.Count Konzerte importieren
+        </MudButton>
+    }
+    @if (_busy)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+        <MudText Typo="Typo.body2">@_status</MudText>
+    }
+</div>
+
+@if (_vorschau is not null)
+{
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <MudChip T="string" Color="Color.Default">@_vorschau.Konzerte Konzerte</MudChip>
+        <MudChip T="string" Color="Color.Default">@_vorschau.Auftritte Auftritte</MudChip>
+        <MudChip T="string" Color="Color.Primary">@_vorschau.NeueBands neue Bands</MudChip>
+        @if (_vorschau.OhneDatum > 0)
+        {
+            <MudTooltip Text="@string.Join(", ", _vorschau.AuftritteOhneDatum)">
+                <MudChip T="string" Color="Color.Warning">@_vorschau.OhneDatum ohne Datum (kein Konzert)</MudChip>
+            </MudTooltip>
+        }
+    </div>
+
+    <MudTable Items="_rows" Dense="true" Hover="true" Bordered="true" FixedHeader="true" Height="60vh">
+        <HeaderContent>
+            <MudTh>Datum</MudTh>
+            <MudTh>Ort</MudTh>
+            <MudTh>Konzert</MudTh>
+            <MudTh>Bands</MudTh>
+            <MudTh>Stücke</MudTh>
+            <MudTh>Neu</MudTh>
+            <MudTh>Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Datum">@context.V.Datum.ToString("dd.MM.yyyy")</MudTd>
+            <MudTd DataLabel="Ort">@context.V.Ort</MudTd>
+            <MudTd DataLabel="Konzert">@context.V.Name</MudTd>
+            <MudTd DataLabel="Bands">
+                <MudTooltip Text="@string.Join(", ", context.V.Bands)">@context.V.AnzahlBands</MudTooltip>
+            </MudTd>
+            <MudTd DataLabel="Stücke">@context.V.AnzahlStuecke</MudTd>
+            <MudTd DataLabel="Neu">@(context.V.NeueBands > 0 ? $"{context.V.NeueBands} Bands" : "")</MudTd>
+            <MudTd DataLabel="Aktion">
+                @if (context.Importiert)
+                {
+                    <MudText Color="Color.Success" Typo="Typo.caption">✓ importiert</MudText>
+                }
+                else if (context.V.KonzertVorhanden)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ImportiereAsync(context))" Disabled="_busy">
+                        Aktualisieren
+                    </MudButton>
+                }
+                else
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               OnClick="@(() => ImportiereAsync(context))" Disabled="_busy">
+                        Importieren
+                    </MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private bool _busy;
+    private string _status = "";
+    private IReadOnlyList<WmcImporter.Auftritt> _auftritte = [];
+    private WmcImportService.Vorschau? _vorschau;
+    private readonly List<Row> _rows = new();
+
+    private sealed class Row
+    {
+        public required WmcImportService.KonzertPlan Plan { get; init; }
+        public required WmcImportService.VorschauZeile V { get; set; }
+        public bool Importiert { get; set; }
+    }
+
+    private async Task SammelnAsync()
+    {
+        _busy = true; _status = "Sammle Liste und Detailseiten (~30 s) …"; _rows.Clear(); _vorschau = null;
+        StateHasChanged();
+        try
+        {
+            _auftritte = await Wmc.SammelnAsync();
+            _status = "Gruppiere zu Konzerten und berechne Vorschau …";
+            StateHasChanged();
+            var plaene = Wmc.Gruppiere(_auftritte);
+            _vorschau = await Wmc.VorschauAsync(plaene, _auftritte);
+            for (var i = 0; i < plaene.Count; i++)
+                _rows.Add(new Row { Plan = plaene[i], V = _vorschau.Zeilen[i] });
+            Snackbar.Add($"{_vorschau.Konzerte} Konzerte aus {_vorschau.Auftritte} Auftritten.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler beim Sammeln: {ex.Message}", Severity.Error); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task ImportiereAsync(Row row)
+    {
+        _busy = true; _status = $"Importiere {row.Plan.Name} …"; StateHasChanged();
+        try
+        {
+            var r = await Wmc.ImportiereKonzertAsync(row.Plan);
+            if (r.Fehler.Count > 0) Snackbar.Add(r.Fehler[0], Severity.Error);
+            else { row.Importiert = true; Snackbar.Add($"{row.Plan.Name} importiert ({r.BandsNeu} neue Bands, {r.StueckeGesamt} Stücke).", Severity.Success); }
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task AlleImportierenAsync()
+    {
+        _busy = true; StateHasChanged();
+        try
+        {
+            var offen = _rows.Where(r => !r.Importiert).ToList();
+            var n = 0;
+            foreach (var row in offen)
+            {
+                _status = $"Importiere {++n}/{offen.Count}: {row.Plan.Name} …"; StateHasChanged();
+                var r = await Wmc.ImportiereKonzertAsync(row.Plan);
+                if (r.Fehler.Count == 0) row.Importiert = true;
+                else Snackbar.Add(r.Fehler[0], Severity.Warning);
+            }
+            Snackbar.Add($"{offen.Count(o => o.Importiert)} Konzerte importiert.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler beim Import: {ex.Message}", Severity.Error); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+}
