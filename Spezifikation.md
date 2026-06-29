@@ -267,7 +267,7 @@ Band
 ├── Webseite (string?)              ← Haupt-Homepage (weitere Links siehe BandLink)
 ├── BildUrl (string?)               ← Band-Logo/Foto
 ├── Kategorie (enum?: Harmonie / Brassband / Fanfare / Unterhaltung / Jugendmusik Harmonie /
-│             Jugendmusik Brassband / Bläserensemble / Sonstige)   — NEU
+│             Jugendmusik Brassband / Bläserensemble / Perkussion / Sonstige)   — NEU
 ├── Staerkeklasse (enum?: Höchstklasse / Elite / 1.–4. Klasse / Ober-/Mittel-/Unterstufe)  — NEU
 ├── Gruendungsjahr (int?)           — NEU
 ├── Geschichte (string?)            — NEU (analog Person.Biografie)
