@@ -177,7 +177,7 @@
         var rollen = await db.PersonRollen.Include(r => r.Person)
             .Select(r => new { r.Person.Name, r.Rolle }).ToListAsync();
         _personPrimaerRolle = rollen
-            .GroupBy(r => r.Name)
+            .GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Min(x => x.Rolle), StringComparer.OrdinalIgnoreCase);
 
         if (Id is Guid kid)
