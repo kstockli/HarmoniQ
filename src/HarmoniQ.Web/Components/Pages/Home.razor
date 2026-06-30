@@ -276,7 +276,16 @@
                       Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;"
                       @onclick="@(() => { if (ziel != null) Nav.NavigateTo(ziel); })">
                 <MudIcon Icon="@icon" Size="Size.Large" Style="@($"color:{farbe};")" />
-                <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@anzahl</MudText>
+                @if (_geladen)
+                {
+                    <MudText Typo="Typo.h4" Class="mt-2" Style="color:#F0E6FF;">@anzahl</MudText>
+                }
+                else
+                {
+                    @* Dezenter Lade-Platzhalter statt eines irreführenden „0" (UX-Spec Block 7/8, A4). *@
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="48px" Height="42px"
+                                 Class="mt-2" Animation="Animation.Wave" />
+                }
                 <MudText Typo="Typo.body2" Style="color:#A78FC0;">@titel</MudText>
             </MudPaper>
         </MudItem>
@@ -289,6 +298,7 @@
     private List<KalenderZeile> _kalender = [];
     private bool _onboardingNoetig;
     private int _offeneAnfragen;
+    private bool _geladen;   // true sobald die Statistik geladen ist – steuert Skeleton statt „0"
     private MarkupString _qrSvg = QrErzeugen();
 
     private static MarkupString QrErzeugen()
@@ -330,6 +340,7 @@
         _neueVideos = neueVideosTask.Result;
         _kalender = kalenderTask.Result;
         (_onboardingNoetig, _offeneAnfragen) = userStatusTask.Result;
+        _geladen = true;
     }
 
     // Globale, gecachte Daten – einmalig pro Cache-Intervall für alle User berechnet.

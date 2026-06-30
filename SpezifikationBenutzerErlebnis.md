@@ -48,13 +48,23 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
 - **Verbreiten erst, wenn „richtig gut"** (Block 9) — sonst verbrennt jeder Verein seinen ersten Eindruck.
 - Primär-Zielgruppe: **Publikum/Fans (persönlicher Mehrwert) + aktive Musiker:innen.**
 
-**Phase 0 — Fundament & Quick Wins (jetzt, billig, hoher Hebel):**
-- **TTFB-Fix:** `Home.razor`-Aggregate cachen + parallelisieren (Task gespawnt). [Block 8]
-- **SEO/Sharing:** `lang=de`, `meta description`, **Open-Graph-Tags**. [Block 9.1 / A7]
-- **Skeleton statt „0"** als Ladezustand; **ohne Ton**; dezente kurze Logo-Animation. [Block 7]
-- **Analytics** (Plausible/Umami, datenschutzkonform) aufsetzen. [Block 9.1]
-- **i18n-Disziplin:** keine neuen Hardcoded-Strings; **Sichtbarkeits-Logik zentralisieren** (für UI
-  + spätere API). [Block 10]
+**Phase 0 — Fundament & Quick Wins (jetzt, billig, hoher Hebel):** *(Umsetzungs-Stand 2026-06-30)*
+- ✅ **TTFB-Fix:** `Home.razor`-Aggregate gecacht (`IMemoryCache`, 5 min) + restliche Queries via
+  `Task.WhenAll` parallelisiert + Startseiten-Indizes. (Commit „Startup-Performance".) [Block 8]
+- ✅ **SEO/Sharing:** `lang=de`, `meta description`, **Open-Graph-Tags** (`og:type/site_name/title/
+  description/url/image/locale`) + Twitter-Card + `canonical` in `App.razor`. OG-Bild =
+  `img/harmoniq-logo.png`; Basis-URL via `Seo:BasisUrl` konfigurierbar (Default Live-Domain).
+  [Block 9.1 / A7]
+- ✅ **Skeleton statt „0"** als Ladezustand: Statistik-Kacheln zeigen beim Circuit-Aufbau einen
+  `MudSkeleton` statt der irreführenden „0" (`_geladen`-Flag in `Home.razor`). **Ohne Ton** (kein
+  Audio eingebaut). *Dezente Logo-Animation: noch offen (optional, niedrige Prio).* [Block 7]
+- ✅ **Analytics-Plumbing:** datenschutzkonformer Script-Slot in `App.razor`, **standardmäßig aus** —
+  aktiviert sich erst, wenn `Analytics:ScriptUrl` (+ optional `Analytics:Domain`) gesetzt ist
+  (passt für Plausible/Umami, cookielos). *Instanz/Domain noch vom User zu hinterlegen.* [Block 9.1]
+- ✅ **i18n-Disziplin / Sichtbarkeit:** `lang=de` gesetzt; **Sichtbarkeits-Logik bereits zentral**
+  in `Services/PersonenSicht.cs` (single source of truth für UI + spätere API). Leitlinie „keine
+  neuen Hardcoded-Strings" bleibt bestehen; voller `.resx`-Retrofit terminiert auf Romandie-Push
+  (Block 10). [Block 10]
 
 **Phase 1 — Kern-Erlebnis „richtig gut" machen:**
 - **Konzert-Tagebuch** (`KonzertBesuch` + `StueckEindruck`, privat; Excel-Import der eigenen

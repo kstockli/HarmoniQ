@@ -1,11 +1,28 @@
 ﻿@using Microsoft.AspNetCore.Components.Endpoints
+@inject IConfiguration Config
+@inject IWebHostEnvironment Env
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
+
+    @* ── SEO & Social-Sharing (UX-Spec Phase 0 / Block 9.1, Befund A7) ─────────────── *@
+    <meta name="description" content="@SeoBeschreibung" />
+    <link rel="canonical" href="@SeoBasisUrl" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="HarmoniQ" />
+    <meta property="og:title" content="HarmoniQ – die Blasmusik-Datenbank" />
+    <meta property="og:description" content="@SeoBeschreibung" />
+    <meta property="og:url" content="@SeoBasisUrl" />
+    <meta property="og:image" content="@($"{SeoBasisUrl}/img/harmoniq-logo.png")" />
+    <meta property="og:locale" content="de_CH" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HarmoniQ – die Blasmusik-Datenbank" />
+    <meta name="twitter:description" content="@SeoBeschreibung" />
+    <meta name="twitter:image" content="@($"{SeoBasisUrl}/img/harmoniq-logo.png")" />
     <ResourcePreloader />
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
@@ -34,6 +51,12 @@
             navigator.serviceWorker.register('service-worker.js').catch(function () { });
         }
     </script>
+    @* Datenschutzkonforme Analytics (Plausible/Umami o.ä.) – nur aktiv, wenn in der Konfiguration
+       eine Script-URL hinterlegt ist (cookielos, kein Tracking by default). UX-Spec Block 9.1. *@
+    @if (AnalyticsAktiv)
+    {
+        <script defer src="@AnalyticsScriptUrl" data-website-id="@AnalyticsWebsiteId"></script>
+    }
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
@@ -57,4 +80,16 @@
     // ihren interaktiven Render-Kontext.
     private IComponentRenderMode? PageRenderMode =>
         HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+
+    // SEO/Sharing: Basis-URL (Produktion) konfigurierbar, Default = Live-Domain.
+    private string SeoBasisUrl => (Config["Seo:BasisUrl"] ?? "https://harmoniq.q-no.ch").TrimEnd('/');
+    private const string SeoBeschreibung =
+        "Entdecke Blasmusik-Konzerte, Stücke, Orchester und die Menschen dahinter – " +
+        "vergleiche Aufnahmen auf YouTube und merke dir, welche Konzerte du besucht hast.";
+
+    // Analytics (Umami): aktiv nur außerhalb von Development (keine lokalen Dev-Zugriffe in der
+    // Statistik) und nur wenn eine Script-URL konfiguriert ist.
+    private string? AnalyticsScriptUrl => Config["Analytics:ScriptUrl"];
+    private string? AnalyticsWebsiteId => Config["Analytics:WebsiteId"];
+    private bool AnalyticsAktiv => !Env.IsDevelopment() && !string.IsNullOrWhiteSpace(AnalyticsScriptUrl);
 }
