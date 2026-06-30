@@ -4,6 +4,14 @@
 > (Subdomain), optional später eigene Domain `harmoniq.ch`. Das interne .NET-Projekt heisst
 > aus historischen Gründen weiterhin `MusicRater.Web` (nur technischer Name, kein Umbenennungsbedarf).
 
+> **Geplante Erweiterungen (aus UX-Sitzung 2026-06-30):** Die dritte Spec
+> `SpezifikationBenutzerErlebnis.md` hält UX-/Strategie-Entscheide + eine **Roadmap (§0.1)** fest.
+> Daraus folgen **noch nicht implementierte** Datenmodell-Erweiterungen, u. a. `KonzertBesuch` +
+> `StueckEindruck` (privates Konzert-Tagebuch), `Lokal` + `LokalAlias` (+ Konzert→Lokal statt
+> Freitext-Ort, + Orte-Merge), `BandAdministrator` (band-skopierte Admin-Rolle) und ein Audit-Log
+> sowie ein „beansprucht – unbestätigt"-Status für Person-Claims sichtbarer Rollen. Diese werden hier
+> **pro umgesetzter Entität** nachgeführt (nicht vorab) — Plan/Begründung siehe die UX-Spec.
+
 ## 1. Projektidee
 
 Eine Web-Applikation, auf der Fans von Blasmusik-Komponisten (Startpunkt: **John Mackey**) Musikstücke durchsuchen und eingebettete YouTube-Aufnahmen desselben Stücks nebeneinander sehen und bewerten können. Die Plattform soll auf weitere Komponisten und Bands erweiterbar sein.
