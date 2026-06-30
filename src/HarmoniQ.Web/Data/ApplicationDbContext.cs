@@ -99,6 +99,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<PersonRolle>()
             .HasOne(r => r.Person).WithMany(p => p.Rollen)
             .HasForeignKey(r => r.PersonId).OnDelete(DeleteBehavior.Cascade);
+        // Filter „alle Komponist:innen" (Startseite/Listen) sucht über die Rolle allein – der PK
+        // beginnt mit PersonId, deckt das nicht ab. Separater Index auf Rolle.
+        builder.Entity<PersonRolle>().HasIndex(r => r.Rolle);
 
         // Band-Aliase (alternative Namen) + Band-Links (analog PersonLink).
         builder.Entity<BandAlias>(e =>
@@ -215,6 +218,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasIndex(a => a.Status);
             // Pro Benutzer nur ein offener Antrag je Person.
             e.HasIndex(a => new { a.PersonId, a.BenutzerId, a.Status });
+            // BenutzerId ist FK → bereits per Konvention indiziert (deckt den Onboarding-Check
+            // „hat dieser Benutzer einen offenen Antrag?" ab).
         });
 
         builder.Entity<BandbeitrittAntrag>(e =>
@@ -263,6 +268,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(ks => ks.BandId).OnDelete(DeleteBehavior.SetNull);
             // Dasselbe Stück nicht doppelt für dieselbe Band am selben Konzert.
             e.HasIndex(ks => new { ks.KonzertId, ks.StueckId, ks.BandId }).IsUnique();
+            // StueckId ist FK → bereits per Konvention indiziert (deckt „kommt Stück X in einem
+            // Programm vor?" ab); kein zusätzlicher Index nötig.
         });
 
         // KonzertPerson: n:m Konzert↔Person mit Rolle.
@@ -288,6 +295,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             // Höchstens eine Verbindung je gerichtetem Paar.
             e.HasIndex(f => new { f.AnfragerPersonId, f.EmpfaengerPersonId }).IsUnique();
             e.HasIndex(f => f.Status);
+            // EmpfaengerPersonId ist FK → bereits per Konvention indiziert (deckt „offene Anfragen
+            // an mich" ab).
         });
 
         // Aktivitaet: Feed-Ereignis. Index auf Zeitpunkt (Feed nach Datum absteigend).

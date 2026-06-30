@@ -1,9 +1,11 @@
 @page "/"
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Caching.Memory
 @using QRCoder
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IMemoryCache Cache
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 
@@ -297,34 +299,54 @@
         return (MarkupString)svg;
     }
 
+    private const string GlobalCacheKey = "home:global";
+
     protected override async Task OnInitializedAsync()
+    {
+        // (1) Globale, für alle User identische Daten (6 Zähler + Featured-Komponist:innen/Bands):
+        // gecacht (5 min), damit ~8 DB-Round-Trips aus dem Hot-Path verschwinden. Sie ändern sich
+        // selten; die teuerste Query (Featured-Komponist:innen) läuft so nur alle paar Minuten.
+        var global = await Cache.GetOrCreateAsync(GlobalCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            return await GlobaleDatenLadenAsync();
+        });
+        _komponistenCount = global!.KomponistenCount;
+        _personenCount = global.PersonenCount;
+        _bandsCount = global.BandsCount;
+        _stueckeCount = global.StueckeCount;
+        _videosCount = global.VideosCount;
+        _bewertungenCount = global.BewertungenCount;
+        _komponisten = global.Komponisten;
+        _bands = global.Bands;
+
+        // (2) Verbleibende unabhängige Queries parallel ausführen – je Task ein eigener Kontext aus
+        // der Factory (DbContext ist nicht thread-sicher), gesammelt via Task.WhenAll statt sequenziell.
+        var neueVideosTask = NeueVideosLadenAsync();
+        var kalenderTask = KalenderLadenAsync();
+        var userStatusTask = UserStatusLadenAsync();
+        await Task.WhenAll(neueVideosTask, kalenderTask, userStatusTask);
+
+        _neueVideos = neueVideosTask.Result;
+        _kalender = kalenderTask.Result;
+        (_onboardingNoetig, _offeneAnfragen) = userStatusTask.Result;
+    }
+
+    // Globale, gecachte Daten – einmalig pro Cache-Intervall für alle User berechnet.
+    private async Task<GlobaleDaten> GlobaleDatenLadenAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        // Onboarding-Hinweis: eingeloggt, aber (noch) keine verknüpfte Person und kein offener Antrag.
-        var authState = await AuthProvider.GetAuthenticationStateAsync();
-        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!string.IsNullOrEmpty(userId))
-        {
-            var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
-            var hatPerson = meineId != Guid.Empty;
-            var hatAntrag = await db.PersonAnsprueche.AnyAsync(a => a.BenutzerId == userId && a.Status == PersonAnspruchStatus.Offen);
-            _onboardingNoetig = !hatPerson && !hatAntrag;
+        var komponistenCount = await db.Personen.CountAsync(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist));
+        var personenCount = await db.Personen.CountAsync();
+        var bandsCount = await db.Bands.CountAsync();
+        var stueckeCount = await db.Stuecke.CountAsync();
+        var videosCount = await db.Videos.CountAsync(v => v.Status == VideoStatus.Genehmigt);
+        var bewertungenCount = await db.Bewertungen.CountAsync();
 
-            // Offene (noch nicht entschiedene) Freundschaftsanfragen an mich.
-            if (hatPerson)
-                _offeneAnfragen = await db.Freundschaften.CountAsync(f =>
-                    f.EmpfaengerPersonId == meineId && f.Status == FreundschaftStatus.Offen);
-        }
-        _komponistenCount = await db.Personen.CountAsync(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist));
-        _personenCount = await db.Personen.CountAsync();
-        _bandsCount = await db.Bands.CountAsync();
-        _stueckeCount = await db.Stuecke.CountAsync();
-        _videosCount = await db.Videos.CountAsync(v => v.Status == VideoStatus.Genehmigt);
-        _bewertungenCount = await db.Bewertungen.CountAsync();
         // Nur Komponist:innen, deren Stücke mind. ein (genehmigtes) Video haben oder in einem
         // Konzertprogramm vorkommen – und davon die „werkreichsten" ersten paar (Rest via „Alle").
-        _komponisten = await db.Personen
+        var komponisten = await db.Personen
             .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist)
                 && p.StueckBeitraege.Any(sb =>
                     sb.Stueck.Videos.Any(v => v.Status == VideoStatus.Genehmigt)
@@ -336,34 +358,69 @@
             .ToListAsync();
 
         // Bands mit den meisten Mitgliedern zuerst (max. 6 auf der Startseite).
-        _bands = await db.Bands
+        var bands = await db.Bands
             .OrderByDescending(b => b.Mitgliedschaften.Count)
             .ThenBy(b => b.Name)
             .Select(b => new BandZeile(b.Id, b.Name, b.Land, b.Mitgliedschaften.Count, b.Videos.Count))
             .Take(6)
             .ToListAsync();
 
-        _neueVideos = await db.Videos
+        return new GlobaleDaten(komponistenCount, personenCount, bandsCount, stueckeCount,
+            videosCount, bewertungenCount, komponisten, bands);
+    }
+
+    private async Task<List<VideoZeile>> NeueVideosLadenAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.Videos
             .Where(v => v.Status == VideoStatus.Genehmigt)
             .OrderByDescending(v => v.ErstelltAm)
             .Select(v => new VideoZeile(v.Id, v.Plattform, v.ExternId, v.Stueck.Titel,
                 v.Band != null ? v.Band.Name : null))
             .Take(4)
             .ToListAsync();
+    }
 
+    private async Task<List<KalenderZeile>> KalenderLadenAsync()
+    {
         // Konzert-Kalender: ±8 Tage um heute, chronologisch.
         var heute = DateOnly.FromDateTime(DateTime.Today);
         var von = heute.AddDays(-8);
         var bis = heute.AddDays(8);
+        await using var db = await DbFactory.CreateDbContextAsync();
         var konzerte = await db.Konzerte
             .Where(k => k.Datum >= von && k.Datum <= bis)
             .OrderBy(k => k.Datum)
             .Select(k => new { k.Id, k.Datum, k.Name, k.Ort })
             .ToListAsync();
-        _kalender = konzerte
+        return konzerte
             .Select(k => new KalenderZeile(k.Id, k.Datum, k.Name, k.Ort,
                 RelativLabel(k.Datum, heute), k.Datum == heute, k.Datum < heute))
             .ToList();
+    }
+
+    // User-spezifischer Onboarding-/Anfragen-Status – pro Request (nicht cachebar).
+    private async Task<(bool OnboardingNoetig, int OffeneAnfragen)> UserStatusLadenAsync()
+    {
+        // Onboarding-Hinweis: eingeloggt, aber (noch) keine verknüpfte Person und kein offener Antrag.
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return (false, 0);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
+        var hatPerson = meineId != Guid.Empty;
+        var hatAntrag = await db.PersonAnsprueche.AnyAsync(a => a.BenutzerId == userId && a.Status == PersonAnspruchStatus.Offen);
+        var onboardingNoetig = !hatPerson && !hatAntrag;
+
+        // Offene (noch nicht entschiedene) Freundschaftsanfragen an mich.
+        var offeneAnfragen = 0;
+        if (hatPerson)
+            offeneAnfragen = await db.Freundschaften.CountAsync(f =>
+                f.EmpfaengerPersonId == meineId && f.Status == FreundschaftStatus.Offen);
+
+        return (onboardingNoetig, offeneAnfragen);
     }
 
     private static string RelativLabel(DateOnly datum, DateOnly heute)
@@ -378,6 +435,12 @@
             _ => $"vor {-tage} Tagen"
         };
     }
+
+    // Gecachte globale Daten (für alle User identisch) – ein Eintrag im IMemoryCache.
+    private record GlobaleDaten(
+        int KomponistenCount, int PersonenCount, int BandsCount, int StueckeCount,
+        int VideosCount, int BewertungenCount,
+        List<Zeile> Komponisten, List<BandZeile> Bands);
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
     private record BandZeile(Guid Id, string Name, string? Land, int MitgliederCount, int VideosCount);

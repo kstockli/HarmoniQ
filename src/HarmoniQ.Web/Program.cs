@@ -18,6 +18,10 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 
+// In-Memory-Cache für globale, nicht user-spezifische Startseiten-Daten (Zähler, Featured-
+// Komponist:innen/Bands) – nimmt ~8 DB-Queries pro Seitenaufbau aus dem Hot-Path (siehe Home.razor).
+builder.Services.AddMemoryCache();
+
 builder.Services.AddHttpClient<YouTubeMetadataService>();
 builder.Services.AddHttpClient<YouTubeSearchService>();
 builder.Services.AddHttpClient<WebseitenScraper>(c =>
