@@ -67,8 +67,12 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   (Block 10). [Block 10]
 
 **Phase 1 — Kern-Erlebnis „richtig gut" machen:**
-- **Konzert-Tagebuch** (`KonzertBesuch` + `StueckEindruck`, privat; Excel-Import der eigenen
-  Historie). [Block 4]
+- ✅ **Konzert-Tagebuch** (`KonzertBesuch` + `StueckEindruck`, privat) — umgesetzt: „Ich war im
+  Publikum" + Sterne/Notiz je Programmpunkt (auch bei Wettbewerben), Seite „Mein Konzert-Tagebuch"
+  mit „Mein Konzert-Jahr", 4-stufige Sichtbarkeit (NurIch/FreundeAnwesenheit/Freunde/Öffentlich),
+  Feed-Eintrag „war beim Konzert", „Eindrücke der Besucher:innen" auf der Konzertseite,
+  Admin-Moderation. Abgrenzung zu „Ich habe mitgewirkt" (`KonzertPerson`, Bühnenrollen). Details in
+  `Spezifikation.md`. **Offen/optional:** Excel-Import der eigenen Historie (zurückgestellt).
 - **Neuer Einstieg:** kontext-zentrierte Startseite, **Bottom-Navigation**, Komponist:innen eigener
   Menüpunkt, vereinheitlichte **Stück-Zeile** (Karten mobil / Tabelle Desktop). [Block 6/7]
 - **Claim Modell B** (erfassen → später Merge vorschlagen) + Trigger + Verifizierungs-Gate. [Block 3]

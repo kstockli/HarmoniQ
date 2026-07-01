@@ -41,6 +41,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<KonzertPerson> KonzertPersonen => Set<KonzertPerson>();
     public DbSet<Freundschaft> Freundschaften => Set<Freundschaft>();
     public DbSet<Aktivitaet> Aktivitaeten => Set<Aktivitaet>();
+    public DbSet<KonzertBesuch> KonzertBesuche => Set<KonzertBesuch>();
+    public DbSet<StueckEindruck> StueckEindruecke => Set<StueckEindruck>();
 
     // Crawler / Import-Roboter (Spezifikation-Crawler.md §5) – isoliert vom Kernmodell.
     public DbSet<CrawlQuelle> CrawlQuellen => Set<CrawlQuelle>();
@@ -297,6 +299,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasIndex(f => f.Status);
             // EmpfaengerPersonId ist FK → bereits per Konvention indiziert (deckt „offene Anfragen
             // an mich" ab).
+        });
+
+        // KonzertBesuch (Konzert-Tagebuch): privates „Ich war dabei" je (User, Konzert).
+        builder.Entity<KonzertBesuch>(e =>
+        {
+            e.HasOne(b => b.Konzert).WithMany()
+                .HasForeignKey(b => b.KonzertId).OnDelete(DeleteBehavior.Cascade);
+            // Höchstens ein Tagebuch-Eintrag pro Konzert und Nutzer:in.
+            e.HasIndex(b => new { b.BenutzerId, b.KonzertId }).IsUnique();
+        });
+
+        // StueckEindruck: private Sterne/Notiz je (User, KonzertStück).
+        builder.Entity<StueckEindruck>(e =>
+        {
+            e.HasOne(s => s.KonzertStueck).WithMany()
+                .HasForeignKey(s => s.KonzertStueckId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(s => new { s.BenutzerId, s.KonzertStueckId }).IsUnique();
         });
 
         // Aktivitaet: Feed-Ereignis. Index auf Zeitpunkt (Feed nach Datum absteigend).

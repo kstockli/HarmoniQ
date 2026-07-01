@@ -33,6 +33,9 @@
     <AuthorizeView>
         <Authorized>
             <MudText Typo="Typo.overline" Class="px-4 pt-2 pb-1 mud-text-secondary">Konto</MudText>
+            <MudNavLink Href="/account/tagebuch" Icon="@Icons.Material.Filled.MenuBook">
+                Mein Tagebuch
+            </MudNavLink>
             <MudNavLink Href="/account/profil" Icon="@Icons.Material.Filled.FavoriteBorder">
                 Meine Beiträge
             </MudNavLink>
@@ -91,6 +94,9 @@
             </MudNavLink>
             <MudNavLink Href="/admin/richtigstellungen" Icon="@Icons.Material.Filled.ReportProblem">
                 Richtigstellungen @Badge(_richtigstellungenOffen)
+            </MudNavLink>
+            <MudNavLink Href="/admin/tagebuch-moderation" Icon="@Icons.Material.Filled.Public">
+                Öffentl. Tagebuch
             </MudNavLink>
             <MudNavLink Href="/admin/verknuepfungen" Icon="@Icons.Material.Filled.PersonPin">
                 Verknüpfungs-Anträge @Badge(_verknuepfungenOffen)

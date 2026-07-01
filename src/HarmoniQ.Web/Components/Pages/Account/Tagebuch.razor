@@ -1,0 +1,183 @@
+@page "/account/tagebuch"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<PageTitle>Mein Konzert-Tagebuch – HarmoniQ</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:#D4AF37;font-size:2.2rem;" />
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Mein Konzert-Tagebuch</MudText>
+</MudStack>
+
+@if (_geladen == false)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_besuche.Count == 0)
+{
+    <MudPaper Class="pa-6" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.body1" Style="color:#F0E6FF;">Dein Tagebuch ist noch leer.</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+            Öffne ein Konzert und tippe „Ich war dabei" – dann sammelst du hier deine besuchten Konzerte
+            und deine privaten Stück-Bewertungen.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   StartIcon="@Icons.Material.Filled.Event" Href="/konzerte">Konzerte durchstöbern</MudButton>
+    </MudPaper>
+}
+else
+{
+    @* ── Mein Konzert-Jahr (Statistik) ─────────────────────────────────────── *@
+    <MudPaper Class="pa-4 mb-6" Elevation="3"
+              Style="background:linear-gradient(135deg,#2d1657,#1a0030); border:1px solid #D4AF37;">
+        <MudText Typo="Typo.h6" GutterBottom="true" Style="color:#D4AF37;">
+            Mein Konzert-Jahr @_heuer
+        </MudText>
+        <MudGrid>
+            @StatKachel(_besucheHeuer.ToString(), "Konzerte " + _heuer, "#1ABC9C")
+            @StatKachel(_besuche.Count.ToString(), "Konzerte gesamt", "#9B59B6")
+            @StatKachel(_bewertetGesamt.ToString(), "Stücke bewertet", "#E67E22")
+            @StatKachel(_schnitt is null ? "–" : _schnitt.Value.ToString("0.0") + "★", "⌀ Bewertung", "#F1C40F")
+        </MudGrid>
+
+        @if (_topStuecke.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1" Style="color:#9B59B6;">Deine Höhepunkte</MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var t in _topStuecke)
+                {
+                    <MudChip T="string" Variant="Variant.Text" OnClick="@(() => Nav.NavigateTo($"/konzerte/{t.KonzertId}"))"
+                             Style="color:#F0E6FF;">
+                        @t.Titel <span style="color:#F1C40F;">&nbsp;@(new string('★', t.Sterne))</span>
+                    </MudChip>
+                }
+            </MudStack>
+        }
+    </MudPaper>
+
+    @* ── Besuchte Konzerte, gruppiert nach Jahr (chronologisch absteigend) ──── *@
+    @foreach (var jahr in _besuche.GroupBy(b => b.Datum.Year).OrderByDescending(g => g.Key))
+    {
+        <MudText Typo="Typo.h5" Class="mt-4 mb-2" Style="color:#D4AF37;">@jahr.Key</MudText>
+        <MudGrid>
+            @foreach (var b in jahr.OrderByDescending(x => x.Datum))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudPaper Class="pa-3 cursor-pointer" Elevation="2"
+                              Style="background:#241640; border-left:4px solid #1ABC9C;"
+                              @onclick="@(() => Nav.NavigateTo($"/konzerte/{b.KonzertId}"))">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <div style="text-align:center;min-width:48px;">
+                                <MudText Typo="Typo.h5" Style="color:#F0E6FF;line-height:1;">@b.Datum.Day</MudText>
+                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@b.Datum.ToString("MMM")</MudText>
+                            </div>
+                            <div style="flex:1;min-width:0;">
+                                <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@b.Titel</MudText>
+                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                                    @b.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(b.Ort) ? "" : $" · {b.Ort}")
+                                </MudText>
+                                @if (b.BewertetAnzahl > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#F1C40F;">
+                                        @b.BewertetAnzahl Stück@(b.BewertetAnzahl == 1 ? "" : "e") bewertet · ⌀ @b.Schnitt.Value.ToString("0.0")★
+                                    </MudText>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(b.Notiz))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-1" Style="color:#C4B0D8;font-style:italic;">„@b.Notiz"</MudText>
+                                }
+                            </div>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+}
+
+@code {
+    private bool _geladen;
+    private readonly int _heuer = DateTime.Today.Year;
+
+    private List<BesuchZeile> _besuche = [];
+    private int _besucheHeuer;
+    private int _bewertetGesamt;
+    private double? _schnitt;
+    private List<TopStueck> _topStuecke = [];
+
+    private RenderFragment StatKachel(string wert, string label, string farbe) => __builder =>
+    {
+        <MudItem xs="6" sm="3">
+            <div style="text-align:center;">
+                <MudText Typo="Typo.h4" Style="@($"color:{farbe};")">@wert</MudText>
+                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@label</MudText>
+            </div>
+        </MudItem>
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) { _geladen = true; return; }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var besuche = await db.KonzertBesuche
+            .Where(b => b.BenutzerId == userId)
+            .Select(b => new { b.KonzertId, b.Konzert.Datum, b.Konzert.Name, b.Konzert.Ort, b.Notiz })
+            .ToListAsync();
+
+        // Alle Stück-Eindrücke des Users (für Aggregation je Konzert + Höhepunkte).
+        var eindruecke = await db.StueckEindruecke
+            .Where(s => s.BenutzerId == userId)
+            .Select(s => new
+            {
+                s.KonzertStueck.KonzertId,
+                Titel = s.KonzertStueck.Stueck.Titel,
+                s.Sterne
+            })
+            .ToListAsync();
+
+        var proKonzert = eindruecke
+            .Where(e => e.Sterne != null)
+            .GroupBy(e => e.KonzertId)
+            .ToDictionary(g => g.Key, g => (Anzahl: g.Count(), Schnitt: g.Average(x => (double)x.Sterne!.Value)));
+
+        _besuche = besuche
+            .Select(b =>
+            {
+                proKonzert.TryGetValue(b.KonzertId, out var agg);
+                return new BesuchZeile(b.KonzertId, b.Datum, b.Name, b.Ort, b.Notiz,
+                    agg.Anzahl, agg.Anzahl > 0 ? agg.Schnitt : null);
+            })
+            .ToList();
+
+        _besucheHeuer = _besuche.Count(b => b.Datum.Year == _heuer);
+        var bewertet = eindruecke.Where(e => e.Sterne != null).ToList();
+        _bewertetGesamt = bewertet.Count;
+        _schnitt = bewertet.Count > 0 ? bewertet.Average(e => (double)e.Sterne!.Value) : null;
+
+        _topStuecke = bewertet
+            .OrderByDescending(e => e.Sterne)
+            .Take(5)
+            .Select(e => new TopStueck(e.KonzertId, e.Titel, e.Sterne!.Value))
+            .ToList();
+
+        _geladen = true;
+    }
+
+    private record BesuchZeile(Guid KonzertId, DateOnly Datum, string? Name, string? Ort, string? Notiz,
+        int BewertetAnzahl, double? Schnitt)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
+    private record TopStueck(Guid KonzertId, string Titel, int Sterne);
+}

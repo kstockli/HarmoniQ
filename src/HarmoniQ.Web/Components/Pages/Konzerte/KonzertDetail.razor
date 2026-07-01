@@ -40,59 +40,72 @@ else
     }
 
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
-        @if (_eigenePersonId is not null)
+        @* „Mitgewirkt" nur für Bühnen-Beteiligte (Dirigent/Musikant/Komponist); Publikum nutzt das Tagebuch unten. *@
+        @if (_eigenePersonId is not null && _kannMitwirken)
         {
             @if (_eigeneTeilnahmeRollen.Count > 0)
             {
                 <MudChip T="string" Icon="@Icons.Material.Filled.CheckCircle" Variant="Variant.Outlined"
                          Style="color:#A78FC0; border-color:#3a1060;">
-                    Du warst dabei (@string.Join(", ", _eigeneTeilnahmeRollen.Select(RolleLabelKurz)))
+                    Du hast mitgewirkt (@string.Join(", ", _eigeneTeilnahmeRollen.Select(RolleLabelKurz)))
                 </MudChip>
             }
             else
             {
                 <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
-                           StartIcon="@Icons.Material.Filled.PanTool" OnClick="IchWarDabei">Ich war dabei</MudButton>
+                           StartIcon="@Icons.Material.Filled.Groups" OnClick="IchWarDabei">Ich habe mitgewirkt</MudButton>
             }
         }
         <RichtigstellungMelden Typ="RichtigstellungTyp.Konzert" Id="_konzert.Id" />
     </MudStack>
 
-    @if (!_istWettbewerb && _programm.Count > 0)
+    <KonzertTagebuchPanel KonzertId="_konzert.Id" Programm="_tagebuchProgramm" />
+
+    @if (_eindruecke.Count > 0)
     {
-        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Programm (@_programm.Count)</MudText>
-        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mb-6"
-                        Style="background:#1a0030; border:1px solid #3a1060;">
-            <thead>
-                <tr>
-                    <th style="color:#9B59B6;">Stück</th>
-                    <th style="color:#9B59B6;">Komponist:in</th>
-                    <th style="color:#9B59B6;">Band</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var p in _programm)
+        <MudPaper Class="pa-4 mb-6" Elevation="1" Style="background:#1a0030; border:1px solid #3a1060;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.People" Style="color:#1ABC9C;" />
+                <MudText Typo="Typo.h6" Style="color:#D4AF37;">Eindrücke der Besucher:innen</MudText>
+            </MudStack>
+            <MudStack Spacing="3">
+                @foreach (var e in _eindruecke)
                 {
-                    <tr>
-                        <td><MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.StueckTitel</MudLink></td>
-                        <td>
-                            @if (_komponisten.TryGetValue(p.StueckId, out var ks) && ks.Count > 0)
+                    <div>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                            <MudLink Href="@($"/personen/{e.PersonId}")" Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@e.Name</MudLink>
+                            @if (!e.ZeigtInhalt)
                             {
-                                @PersonenLinks(ks)
+                                <MudText Typo="Typo.caption" Style="color:#6f5a86;">war dabei</MudText>
                             }
-                            else { <span style="color:#A78FC0;">–</span> }
-                        </td>
-                        <td>
-                            @if (p.BandId is { } bid)
-                            {
-                                <MudLink Href="@($"/bands/{bid}")" Style="color:#A78FC0;" Underline="Underline.Hover">@p.BandName</MudLink>
-                            }
-                            else { <span style="color:#A78FC0;">–</span> }
-                        </td>
-                    </tr>
+                        </MudStack>
+                        @if (e.ZeigtInhalt && !string.IsNullOrWhiteSpace(e.Notiz))
+                        {
+                            <MudText Typo="Typo.body2" Style="color:#C4B0D8;font-style:italic;">„@e.Notiz"</MudText>
+                        }
+                        @if (e.Bewertungen.Count > 0)
+                        {
+                            <MudStack Spacing="0" Class="mt-1">
+                                @foreach (var (titel, st, notiz) in e.Bewertungen)
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                                        @titel
+                                        @if (st is int s)
+                                        {
+                                            <span style="color:#F1C40F;">&nbsp;@(new string('★', s))</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(notiz))
+                                        {
+                                            <span style="color:#C4B0D8;font-style:italic;">&nbsp;– @notiz</span>
+                                        }
+                                    </MudText>
+                                }
+                            </MudStack>
+                        }
+                    </div>
                 }
-            </tbody>
-        </MudSimpleTable>
+            </MudStack>
+        </MudPaper>
     }
 
     @if (_mitwirkende.Count > 0)
@@ -239,9 +252,20 @@ else
     private Dictionary<Guid, List<PersonRef>> _komponisten = new();
     private bool _istWettbewerb;
 
+    // Programmpunkte fürs vereinte Programm-/Bewertungs-Panel (mit Komponist:innen + Links).
+    // Auch bei Wettbewerben: die Rangliste zeigt Platzierung/Punkte, das Panel die private Bewertung.
+    private List<KonzertTagebuchPanel.Programmpunkt> _tagebuchProgramm =>
+        _programm.Select(p => new KonzertTagebuchPanel.Programmpunkt(
+            p.KonzertStueckId, p.StueckId, p.StueckTitel, p.BandId, p.BandName,
+            _komponisten.TryGetValue(p.StueckId, out var ks)
+                ? ks.Select(k => new KonzertTagebuchPanel.Komponist(k.Id, k.Name)).ToList()
+                : [])).ToList();
+
     private Guid? _eigenePersonId;
-    private PersonRolleTyp _vorschlagRolle = PersonRolleTyp.Zuhoerer;
+    private bool _kannMitwirken;   // Person hat eine Bühnenrolle (nicht nur Zuhörer:in)
+    private PersonRolleTyp _vorschlagRolle = PersonRolleTyp.Musikant;
     private List<PersonRolleTyp> _eigeneTeilnahmeRollen = [];
+    private List<EindruckZeile> _eindruecke = [];
 
     private List<BreadcrumbItem> _breadcrumbs => _konzert == null ? [] :
     [
@@ -291,7 +315,7 @@ else
             .Where(ks => ks.KonzertId == Id)
             .OrderBy(ks => ks.Reihenfolge)
             .ThenBy(ks => ks.Stueck.Titel)
-            .Select(ks => new ProgrammZeile(ks.StueckId, ks.Stueck.Titel, ks.BandId, ks.Band != null ? ks.Band.Name : null))
+            .Select(ks => new ProgrammZeile(ks.Id, ks.StueckId, ks.Stueck.Titel, ks.BandId, ks.Band != null ? ks.Band.Name : null))
             .ToListAsync();
 
         // Mitwirkende & Gäste (Konzert↔Person mit Rolle); Namen sichtbarkeitsabhängig.
@@ -342,9 +366,11 @@ else
             .OrderBy(b => b.Rang == null).ThenBy(b => b.Rang).ThenBy(b => b.Name)
             .ToList();
 
-        // „Ich war dabei": eigene verknüpfte Person + Rollen-Vorschlag.
+        // Eigene verknüpfte Person + Rollen-Vorschlag (für „Ich habe mitgewirkt").
         _eigenePersonId = null;
+        _kannMitwirken = false;
         _eigeneTeilnahmeRollen = [];
+        List<Guid> freundIds = [];
         if (!string.IsNullOrEmpty(userId))
         {
             var eigene = await db.Personen
@@ -354,15 +380,70 @@ else
             if (eigene != null)
             {
                 _eigenePersonId = eigene.Id;
-                // Eindeutiger Person-Typ → vorschlagen; sonst Zuhörer:in.
                 var distinct = eigene.Rollen.Distinct().ToList();
-                _vorschlagRolle = distinct.Count == 1 ? distinct[0] : PersonRolleTyp.Zuhoerer;
+                // Nur Personen mit Bühnenrolle (nicht nur Zuhörer:in) können „mitwirken".
+                var buehne = distinct.Where(r => r != PersonRolleTyp.Zuhoerer).ToList();
+                _kannMitwirken = buehne.Count > 0;
+                _vorschlagRolle = buehne.Count == 1 ? buehne[0] : PersonRolleTyp.Musikant;
                 _eigeneTeilnahmeRollen = mitwirkende
                     .Where(kp => kp.PersonId == eigene.Id)
                     .Select(kp => kp.Rolle)
                     .ToList();
+
+                var meineId = eigene.Id;
+                freundIds = await db.Freundschaften
+                    .Where(f => f.Status == FreundschaftStatus.Bestaetigt
+                        && (f.AnfragerPersonId == meineId || f.EmpfaengerPersonId == meineId))
+                    .Select(f => f.AnfragerPersonId == meineId ? f.EmpfaengerPersonId : f.AnfragerPersonId)
+                    .ToListAsync();
             }
         }
+
+        await EindrueckeLadenAsync(db, userId, freundIds);
+    }
+
+    // Geteilte Tagebuch-Eindrücke für die Konzertseite: öffentliche für alle, Freundes-Einträge für mich.
+    private async Task EindrueckeLadenAsync(ApplicationDbContext db, string? userId, List<Guid> freundIds)
+    {
+        _eindruecke = [];
+
+        // Besuche dieses Konzerts, die überhaupt geteilt sind (nicht „Nur ich"), ohne meinen eigenen.
+        var besuche = await db.KonzertBesuche
+            .Where(b => b.KonzertId == Id && b.Sichtbarkeit != TagebuchSichtbarkeit.NurIch
+                        && b.BenutzerId != userId)
+            .Join(db.Personen, b => b.BenutzerId, p => p.BenutzerId,
+                (b, p) => new { b.BenutzerId, b.Sichtbarkeit, b.Notiz, PersonId = p.Id, p.Name })
+            .ToListAsync();
+
+        // Sichtbar: öffentlich (alle) ODER von einer bestätigten Freund:in.
+        var sichtbar = besuche
+            .Where(b => b.Sichtbarkeit == TagebuchSichtbarkeit.Oeffentlich || freundIds.Contains(b.PersonId))
+            .ToList();
+        if (sichtbar.Count == 0) return;
+
+        // Inhalt (Notiz + Sterne) nur ab Stufe „Freunde"/„Öffentlich"; „FreundeAnwesenheit" = nur Anwesenheit.
+        var inhaltUser = sichtbar
+            .Where(b => b.Sichtbarkeit is TagebuchSichtbarkeit.Freunde or TagebuchSichtbarkeit.Oeffentlich)
+            .Select(b => b.BenutzerId).ToList();
+        var eindr = await db.StueckEindruecke
+            .Where(s => inhaltUser.Contains(s.BenutzerId) && (s.Sterne != null || s.Notiz != null)
+                        && db.KonzertStuecke.Any(ks => ks.Id == s.KonzertStueckId && ks.KonzertId == Id))
+            .Select(s => new { s.BenutzerId, Titel = s.KonzertStueck.Stueck.Titel, s.Sterne, s.Notiz })
+            .ToListAsync();
+        var sterneProUser = eindr.GroupBy(x => x.BenutzerId)
+            .ToDictionary(g => g.Key, g => g.Select(x => (x.Titel, x.Sterne, x.Notiz)).ToList());
+
+        _eindruecke = sichtbar
+            .OrderBy(b => b.Name)
+            .Select(b =>
+            {
+                var zeigtInhalt = b.Sichtbarkeit is TagebuchSichtbarkeit.Freunde or TagebuchSichtbarkeit.Oeffentlich;
+                return new EindruckZeile(b.PersonId, b.Name,
+                    zeigtInhalt,
+                    zeigtInhalt ? b.Notiz : null,
+                    zeigtInhalt && sterneProUser.TryGetValue(b.BenutzerId, out var lst) ? lst : []);
+            })
+            .ToList();
     }
 
     private async Task IchWarDabei()
@@ -440,6 +521,8 @@ else
     private record PersonRef(Guid Id, string Name);
     private record BandZeile(Guid Id, string Name, int? Rang, int? Punkte, PersonRef? Dirigent, List<StueckRef> Stuecke);
     private record VideoZeile(Guid Id, Guid? BandId, VideoPlattform Plattform, string ExternId, string Titel, string StueckTitel);
-    private record ProgrammZeile(Guid StueckId, string StueckTitel, Guid? BandId, string? BandName);
+    private record ProgrammZeile(Guid KonzertStueckId, Guid StueckId, string StueckTitel, Guid? BandId, string? BandName);
+    private record EindruckZeile(Guid PersonId, string Name, bool ZeigtInhalt, string? Notiz,
+        List<(string Titel, int? Sterne, string? Notiz)> Bewertungen);
     private record MitwirkendeZeile(Guid PersonId, string AnzeigeName, PersonRolleTyp Rolle, Guid? BandId, string? BandName);
 }

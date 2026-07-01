@@ -131,10 +131,17 @@
             .Select(v => new { v.Id, Titel = v.Stueck.Titel })
             .ToDictionaryAsync(v => v.Id, v => v.Titel);
 
+        // Konzert-Beschriftungen (für „war beim Konzert …") gebündelt auflösen.
+        var konzertIds = roh.Where(r => r.ZielTyp == AktivitaetZielTyp.Konzert && r.ZielId != null)
+            .Select(r => r.ZielId!.Value).Distinct().ToList();
+        var konzertTitel = await db.Konzerte.Where(k => konzertIds.Contains(k.Id))
+            .Select(k => new { k.Id, k.Name, k.Datum })
+            .ToDictionaryAsync(k => k.Id, k => k.Name ?? k.Datum.ToString("dd.MM.yyyy"));
+
         var jetzt = DateTime.UtcNow;
         _items = roh.Select(r => new Zeile(
             r.Id, r.AkteurPersonId, r.AkteurName, r.Typ, r.Text,
-            AktionHtml(r.Typ, r.ZielTyp, r.ZielId, videoTitel, r.NebenPersonId, r.NebenName),
+            AktionHtml(r.Typ, r.ZielTyp, r.ZielId, videoTitel, konzertTitel, r.NebenPersonId, r.NebenName),
             RelativLabel(r.Zeitpunkt, jetzt))).ToList();
     }
 
@@ -184,11 +191,12 @@
         AktivitaetTyp.VideoHinzugefuegt => Icons.Material.Filled.VideoLibrary,
         AktivitaetTyp.FreundschaftBestaetigt => Icons.Material.Filled.People,
         AktivitaetTyp.MitwirkungHinzugefuegt => Icons.Material.Filled.Groups,
+        AktivitaetTyp.KonzertBesucht => Icons.Material.Filled.Event,
         _ => Icons.Material.Filled.Notifications
     };
 
     private static string AktionHtml(AktivitaetTyp typ, AktivitaetZielTyp? zt, Guid? zid,
-        Dictionary<Guid, string> videoTitel, Guid? nebenId, string? nebenName)
+        Dictionary<Guid, string> videoTitel, Dictionary<Guid, string> konzertTitel, Guid? nebenId, string? nebenName)
     {
         string VideoLink()
         {
@@ -196,12 +204,19 @@
                 return $"<a href=\"/videos/{vid}\" style=\"color:#9B59B6;\">{System.Net.WebUtility.HtmlEncode(t)}</a>";
             return "ein Video";
         }
+        string KonzertLink()
+        {
+            if (zid is Guid kid && konzertTitel.TryGetValue(kid, out var t))
+                return $"<a href=\"/konzerte/{kid}\" style=\"color:#9B59B6;\">{System.Net.WebUtility.HtmlEncode(t)}</a>";
+            return "einem Konzert";
+        }
         return typ switch
         {
             AktivitaetTyp.Beitrag => " hat etwas geschrieben:",
             AktivitaetTyp.BewertungAbgegeben => $" hat {VideoLink()} bewertet.",
             AktivitaetTyp.VideoHinzugefuegt => $" hat {VideoLink()} hinzugefügt.",
             AktivitaetTyp.MitwirkungHinzugefuegt => $" wirkt mit in {VideoLink()}.",
+            AktivitaetTyp.KonzertBesucht => $" war beim Konzert {KonzertLink()}.",
             AktivitaetTyp.FreundschaftBestaetigt when nebenId is Guid nid =>
                 $" ist jetzt mit <a href=\"/personen/{nid}\" style=\"color:#9B59B6;\">{System.Net.WebUtility.HtmlEncode(nebenName ?? "?")}</a> befreundet.",
             _ => ""

@@ -42,4 +42,29 @@ public static class AktivitaetService
         Hinzufuegen(db, id, typ, zielTyp, zielId);
         await db.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Hält das Feed-Ereignis „war beim Konzert" konsistent zur Tagebuch-Sichtbarkeit: legt es an,
+    /// wenn der Besuch geteilt ist (Sichtbarkeit ≠ NurIch), und entfernt es sonst. Nur die
+    /// (stabile) Anwesenheit landet im Feed – Notiz/Bewertungen bleiben auf der Konzertseite.
+    /// Tut nichts, wenn der Benutzer keine verknüpfte Person hat (Feed ist personen-basiert).
+    /// </summary>
+    public static async Task SyncKonzertBesuchFeedAsync(ApplicationDbContext db, string? userId,
+        Guid konzertId, bool geteilt)
+    {
+        var pid = await PersonIdAsync(db, userId);
+        if (pid is not Guid akteur) return;
+
+        var vorhanden = await db.Aktivitaeten.FirstOrDefaultAsync(a =>
+            a.AkteurPersonId == akteur && a.Typ == AktivitaetTyp.KonzertBesucht && a.ZielId == konzertId);
+
+        if (geteilt && vorhanden is null)
+            Hinzufuegen(db, akteur, AktivitaetTyp.KonzertBesucht, AktivitaetZielTyp.Konzert, konzertId);
+        else if (!geteilt && vorhanden is not null)
+            db.Aktivitaeten.Remove(vorhanden);
+        else
+            return;
+
+        await db.SaveChangesAsync();
+    }
 }

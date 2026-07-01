@@ -60,7 +60,7 @@ else
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn Property="k => k.Ort" Title="Ort" />
-                <PropertyColumn Property="k => k.Bands" Title="Bands" />
+                <PropertyColumn Property="k => k.BandAnzeige" Title="Bands" />
                 <PropertyColumn Property="k => k.VideoAnzahl" Title="Videos" />
             </Columns>
         </MudDataGrid>
@@ -78,13 +78,18 @@ else
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _alle = await db.Konzerte
+        var roh = await db.Konzerte
             .OrderByDescending(k => k.Datum)
-            .Select(k => new KonzertZeile(
+            .Select(k => new
+            {
                 k.Id, k.Datum, k.Name, k.Ort,
-                k.Bands.Count,
-                k.Videos.Count(v => v.Status == VideoStatus.Genehmigt)))
+                BandNamen = k.Bands.OrderBy(b => b.Band.Name).Select(b => b.Band.Name).ToList(),
+                VideoAnzahl = k.Videos.Count(v => v.Status == VideoStatus.Genehmigt)
+            })
             .ToListAsync();
+        _alle = roh
+            .Select(k => new KonzertZeile(k.Id, k.Datum, k.Name, k.Ort, BandAnzeigeText(k.BandNamen), k.VideoAnzahl))
+            .ToList();
         Filtern();
     }
 
@@ -110,7 +115,15 @@ else
         _gefiltert = q.ToList();
     }
 
-    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort, int Bands, int VideoAnzahl)
+    // Bis zu 3 Band-Namen, danach „+N".
+    private static string BandAnzeigeText(List<string> namen)
+    {
+        if (namen.Count == 0) return "";
+        if (namen.Count <= 3) return string.Join(", ", namen);
+        return string.Join(", ", namen.Take(3)) + $" +{namen.Count - 3}";
+    }
+
+    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort, string BandAnzeige, int VideoAnzahl)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }

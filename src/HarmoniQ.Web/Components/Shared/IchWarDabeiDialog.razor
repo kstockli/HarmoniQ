@@ -3,10 +3,9 @@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mb-3" Style="color:#C4B0D8;">
-            In welcher Rolle warst du an diesem Konzert dabei?
+            In welcher Rolle hast du an diesem Konzert mitgewirkt?
         </MudText>
         <MudSelect T="PersonRolleTyp" @bind-Value="_rolle" Label="Rolle" Variant="Variant.Outlined">
-            <MudSelectItem Value="PersonRolleTyp.Zuhoerer">Zuhörer:in</MudSelectItem>
             <MudSelectItem Value="PersonRolleTyp.Musikant">Musikant:in</MudSelectItem>
             <MudSelectItem Value="PersonRolleTyp.Dirigent">Dirigent:in</MudSelectItem>
             <MudSelectItem Value="PersonRolleTyp.Komponist">Komponist:in</MudSelectItem>
@@ -21,8 +20,8 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
-    /// <summary>Vorgeschlagene Rolle (eindeutiger Person-Typ, sonst Zuhörer:in).</summary>
-    [Parameter] public PersonRolleTyp Vorschlag { get; set; } = PersonRolleTyp.Zuhoerer;
+    /// <summary>Vorgeschlagene Rolle (eindeutiger Person-Typ, sonst Musikant:in).</summary>
+    [Parameter] public PersonRolleTyp Vorschlag { get; set; } = PersonRolleTyp.Musikant;
 
     private PersonRolleTyp _rolle;
 

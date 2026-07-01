@@ -515,6 +515,57 @@ KonzertPerson                       (NEU – n:m Person ↔ Konzert mit Rolle)
 > Speichern legt alles transaktional an (Konzert, neue Stücke/Komponist:innen/Bands, KonzertStueck,
 > KonzertBand, KonzertPerson). Videos können später wie gehabt am Konzert ergänzt werden.
 
+KonzertBesuch                       (NEU – Konzert-Tagebuch: privates „Ich war dabei" eines Users)
+├── Id (Guid)
+├── KonzertId (FK, Cascade)
+├── BenutzerId (FK → AspNetUsers, erforderlich; Tagebuch erfordert Login)
+├── Notiz (Text?)                   ← optionale private Gesamt-Notiz zum Besuch
+├── Sichtbarkeit (enum TagebuchSichtbarkeit, 1 Regler für den ganzen Eintrag):
+│     NurIch (0) / FreundeAnwesenheit (1, Default) / Freunde (2) / Oeffentlich (3)
+├── ErstelltAm (DateTime)
+└── CONSTRAINT: UNIQUE (BenutzerId, KonzertId)
+
+StueckEindruck                      (NEU – privater Live-Eindruck je gespieltem Programmpunkt)
+├── Id (Guid)
+├── KonzertStueckId (FK → KonzertStueck, Cascade)
+├── BenutzerId (FK → AspNetUsers)
+├── Sterne (int? 1–5)               ← null, wenn nur Notiz erfasst
+├── Notiz (Text?)                   ← privater Eindruck, wie das Stück an diesem Konzert klang
+├── ErstelltAm / GeaendertAm (DateTime?)
+└── CONSTRAINT: UNIQUE (BenutzerId, KonzertStueckId)
+
+> **Konzert-Tagebuch (Leit-Feature, UX-Spec Block 4.1; umgesetzt v1).** Analogie Letterboxd/Untappd
+> für Blasmusik-Konzerte. Eingeloggte Nutzer:innen markieren besuchte Konzerte (`KonzertBesuch`) und
+> bewerten je gespieltem Stück privat mit Sternen + Notiz (`StueckEindruck`, Granularität `KonzertStueck`
+> = Stück + Band + Konzert). **Privat by default** und bewusst **getrennt** von der öffentlich kuratierten
+> Zuhörer:in-Verknüpfung (`KonzertPerson`) und von der öffentlichen Video-`Bewertung` (Aufnahme ≠
+> Live-Eindruck). **Datenschutz:** FK auf AspNetUsers mit Cascade → beim Löschen des Kontos verschwindet
+> das ganze Tagebuch.
+> **Sichtbarkeit = EIN Regler pro Konzert-Eintrag** (4-stufig), der den ganzen Eintrag regelt
+> (Anwesenheit + Konzert-Notiz + alle `StueckEindruck` dieses Konzerts – diese **erben** die Stufe,
+> haben kein eigenes Feld): **NurIch** (nichts, auch nicht Anwesenheit) · **FreundeAnwesenheit**
+> (Default: Freunde sehen nur *dass* ich dabei war, Notiz/Bewertungen privat) · **Freunde** (alles für
+> Freunde) · **Oeffentlich** (alle; Admin moderiert). Aggregiert-öffentliches Rating ist NICHT Teil
+> von v1.
+> **Anzeige der geteilten Einträge (umgesetzt):** (1) **Feed** – beim Teilen (Sichtbarkeit ≠ NurIch)
+> schreibt `AktivitaetService.SyncKonzertBesuchFeedAsync` ein `Aktivitaet`-Ereignis
+> `KonzertBesucht` „war beim Konzert X" (nur die stabile Anwesenheit; bei NurIch/Entfernen wieder
+> gelöscht). (2) **Konzertseite** – Sektion **„Eindrücke der Besucher:innen"**: öffentliche Einträge
+> für alle, Freundes-Einträge für die betrachtende Person; zeigt Name + Notiz + vergebene Sterne
+> (bei Stufe `FreundeAnwesenheit` nur „war dabei", ohne Inhalt). Der eigene Eintrag wird dort
+> ausgeblendet (steht im eigenen Panel). (3) **Admin-Moderation** öffentlicher Einträge unter
+> `/admin/tagebuch-moderation` (Verbergen → NurIch, oder Löschen).
+>
+> **Abgrenzung „Ich war im Publikum" vs. „Ich habe mitgewirkt" (2026-07-01):** Publikum = `KonzertBesuch`
+> (Tagebuch, für alle). Bühnen-Beteiligung (Dirigent:in/Musikant:in/Komponist:in) = `KonzertPerson`
+> über den Button **„Ich habe mitgewirkt"**, der nur Personen mit einer Bühnenrolle angezeigt wird;
+> die Rolle **Zuhörer:in** entfällt dort (Publikum läuft über das Tagebuch).
+> **UI:** (1) `KonzertTagebuchPanel` auf der Konzert-Detailseite – „Ich war dabei" + inline Sterne/Notiz
+> je Programmpunkt (Bewerten impliziert „war dabei"). (2) Seite **„Mein Konzert-Tagebuch"**
+> (`/account/tagebuch`, Konto-Menü) – nach Jahr gruppierte Liste der Besuche + „Mein Konzert-Jahr"-
+> Statistik (Konzerte heuer/gesamt, bewertete Stücke, ⌀ Bewertung, Höhepunkte).
+> **Offen (Folgeschritt):** Import der bestehenden Excel-Besuchshistorie (Format noch zu klären).
+
 Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten Usern)
 ├── Id (Guid)
 ├── BetrifftTyp (enum: Video / Stück / Person / Band / Konzert)
@@ -677,6 +728,8 @@ So bleibt die Tabelle sauber/normalisiert und wächst organisch mit der Nutzung.
 - Konzert `n—m` Band über **KonzertBand**; Konzert `1—n` Video (`Video.KonzertId`, optional)
 - Konzert `n—m` Stück über **KonzertStueck** (Programm, mit optionaler Band je Programmpunkt)
 - Konzert `n—m` Person über **KonzertPerson** (mit Rolle PersonRolleTyp, optionaler Band)
+- User `n—m` Konzert über **KonzertBesuch** (Konzert-Tagebuch, privat; UNIQUE User+Konzert)
+- User `n—m` KonzertStueck über **StueckEindruck** (private Sterne/Notiz je Programmpunkt)
 - Person `1—n` Aktivitaet (Akteur); Aktivitaet verweist lose (ZielTyp + ZielId) auf das Objekt
 - Richtigstellung verweist lose (Typ + Id) auf Video/Stück/Person/Band/Konzert
 

@@ -1,0 +1,105 @@
+@page "/admin/tagebuch-moderation"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Öffentliche Tagebuch-Einträge – Admin</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Öffentliche Tagebuch-Einträge</MudText>
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+    Nur als <b>öffentlich</b> markierte Konzert-Tagebuch-Einträge. Bei anstössigem Inhalt kannst du den
+    Eintrag <b>verbergen</b> (auf „Nur ich" setzen) oder ganz <b>löschen</b>.
+</MudText>
+
+@if (_eintraege == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_eintraege.Count == 0)
+{
+    <MudAlert Severity="Severity.Success">Keine öffentlichen Einträge – nichts zu moderieren.</MudAlert>
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true" Bordered="true"
+                    Style="background:#1a0030; border:1px solid #3a1060;">
+        <thead>
+            <tr>
+                <th style="color:#9B59B6;">Konzert</th>
+                <th style="color:#9B59B6;">Benutzer:in</th>
+                <th style="color:#9B59B6;">Notiz</th>
+                <th style="color:#9B59B6;">Bewertungen</th>
+                <th style="color:#9B59B6;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in _eintraege)
+            {
+                <tr>
+                    <td><MudLink Href="@($"/konzerte/{e.KonzertId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@e.KonzertTitel</MudLink></td>
+                    <td style="color:#A78FC0;">@e.Email</td>
+                    <td style="color:#C4B0D8;max-width:320px;">@(string.IsNullOrWhiteSpace(e.Notiz) ? "–" : e.Notiz)</td>
+                    <td style="color:#A78FC0;">@e.BewertungAnzahl</td>
+                    <td>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;"
+                                   OnClick="@(() => Verbergen(e))">Verbergen</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                   OnClick="@(() => Loeschen(e))">Löschen</MudButton>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    private List<Zeile>? _eintraege;
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _eintraege = await db.KonzertBesuche
+            .Where(b => b.Sichtbarkeit == TagebuchSichtbarkeit.Oeffentlich)
+            .OrderByDescending(b => b.ErstelltAm)
+            .Select(b => new Zeile(
+                b.Id, b.KonzertId,
+                b.Konzert.Name ?? b.Konzert.Datum.ToString(),
+                b.Benutzer != null ? b.Benutzer.Email : b.BenutzerId,
+                b.BenutzerId, b.Notiz,
+                db.StueckEindruecke.Count(s => s.BenutzerId == b.BenutzerId
+                    && db.KonzertStuecke.Any(ks => ks.Id == s.KonzertStueckId && ks.KonzertId == b.KonzertId))))
+            .ToListAsync();
+    }
+
+    private async Task Verbergen(Zeile e)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.KonzertBesuche.Where(b => b.Id == e.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.Sichtbarkeit, TagebuchSichtbarkeit.NurIch));
+        await AktivitaetService.SyncKonzertBesuchFeedAsync(db, e.BenutzerId, e.KonzertId, geteilt: false);
+        Snackbar.Add("Eintrag verborgen (jetzt privat).", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Loeschen(Zeile e)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        // Stück-Eindrücke dieses Users zu diesem Konzert + den Besuch + den Feed-Eintrag entfernen.
+        var ksIds = await db.KonzertStuecke.Where(ks => ks.KonzertId == e.KonzertId).Select(ks => ks.Id).ToListAsync();
+        await db.StueckEindruecke.Where(s => s.BenutzerId == e.BenutzerId && ksIds.Contains(s.KonzertStueckId))
+            .ExecuteDeleteAsync();
+        await db.KonzertBesuche.Where(b => b.Id == e.Id).ExecuteDeleteAsync();
+        await AktivitaetService.SyncKonzertBesuchFeedAsync(db, e.BenutzerId, e.KonzertId, geteilt: false);
+        Snackbar.Add("Eintrag gelöscht.", Severity.Success);
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, Guid KonzertId, string KonzertTitel, string? Email,
+        string BenutzerId, string? Notiz, int BewertungAnzahl);
+}

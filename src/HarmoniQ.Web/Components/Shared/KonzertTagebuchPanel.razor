@@ -1,0 +1,275 @@
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+@* Programm + persönliches Konzert-Tagebuch in EINER Ansicht (UX-Spec 4.1):
+   Programm-Tabelle mit Links; Sterne/Notiz je Zeile, sobald „Ich war dabei". *@
+<MudPaper Class="pa-4 mb-6" Elevation="2"
+          Style="background:linear-gradient(135deg,#241640,#1a0030); border:1px solid #1ABC9C;">
+
+    @* ── Tagebuch-Steuerung (Besuch, Sichtbarkeit, Konzert-Notiz) ──────────── *@
+    @if (_userId is null)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:#1ABC9C;" />
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                <MudLink Href="Account/Login" Style="color:#1ABC9C;">Melde dich an</MudLink>, um dieses Konzert
+                in dein Tagebuch aufzunehmen und Stücke privat zu bewerten.
+            </MudText>
+        </MudStack>
+    }
+    else if (_besuch is null)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-1" Wrap="Wrap.Wrap">
+            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:#1ABC9C;" />
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;flex:1;min-width:180px;">
+                Warst du hier? Nimm das Konzert in dein privates Tagebuch auf und bewerte die Stücke.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.AddTask" OnClick="BesuchAnlegen" Disabled="_speichert">
+                Ich war im Publikum
+            </MudButton>
+        </MudStack>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3" Wrap="Wrap.Wrap">
+            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:#1ABC9C;" />
+            <MudChip T="string" Icon="@Icons.Material.Filled.CheckCircle" Variant="Variant.Text"
+                     Style="color:#1ABC9C;">In deinem Tagebuch</MudChip>
+            <MudSelect T="TagebuchSichtbarkeit" Value="_sichtbarkeit" ValueChanged="SichtbarkeitSpeichern"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:340px;"
+                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Visibility">
+                <MudSelectItem Value="TagebuchSichtbarkeit.NurIch">Nur ich</MudSelectItem>
+                <MudSelectItem Value="TagebuchSichtbarkeit.FreundeAnwesenheit">Freunde sehen nur, dass ich dabei war</MudSelectItem>
+                <MudSelectItem Value="TagebuchSichtbarkeit.Freunde">Freunde sehen alles (Notiz &amp; Bewertungen)</MudSelectItem>
+                <MudSelectItem Value="TagebuchSichtbarkeit.Oeffentlich">Öffentlich</MudSelectItem>
+            </MudSelect>
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#c96;"
+                       StartIcon="@Icons.Material.Filled.DeleteOutline" OnClick="BesuchEntfernen" Disabled="_speichert">
+                Aus Tagebuch entfernen
+            </MudButton>
+        </MudStack>
+
+        <MudTextField @bind-Value="_notiz" Label="Private Notiz zum Konzert (optional)" Variant="Variant.Outlined"
+                      Lines="2" Class="mb-4" Immediate="false" OnBlur="NotizSpeichern" />
+    }
+
+    @* ── Programm-Tabelle (mit Bewertungs-Spalten, wenn „dabei") ───────────── *@
+    @if (Programm.Count > 0)
+    {
+        var bewertbar = _besuch is not null;
+        <MudText Typo="Typo.h6" GutterBottom="true" Style="color:#D4AF37;">Programm (@Programm.Count)</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Bordered="true"
+                        Style="background:#1a0030; border:1px solid #3a1060;">
+            <thead>
+                <tr>
+                    <th style="color:#9B59B6;">Stück</th>
+                    <th style="color:#9B59B6;">Komponist:in</th>
+                    <th style="color:#9B59B6;">Band</th>
+                    @if (bewertbar)
+                    {
+                        <th style="color:#9B59B6;">Meine Bewertung</th>
+                        <th style="color:#9B59B6;">Meine Notiz</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Programm)
+                {
+                    var e = Eindruck(p.KonzertStueckId);
+                    <tr>
+                        <td>
+                            <MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.Titel</MudLink>
+                        </td>
+                        <td>
+                            @if (p.Komponisten.Count > 0)
+                            {
+                                var erster = true;
+                                foreach (var k in p.Komponisten)
+                                {
+                                    @(!erster ? (MarkupString)", " : (MarkupString)"")
+                                    <MudLink Href="@($"/personen/{k.Id}")" Style="color:#9B59B6;" Underline="Underline.Hover">@k.Name</MudLink>
+                                    erster = false;
+                                }
+                            }
+                            else { <span style="color:#A78FC0;">–</span> }
+                        </td>
+                        <td>
+                            @if (p.BandId is { } bid)
+                            {
+                                <MudLink Href="@($"/bands/{bid}")" Style="color:#A78FC0;" Underline="Underline.Hover">@p.BandName</MudLink>
+                            }
+                            else { <span style="color:#A78FC0;">–</span> }
+                        </td>
+                        @if (bewertbar)
+                        {
+                            <td>
+                                <MudRating MaxValue="5" SelectedValue="e.Sterne ?? 0"
+                                           SelectedValueChanged="@(v => SterneSpeichern(p.KonzertStueckId, v))" />
+                            </td>
+                            <td>
+                                <MudTextField T="string" Value="e.Notiz" ValueChanged="@(v => NotizStueckSetzen(p.KonzertStueckId, v))"
+                                              Placeholder="Notiz…" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                              Style="min-width:160px;" OnBlur="@(() => StueckSpeichern(p.KonzertStueckId))" />
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Guid KonzertId { get; set; }
+    /// <summary>Programmpunkte (KonzertStück) dieses Konzerts, bereits in Programm-Reihenfolge.</summary>
+    [Parameter] public List<Programmpunkt> Programm { get; set; } = [];
+
+    private string? _userId;
+    private KonzertBesuch? _besuch;
+    private string? _notiz;
+    private TagebuchSichtbarkeit _sichtbarkeit = TagebuchSichtbarkeit.FreundeAnwesenheit;
+    private readonly Dictionary<Guid, StueckEindruck> _eindruecke = new();
+    private bool _speichert;
+
+    public record Komponist(Guid Id, string Name);
+    public record Programmpunkt(Guid KonzertStueckId, Guid StueckId, string Titel,
+        Guid? BandId, string? BandName, List<Komponist> Komponisten);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(_userId)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _besuch = await db.KonzertBesuche
+            .FirstOrDefaultAsync(b => b.KonzertId == KonzertId && b.BenutzerId == _userId);
+        _notiz = _besuch?.Notiz;
+        if (_besuch is not null) _sichtbarkeit = _besuch.Sichtbarkeit;
+
+        var stueckIds = Programm.Select(p => p.KonzertStueckId).ToList();
+        var eindruecke = await db.StueckEindruecke
+            .Where(s => s.BenutzerId == _userId && stueckIds.Contains(s.KonzertStueckId))
+            .ToListAsync();
+        foreach (var e in eindruecke) _eindruecke[e.KonzertStueckId] = e;
+    }
+
+    // Lokaler (ggf. noch nicht gespeicherter) Eindruck für die Anzeige/Bearbeitung.
+    private StueckEindruck Eindruck(Guid konzertStueckId)
+    {
+        if (!_eindruecke.TryGetValue(konzertStueckId, out var e))
+        {
+            e = new StueckEindruck { KonzertStueckId = konzertStueckId, BenutzerId = _userId ?? "" };
+            _eindruecke[konzertStueckId] = e;
+        }
+        return e;
+    }
+
+    private async Task BesuchAnlegen()
+    {
+        if (_userId is null) return;
+        _speichert = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var vorhanden = await db.KonzertBesuche
+            .FirstOrDefaultAsync(b => b.KonzertId == KonzertId && b.BenutzerId == _userId);
+        if (vorhanden is null)
+        {
+            vorhanden = new KonzertBesuch { KonzertId = KonzertId, BenutzerId = _userId };
+            db.KonzertBesuche.Add(vorhanden);
+            await db.SaveChangesAsync();
+        }
+        _besuch = vorhanden;
+        _sichtbarkeit = vorhanden.Sichtbarkeit;
+        // Feed-Eintrag „war beim Konzert" anlegen, wenn geteilt (Default FreundeAnwesenheit → geteilt).
+        await AktivitaetService.SyncKonzertBesuchFeedAsync(db, _userId, KonzertId,
+            _sichtbarkeit != TagebuchSichtbarkeit.NurIch);
+        _speichert = false;
+        Snackbar.Add("Ins Tagebuch aufgenommen.", Severity.Success);
+    }
+
+    private async Task BesuchEntfernen()
+    {
+        if (_besuch is null) return;
+        _speichert = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var stueckIds = Programm.Select(p => p.KonzertStueckId).ToList();
+        var eindruecke = await db.StueckEindruecke
+            .Where(s => s.BenutzerId == _userId && stueckIds.Contains(s.KonzertStueckId))
+            .ToListAsync();
+        db.StueckEindruecke.RemoveRange(eindruecke);
+        await db.KonzertBesuche.Where(b => b.Id == _besuch.Id).ExecuteDeleteAsync();
+        await db.SaveChangesAsync();
+        await AktivitaetService.SyncKonzertBesuchFeedAsync(db, _userId, KonzertId, geteilt: false);
+        _besuch = null;
+        _notiz = null;
+        _eindruecke.Clear();
+        _speichert = false;
+        Snackbar.Add("Aus dem Tagebuch entfernt.", Severity.Info);
+    }
+
+    private async Task NotizSpeichern()
+    {
+        if (_besuch is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.KonzertBesuche.Where(b => b.Id == _besuch.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.Notiz, _notiz));
+    }
+
+    private async Task SichtbarkeitSpeichern(TagebuchSichtbarkeit stufe)
+    {
+        _sichtbarkeit = stufe;
+        if (_besuch is null) return;
+        _besuch.Sichtbarkeit = stufe;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.KonzertBesuche.Where(b => b.Id == _besuch.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.Sichtbarkeit, stufe));
+        // Feed-Eintrag entsprechend anlegen/entfernen (NurIch = nicht geteilt).
+        await AktivitaetService.SyncKonzertBesuchFeedAsync(db, _userId, KonzertId,
+            geteilt: stufe != TagebuchSichtbarkeit.NurIch);
+    }
+
+    private void NotizStueckSetzen(Guid konzertStueckId, string? notiz) => Eindruck(konzertStueckId).Notiz = notiz;
+
+    private async Task SterneSpeichern(Guid konzertStueckId, int sterne)
+    {
+        var e = Eindruck(konzertStueckId);
+        e.Sterne = sterne == 0 ? null : sterne;
+        await StueckSpeichern(konzertStueckId);
+    }
+
+    // Upsert des Stück-Eindrucks (Sterne und/oder Notiz).
+    private async Task StueckSpeichern(Guid konzertStueckId)
+    {
+        if (_besuch is null) await BesuchAnlegen();   // Bewerten impliziert „war dabei".
+        var e = Eindruck(konzertStueckId);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var vorhanden = await db.StueckEindruecke
+            .FirstOrDefaultAsync(s => s.BenutzerId == _userId && s.KonzertStueckId == konzertStueckId);
+        if (vorhanden is null)
+        {
+            if (e.Sterne is null && string.IsNullOrWhiteSpace(e.Notiz)) return;
+            db.StueckEindruecke.Add(new StueckEindruck
+            {
+                KonzertStueckId = konzertStueckId,
+                BenutzerId = _userId!,
+                Sterne = e.Sterne,
+                Notiz = string.IsNullOrWhiteSpace(e.Notiz) ? null : e.Notiz
+            });
+        }
+        else
+        {
+            vorhanden.Sterne = e.Sterne;
+            vorhanden.Notiz = string.IsNullOrWhiteSpace(e.Notiz) ? null : e.Notiz;
+            vorhanden.GeaendertAm = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync();
+    }
+}

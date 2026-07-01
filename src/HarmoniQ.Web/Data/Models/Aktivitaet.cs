@@ -38,7 +38,9 @@ public enum AktivitaetTyp
     BewertungAbgegeben = 1,
     VideoHinzugefuegt = 2,
     FreundschaftBestaetigt = 3,
-    MitwirkungHinzugefuegt = 4
+    MitwirkungHinzugefuegt = 4,
+    /// <summary>Hat ein Konzert besucht (Tagebuch, geteilt an Freund:innen/Bandkolleg:innen).</summary>
+    KonzertBesucht = 5
 }
 
 public enum AktivitaetZielTyp
