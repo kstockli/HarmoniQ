@@ -73,8 +73,11 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   Feed-Eintrag „war beim Konzert", „Eindrücke der Besucher:innen" auf der Konzertseite,
   Admin-Moderation. Abgrenzung zu „Ich habe mitgewirkt" (`KonzertPerson`, Bühnenrollen). Details in
   `Spezifikation.md`. **Offen/optional:** Excel-Import der eigenen Historie (zurückgestellt).
-- **Neuer Einstieg:** kontext-zentrierte Startseite, **Bottom-Navigation**, Komponist:innen eigener
-  Menüpunkt, vereinheitlichte **Stück-Zeile** (Karten mobil / Tabelle Desktop). [Block 6/7]
+- ✅ **Neuer Einstieg:** umgesetzt — kontext-zentrierte Startseite (anonym: Hero „Dein Konzert-Tagebuch",
+  B+A-Positionierung; eingeloggt: „Mein Konzert-Jahr"-Teaser oben, „Demnächst", „Deine Bands"-Sektion,
+  Aufnahmen; Statistik klein/weit unten), **Bottom-Navigation** (mobil, 5 Tabs), Komponist:innen bereits
+  eigener Menüpunkt, vereinheitlichte **Stück-Zeile** (`StueckZeilen`: Karten mobil / Tabelle Desktop,
+  in Person-Werke & Band-Stücke). [Block 6/7]
 - **Claim Modell B** (erfassen → später Merge vorschlagen) + Trigger + Verifizierungs-Gate. [Block 3]
 - **`Lokal`-Entität** (+ `LokalAlias` + Merge) für Region-Filter. [Block 4.3]
 - **Wiederkehr-Schleife** (Benachrichtigungen) + **„Demnächst"-Empfehlungen** (Crawler). [Block 4.2/4.3]

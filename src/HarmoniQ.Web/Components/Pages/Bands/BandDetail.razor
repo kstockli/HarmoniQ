@@ -161,15 +161,8 @@ else
         <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
             Gespielte Stücke (@_stuecke.Count)
         </MudText>
-        <MudList T="string" Dense="true" Class="mb-6">
-            @foreach (var s in _stuecke)
-            {
-                <MudListItem T="string" Href="@($"/stuecke/{s.Id}")" Icon="@Icons.Material.Filled.MusicNote"
-                             Style="color:#F0E6FF;">
-                    @s.Titel <MudText Typo="Typo.caption" Style="color:#A78FC0;">@(s.Jahr.HasValue ? $"({s.Jahr})" : "")</MudText>
-                </MudListItem>
-            }
-        </MudList>
+        <StueckZeilen ZusatzTitel="Jahr" Stuecke="@_stuecke.Select(s => new StueckZeilen.StueckRef(
+            s.Id, s.Titel, s.Jahr?.ToString())).ToList()" />
     }
 
     @* 4. Besetzung (Mitglieder) *@

@@ -164,17 +164,8 @@ else
     }
     else
     {
-        <MudList T="string" Dense="true" Class="mb-4">
-            @foreach (var w in _werke)
-            {
-                <MudListItem T="string" Href="@($"/stuecke/{w.StueckId}")" Icon="@Icons.Material.Filled.MusicNote" Style="color:#F0E6FF;">
-                    @w.Titel
-                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                        @(w.Jahr.HasValue ? $"({w.Jahr}) " : "")· @RolleText(w.Rolle)
-                    </MudText>
-                </MudListItem>
-            }
-        </MudList>
+        <StueckZeilen ZusatzTitel="Rolle" Stuecke="@_werke.Select(w => new StueckZeilen.StueckRef(
+            w.StueckId, w.Titel, $"{(w.Jahr.HasValue ? $"({w.Jahr}) · " : "")}{RolleText(w.Rolle)}")).ToList()" />
     }
 
     @* Auftritte (VideoMitwirkungen) *@

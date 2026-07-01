@@ -52,8 +52,27 @@
     <MudMainContent Style="background: #0e0018; min-height: 100vh;">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-6 pb-10">
             @Body
+            @* Platz, damit die fixe Bottom-Navigation den Inhalt auf dem Smartphone nicht überdeckt. *@
+            <MudHidden Breakpoint="Breakpoint.MdAndUp">
+                <div style="height:64px;"></div>
+            </MudHidden>
         </MudContainer>
     </MudMainContent>
+
+    @* ── Bottom-Navigation (nur Smartphone, smartphone-first, UX-Spec §6) ──── *@
+    <MudHidden Breakpoint="Breakpoint.MdAndUp">
+        <div style="position:fixed;bottom:0;left:0;right:0;z-index:1300;display:flex;
+                    background:#12001f;border-top:1px solid #3a1060;">
+            @BottomTab("/", Icons.Material.Filled.Home, "Start")
+            @BottomTab("/konzerte", Icons.Material.Filled.Event, "Konzerte")
+            @BottomTab("/account/tagebuch", Icons.Material.Filled.MenuBook, "Tagebuch")
+            @BottomTab("/videos", Icons.Material.Filled.VideoLibrary, "Videos")
+            <div @onclick="ToggleDrawer" style="@_bottomItemStyle">
+                <MudIcon Icon="@Icons.Material.Filled.Menu" Size="Size.Small" Style="color:#D4AF37;" />
+                <span style="font-size:.68rem;color:#A78FC0;">Mehr</span>
+            </div>
+        </div>
+    </MudHidden>
 </MudLayout>
 
 @code {
@@ -70,6 +89,16 @@
     }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private const string _bottomItemStyle =
+        "flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;" +
+        "padding:6px 0;cursor:pointer;text-decoration:none;gap:2px;";
+
+    // Ein Tab der Bottom-Navigation (Icon + Label, führt auf eine Route).
+    private RenderFragment BottomTab(string href, string icon, string label) =>@<a href="@href" style="@_bottomItemStyle">
+        <MudIcon Icon="@icon" Size="Size.Small" Style="color:#D4AF37;" />
+        <span style="font-size:.68rem;color:#A78FC0;">@label</span>
+    </a>;
 
     private readonly MudTheme _theme = new()
     {

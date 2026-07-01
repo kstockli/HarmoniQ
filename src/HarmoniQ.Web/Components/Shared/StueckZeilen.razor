@@ -1,0 +1,89 @@
+@* Vereinheitlichte Stück-Liste (UX-Spec §7): Desktop = Tabelle, Smartphone = Karten.
+   Spalten Titel · (Komponist:in) · (Band) · (Zusatz) je nach Parametern. *@
+
+@if (Stuecke.Count > 0)
+{
+    @* ── Desktop (md und grösser): Tabelle ─────────────────────────────── *@
+    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mb-4"
+                        Style="background:#1a0030; border:1px solid #3a1060;">
+            <thead>
+                <tr>
+                    <th style="color:#9B59B6;">Stück</th>
+                    @if (ZeigeKomponist) { <th style="color:#9B59B6;">Komponist:in</th> }
+                    @if (ZeigeBand) { <th style="color:#9B59B6;">Band</th> }
+                    @if (!string.IsNullOrEmpty(ZusatzTitel)) { <th style="color:#9B59B6;">@ZusatzTitel</th> }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Stuecke)
+                {
+                    <tr>
+                        <td><MudLink Href="@($"/stuecke/{s.Id}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@s.Titel</MudLink></td>
+                        @if (ZeigeKomponist) { <td>@KomponistenMarkup(s)</td> }
+                        @if (ZeigeBand) { <td>@BandMarkup(s)</td> }
+                        @if (!string.IsNullOrEmpty(ZusatzTitel)) { <td style="color:#A78FC0;">@s.Zusatz</td> }
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudHidden>
+
+    @* ── Smartphone (bis sm): Karten ──────────────────────────────────── *@
+    <MudHidden Breakpoint="Breakpoint.MdAndUp">
+        <MudStack Spacing="2" Class="mb-4">
+            @foreach (var s in Stuecke)
+            {
+                <MudPaper Class="pa-3" Elevation="1" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudLink Href="@($"/stuecke/{s.Id}")" Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@s.Titel</MudLink>
+                    @if (ZeigeKomponist && s.Komponisten is { Count: > 0 })
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block">@KomponistenMarkup(s)</MudText>
+                    }
+                    @if (ZeigeBand && s.BandId is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block">@BandMarkup(s)</MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(s.Zusatz))
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@s.Zusatz</MudText>
+                    }
+                </MudPaper>
+            }
+        </MudStack>
+    </MudHidden>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<StueckRef> Stuecke { get; set; } = [];
+    [Parameter] public bool ZeigeKomponist { get; set; }
+    [Parameter] public bool ZeigeBand { get; set; }
+    /// <summary>Kopf der optionalen Zusatz-Spalte (z. B. „Rolle"); leer = keine Zusatz-Spalte.</summary>
+    [Parameter] public string? ZusatzTitel { get; set; }
+
+    private RenderFragment KomponistenMarkup(StueckRef s) =>@<text>
+        @if (s.Komponisten is { Count: > 0 })
+        {
+            var erster = true;
+            foreach (var k in s.Komponisten)
+            {
+                @(!erster ? (MarkupString)", " : (MarkupString)"")
+                <MudLink Href="@($"/personen/{k.Id}")" Style="color:#9B59B6;" Underline="Underline.Hover">@k.Name</MudLink>
+                erster = false;
+            }
+        }
+        else { <span style="color:#A78FC0;">–</span> }
+    </text>;
+
+    private RenderFragment BandMarkup(StueckRef s) =>@<text>
+        @if (s.BandId is { } bid)
+        {
+            <MudLink Href="@($"/bands/{bid}")" Style="color:#A78FC0;" Underline="Underline.Hover">@s.BandName</MudLink>
+        }
+        else { <span style="color:#A78FC0;">–</span> }
+    </text>;
+
+    public record StueckRef(Guid Id, string Titel, string? Zusatz = null,
+        List<(Guid Id, string Name)>? Komponisten = null,
+        Guid? BandId = null, string? BandName = null);
+}
