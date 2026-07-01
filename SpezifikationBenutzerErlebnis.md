@@ -392,10 +392,21 @@ realistische v1:
   **exakte km** bräuchten **Geocoding** der Lokale.
 - **User-Standort:** anonym unbekannt (GPS nur per **opt-in**-Browser-Geolocation, datenschutz-
   sensibel; IP grob). Eingeloggt: **Heim-Region im Profil** oder aus der eigenen Band abgeleitet.
-- **Entscheid v1:** „Demnächst" filtert nach **Region/Kanton** (eingeloggt Default aus Profil/Band;
-  anonym wählbares Region-Dropdown, kein Zwang). Wording ehrlich **„in deiner Region"** statt
-  „X km", solange kein Geocoding/Geolocation. **Später:** opt-in Geolocation + Geocoding → echte
-  „in deiner Nähe (km)"-Anzeige.
+- **Entscheid v1 (revidiert 2026-07-01):** **Datum ist der Leit-Sinn, Distanz ein Filter-Werkzeug.**
+  Grund: die Konzert-Abdeckung ist regional lückenhaft → nach km zu *sortieren* würde falsche Nähe
+  suggerieren.
+  - **Startseite „Demnächst"** = **nur nach Datum** sortiert (nächste zuerst). Die km-Anzeige ist rein
+    **dekorativ** („· 12 km") und erscheint **nur, wenn der Standort ohnehin bekannt ist** (frühere
+    Freigabe / PLZ aus localStorage) — **kein** Standort-Prompt, **keine** Umsortierung.
+  - **`/konzerte`** = echter **Distanz-Filter**: Bezugspunkt via **Browser-Geolocation (opt-in, ideal
+    mobil)** ODER **PLZ-Eingabe** (Fallback Desktop / bei Ablehnung; via Nominatim `postalcode` + `ch`).
+    Dann **Radius-Filter (10/25/50/100 km)** + km-Spalte, innerhalb des Radius nach Distanz sortiert.
+    Bezugspunkt wird in **localStorage** gemerkt (nicht serverseitig gespeichert → datensparsam;
+    Distanz client-seitig berechnet). Konzerte ohne Lokal-Koordinaten werden bei aktivem Filter
+    ausgeblendet (mit Hinweis).
+  - **Voraussetzung:** Lokal-Koordinaten. Admin-Batch **„Koordinaten via Nominatim ergänzen"**
+    (rate-limitiert ~1/s) füllt bestehende `Lokale`. Kein Profilfeld nötig (Standort/PLZ deckt
+    eingeloggt wie anonym ab).
 
 **Entscheid (User 2026-06-30): eigene `Lokal`-/Veranstaltungsort-Entität** (→ Datenmodell-Änderung,
 bei Umsetzung `Spezifikation.md` nachführen). Ersetzt den heutigen Freitext-`Ort` am Konzert durch

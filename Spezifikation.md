@@ -471,8 +471,13 @@ LokalAlias                          (NEU – Alternativ-Namen eines Lokals, anal
 > `InvariantCulture` (punkt-dezimal, siehe [[mudnumericfield-kultur]]).
 > **Erfassungshilfe (umgesetzt):** Im Lokal-Dialog füllt das Einfügen eines **Google-Maps-Links**
 > (oder freiem „Lat, Lng") die Koordinaten automatisch (Parsing von `!3d…!4d…`, `@lat,lng`, `lat, lng`).
-> **Geocoding aus Adresse (offen/optional):** Adresse → Koordinaten via **Nominatim/OpenStreetMap**
-> (gratis, kein Key, aber externe Requests + User-Agent-Policy) – bei Bedarf nachrüstbar.
+> **Geocoding (`GeocodingService`, Nominatim/OSM, kein Key):** (1) Button im Lokal-Dialog „Aus
+> Name/Adresse suchen"; (2) Admin-Batch **„Koordinaten via Nominatim ergänzen"** (`/admin/lokale`,
+> rate-limitiert ~1/s) füllt Koordinaten (+ Kanton) für alle Lokale ohne Koordinaten; (3) PLZ→Koordinaten
+> als Bezugspunkt für den Distanz-Filter auf `/konzerte`.
+> **Distanz-Filter (`/konzerte`):** Bezugspunkt via Browser-Geolocation (opt-in) oder PLZ; Radius
+> 10/25/50/100 km, km-Anzeige, Distanz client-seitig (Haversine). Startseite „Demnächst" bleibt
+> datums-sortiert, km nur dekorativ (Details in `SpezifikationBenutzerErlebnis.md` §4.3).
 
 KonzertBand                         (n:m – welche Bands beim Konzert mitwirken)
 ├── KonzertId (FK)

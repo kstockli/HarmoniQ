@@ -8,6 +8,7 @@
 @inject IMemoryCache Cache
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
+@inject IJSRuntime JS
 
 <PageTitle>HarmoniQ – Startseite</PageTitle>
 
@@ -127,7 +128,7 @@
                             <div style="flex:1;min-width:0;">
                                 <MudText Typo="Typo.subtitle2" Style="color:#F0E6FF;">@k.Titel</MudText>
                                 <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                                    @k.RelativLabel@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                                    @k.RelativLabel@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")@(k.Distanz is double d ? $" · {d:0} km" : "")
                                 </MudText>
                             </div>
                         </MudStack>
@@ -464,12 +465,19 @@
         var konzerte = await db.Konzerte
             .Where(k => k.Datum >= von && k.Datum <= bis)
             .OrderBy(k => k.Datum)
-            .Select(k => new { k.Id, k.Datum, k.Name, Ort = k.Lokal != null ? k.Lokal.Name : k.Ort })
+            .Select(k => new
+            {
+                k.Id, k.Datum, k.Name,
+                Ort = k.Lokal != null ? k.Lokal.Name : k.Ort,
+                Lat = k.Lokal != null ? k.Lokal.Lat : null,
+                Lng = k.Lokal != null ? k.Lokal.Lng : null
+            })
             .Take(6)
             .ToListAsync();
         return konzerte
             .Select(k => new KalenderZeile(k.Id, k.Datum, k.Name, k.Ort,
-                RelativLabel(k.Datum, heute), k.Datum == heute, k.Datum < heute))
+                RelativLabel(k.Datum, heute), k.Datum == heute, k.Datum < heute)
+            { Lat = k.Lat, Lng = k.Lng })
             .ToList();
     }
 
@@ -551,6 +559,29 @@
         return (onboardingNoetig, offeneAnfragen);
     }
 
+    // Dekoratives km-Label: Bezugspunkt aus localStorage lesen, Distanz berechnen (keine Umsortierung).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _kalender.All(k => k.Lat is null)) return;
+        var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
+        if (pos is not { Length: 2 }) return;
+        foreach (var k in _kalender)
+            if (k.Lat is double la && k.Lng is double lo)
+                k.Distanz = Distanz(pos[0], pos[1], la, lo);
+        StateHasChanged();
+    }
+
+    private static double Distanz(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371.0;
+        double Rad(double g) => g * Math.PI / 180.0;
+        var dLat = Rad(lat2 - lat1);
+        var dLng = Rad(lng2 - lng1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+              + Math.Cos(Rad(lat1)) * Math.Cos(Rad(lat2)) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
     private static string RelativLabel(DateOnly datum, DateOnly heute)
     {
         var tage = datum.DayNumber - heute.DayNumber;
@@ -580,5 +611,8 @@
         string RelativLabel, bool IstHeute, bool IstVergangen)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+        public double? Lat { get; init; }
+        public double? Lng { get; init; }
+        public double? Distanz { get; set; }   // dekorativ, nur wenn Bezugspunkt bekannt
     }
 }

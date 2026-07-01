@@ -8,6 +8,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject GeocodingService Geo
 
 <PageTitle>Lokale – Admin</PageTitle>
 
@@ -15,8 +16,12 @@
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Lokale (Veranstaltungsorte)</MudText>
     <MudSpacer />
     <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
-               StartIcon="@Icons.Material.Filled.Download" OnClick="OrteImportieren" Disabled="_importiert">
+               StartIcon="@Icons.Material.Filled.Download" OnClick="OrteImportieren" Disabled="@(_importiert || _geoLaeuft)">
         Bestehende Orte importieren
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#9B59B6;"
+               StartIcon="@Icons.Material.Filled.MyLocation" OnClick="KoordinatenErgaenzen" Disabled="@(_geoLaeuft || _importiert)">
+        @(_geoLaeuft ? $"Koordinaten… {_geoFortschritt}" : "Koordinaten via Nominatim ergänzen")
     </MudButton>
 </MudStack>
 
@@ -69,6 +74,8 @@ else
     private List<Zeile> _gefiltert = [];
     private string _suche = "";
     private bool _importiert;
+    private bool _geoLaeuft;
+    private string _geoFortschritt = "";
 
     protected override async Task OnInitializedAsync() => await Laden();
 
@@ -136,6 +143,43 @@ else
         await db.SaveChangesAsync();
         Snackbar.Add($"{konzerte.Count} Konzerte verknüpft, {neueLokale} Lokale angelegt.", Severity.Success);
         _importiert = false;
+        await Laden();
+    }
+
+    // Batch: füllt Koordinaten (+ Kanton, falls leer) für alle Lokale ohne Koordinaten via Nominatim.
+    // Rate-limitiert (~1 Anfrage/s, Policy), pro Treffer sofort gespeichert (Wiederaufnahme möglich).
+    private async Task KoordinatenErgaenzen()
+    {
+        _geoLaeuft = true;
+        int erfolg = 0;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            var offen = await db.Lokale.Where(l => l.Lat == null || l.Lng == null).ToListAsync();
+            for (var i = 0; i < offen.Count; i++)
+            {
+                var l = offen[i];
+                _geoFortschritt = $"{i + 1}/{offen.Count}";
+                StateHasChanged();
+
+                var query = string.Join(", ", new[] { l.Name, l.Adresse, l.Stadt }
+                    .Where(x => !string.IsNullOrWhiteSpace(x)));
+                if (!query.Contains("schweiz", StringComparison.OrdinalIgnoreCase)) query += ", Schweiz";
+
+                var t = await Geo.GeocodeDetailAsync(query);
+                if (t is not null)
+                {
+                    l.Lat = t.Lat;
+                    l.Lng = t.Lng;
+                    if (string.IsNullOrWhiteSpace(l.Kanton) && !string.IsNullOrWhiteSpace(t.Kanton)) l.Kanton = t.Kanton;
+                    await db.SaveChangesAsync();
+                    erfolg++;
+                }
+                await Task.Delay(1100);   // Nominatim: max ~1 Anfrage/Sekunde
+            }
+        }
+        _geoLaeuft = false;
+        _geoFortschritt = "";
+        Snackbar.Add($"Koordinaten ergänzt für {erfolg} Lokal(e).", Severity.Success);
         await Laden();
     }
 
