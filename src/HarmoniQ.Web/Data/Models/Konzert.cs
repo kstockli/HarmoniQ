@@ -15,7 +15,11 @@ public class Konzert
     /// <summary>Optionaler Name, z. B. „Jahreskonzert 2025“.</summary>
     public string? Name { get; set; }
 
-    /// <summary>Optionaler Standort/Lokal, z. B. „KKL Luzern“.</summary>
+    /// <summary>Veranstaltungsort als Referenz (Find-or-create; ersetzt den Freitext-<see cref="Ort"/>).</summary>
+    public Guid? LokalId { get; set; }
+    public Lokal? Lokal { get; set; }
+
+    /// <summary>Alt/Fallback-Freitext des Orts. Anzeige bevorzugt <see cref="Lokal"/>.Name.</summary>
     public string? Ort { get; set; }
 
     public string? Beschreibung { get; set; }

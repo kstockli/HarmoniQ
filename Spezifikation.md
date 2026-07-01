@@ -422,7 +422,8 @@ Konzert                             (NEU – ein Auftritt/Event, an dem eine ode
 ├── Id (Guid)
 ├── Datum (DateOnly)               ← PFLICHT
 ├── Name (string?)                 ← optional, z. B. "Jahreskonzert 2025", "Eidg. Musikfest"
-├── Ort (string?)                  ← optional, Standort/Lokal, z. B. "KKL Luzern"
+├── LokalId (FK? → Lokal)          ← NEU: Veranstaltungsort als Referenz (find-or-create)
+├── Ort (string?)                  ← Alt/Fallback-Freitext; neue Konzerte nutzen Lokal. Anzeige = Lokal.Name ?? Ort
 ├── Beschreibung (string?)         ← optional
 ├── BildUrl (string?)              ← NEU: Plakat/Foto des Konzerts (optional)
 ├── Bands [n:m] → KonzertBand      ← teilnehmende Bands (eine bis mehrere)
@@ -434,6 +435,44 @@ Konzert                             (NEU – ein Auftritt/Event, an dem eine ode
 > wäre breiter (Umzug, Probe …); falls künftig nötig, lässt sich ein optionales `Typ`-Enum
 > (Konzert / Wertungsspiel / Sonstiges) ergänzen, ohne das Modell umzubauen. Vorerst bewusst
 > schlank: nur Datum (Pflicht) + optional Name/Ort.
+
+Lokal                               (NEU – Veranstaltungsort; ersetzt den Freitext-`Ort` am Konzert)
+├── Id (Guid)
+├── Name (string)                  ← z. B. "KKL Luzern"
+├── Saal (string?)                 ← optionaler Detail-/Saalname
+├── Adresse (string?)              ← Strasse/Nr.
+├── Stadt (string?)
+├── Kanton (string?)               ← z. B. "LU" – für Region-Filter „Demnächst" (UX-Spec 4.3)
+├── Lat / Lng (double?)            ← Koordinaten (Geocoding via Nominatim – SPÄTER)
+├── Webseite (string?)
+└── Aliase [1:n] → LokalAlias
+
+LokalAlias                          (NEU – Alternativ-Namen eines Lokals, analog BandAlias/StueckAlias)
+├── Id (Guid, clientseitig → ValueGeneratedNever)
+├── LokalId (FK)
+├── Name (string)
+└── CONSTRAINT: UNIQUE (LokalId, Name)
+
+> **Zweck (UX-Spec 4.3):** (1) **Region-Filter** & später Distanz für „Demnächst"; (2) **Karte** unten
+> auf der Konzert-Detailseite (SPÄTER, Leaflet + OSM); (3) Gruppierung „Konzerte an diesem Lokal";
+> (4) **Dublettenfreiheit** via Find-or-create über Name **oder** `LokalAlias`.
+> **Find-or-create (`LokalService`):** matcht den eingegebenen Namen gegen `Lokal.Name` und `LokalAlias.Name`
+> (case-insensitiv); kein Treffer → neues `Lokal`. Der Konzert-Wizard bietet den Ort als
+> **Autocomplete-mit-Anlegen** (analog Band/Stück).
+> **Merge (`LokalMergeService`, Admin `/admin/lokale`):** hängt alle Konzerte vom Quell- aufs Ziel-Lokal
+> um, füllt leere Ziel-Stammdaten (Adresse/Stadt/Kanton/Koordinaten/Webseite), sichert Quell-Name + dessen
+> Aliase als `LokalAlias`, löscht die Quelle.
+> **Migration bestehender Orte:** einmaliger Import (Admin-Aktion „Bestehende Orte importieren") parst
+> die distinct `Konzert.Ort`-Freitexte → `Lokal` find-or-create und setzt `Konzert.LokalId`. Der
+> `Ort`-Freitext bleibt als Fallback erhalten; Anzeige bevorzugt `Lokal.Name`.
+> **Karte (umgesetzt):** `Lat`/`Lng` im Lokal-CRUD erfass-/editierbar; die Konzert-Detailseite zeigt
+> unten eine **Leaflet-/OSM-Karte mit Marker** (`Components/Shared/LokalKarte.razor` + `wwwroot/js/lokalkarte.js`,
+> Leaflet via CDN) – **nur wenn beide Koordinaten gesetzt** sind. Koordinaten-Felder nutzen
+> `InvariantCulture` (punkt-dezimal, siehe [[mudnumericfield-kultur]]).
+> **Erfassungshilfe (umgesetzt):** Im Lokal-Dialog füllt das Einfügen eines **Google-Maps-Links**
+> (oder freiem „Lat, Lng") die Koordinaten automatisch (Parsing von `!3d…!4d…`, `@lat,lng`, `lat, lng`).
+> **Geocoding aus Adresse (offen/optional):** Adresse → Koordinaten via **Nominatim/OpenStreetMap**
+> (gratis, kein Key, aber externe Requests + User-Agent-Policy) – bei Bedarf nachrüstbar.
 
 KonzertBand                         (n:m – welche Bands beim Konzert mitwirken)
 ├── KonzertId (FK)
@@ -726,6 +765,7 @@ So bleibt die Tabelle sauber/normalisiert und wächst organisch mit der Nutzung.
 - Person `1—n` BandMitgliedschaft `n—1` Band (Person ↔ Band über die Zeit)
 - Person `n—m` Person über **Freundschaft** (gegenseitig, mit Status)
 - Konzert `n—m` Band über **KonzertBand**; Konzert `1—n` Video (`Video.KonzertId`, optional)
+- Konzert `n—1` **Lokal** (Veranstaltungsort, optional); Lokal `1—n` **LokalAlias**
 - Konzert `n—m` Stück über **KonzertStueck** (Programm, mit optionaler Band je Programmpunkt)
 - Konzert `n—m` Person über **KonzertPerson** (mit Rolle PersonRolleTyp, optionaler Band)
 - User `n—m` Konzert über **KonzertBesuch** (Konzert-Tagebuch, privat; UNIQUE User+Konzert)

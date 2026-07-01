@@ -1,0 +1,143 @@
+@page "/admin/lokale"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Pages.Admin.Dialogs
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Lokale – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Lokale (Veranstaltungsorte)</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+               StartIcon="@Icons.Material.Filled.Download" OnClick="OrteImportieren" Disabled="_importiert">
+        Bestehende Orte importieren
+    </MudButton>
+</MudStack>
+
+@if (_lokale == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name / Stadt)"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-3" />
+
+    <MudSimpleTable Dense="true" Hover="true" Bordered="true"
+                    Style="background:#1a0030; border:1px solid #3a1060;">
+        <thead>
+            <tr>
+                <th style="color:#9B59B6;">Name</th>
+                <th style="color:#9B59B6;">Stadt</th>
+                <th style="color:#9B59B6;">Kanton</th>
+                <th style="color:#9B59B6;">Konzerte</th>
+                <th style="color:#9B59B6;">Aliase</th>
+                <th style="color:#9B59B6;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var l in _gefiltert)
+            {
+                <tr>
+                    <td style="color:#F0E6FF;">@l.Name</td>
+                    <td style="color:#A78FC0;">@(l.Stadt ?? "–")</td>
+                    <td style="color:#A78FC0;">@(l.Kanton ?? "–")</td>
+                    <td style="color:#A78FC0;">@l.KonzertAnzahl</td>
+                    <td style="color:#A78FC0;">@l.AliasAnzahl</td>
+                    <td>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;"
+                                   OnClick="@(() => Bearbeiten(l.Id))">Bearbeiten</MudButton>
+                        <MudIconButton Icon="@Icons.Material.Filled.Merge" Size="Size.Small" Title="Zusammenführen"
+                                       Style="color:#D4AF37;" OnClick="@(() => Zusammenfuehren(l))" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+    <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_lokale.Count</MudText>
+}
+
+@code {
+    private List<Zeile>? _lokale;
+    private List<Zeile> _gefiltert = [];
+    private string _suche = "";
+    private bool _importiert;
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _lokale = await db.Lokale
+            .OrderBy(l => l.Name)
+            .Select(l => new Zeile(l.Id, l.Name, l.Stadt, l.Kanton,
+                db.Konzerte.Count(k => k.LokalId == l.Id), l.Aliase.Count))
+            .ToListAsync();
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = (_lokale ?? [])
+            .Where(l => s.Length == 0
+                || l.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                || (l.Stadt ?? "").Contains(s, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task Bearbeiten(Guid id)
+    {
+        var parameters = new DialogParameters<LokalDialog> { { x => x.LokalId, id } };
+        var dialog = await DialogService.ShowAsync<LokalDialog>("Lokal bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false }) await Laden();
+    }
+
+    private async Task Zusammenfuehren(Zeile quelle)
+    {
+        var parameters = new DialogParameters<LokalMergeDialog>
+        {
+            { x => x.QuelleId, quelle.Id },
+            { x => x.QuelleName, quelle.Name }
+        };
+        var dialog = await DialogService.ShowAsync<LokalMergeDialog>("Lokale zusammenführen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: Guid zielId })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var (ok, meldung) = await LokalMergeService.MergeAsync(db, quelle.Id, zielId);
+            Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+            if (ok) await Laden();
+        }
+    }
+
+    // Einmaliger Import: bestehende Freitext-Orte → Lokal (find-or-create) + Konzert.LokalId setzen.
+    private async Task OrteImportieren()
+    {
+        _importiert = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var konzerte = await db.Konzerte
+            .Where(k => k.LokalId == null && k.Ort != null && k.Ort != "")
+            .ToListAsync();
+        foreach (var k in konzerte)
+            k.LokalId = await LokalService.FindeOderErstelleAsync(db, k.Ort);
+
+        var neueLokale = db.ChangeTracker.Entries<Lokal>().Count(e => e.State == EntityState.Added);
+        await db.SaveChangesAsync();
+        Snackbar.Add($"{konzerte.Count} Konzerte verknüpft, {neueLokale} Lokale angelegt.", Severity.Success);
+        _importiert = false;
+        await Laden();
+    }
+
+    private record Zeile(Guid Id, string Name, string? Stadt, string? Kanton, int KonzertAnzahl, int AliasAnzahl);
+}

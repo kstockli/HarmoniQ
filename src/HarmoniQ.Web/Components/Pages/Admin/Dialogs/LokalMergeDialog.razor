@@ -1,0 +1,56 @@
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            „<b>@QuelleName</b>" wird in das gewählte Lokal <b>hineingeschmolzen</b>: alle Konzerte
+            werden übernommen, Quell-Name + Aliase als Alias gesichert, danach „@QuelleName" gelöscht.
+            <b>Nicht umkehrbar.</b>
+        </MudAlert>
+        <MudAutocomplete T="LokalRef" Label="Ziel-Lokal suchen" Variant="Variant.Outlined" Required="true"
+                         Value="_ziel" ValueChanged="@(v => _ziel = v)" SearchFunc="Suche"
+                         ToStringFunc="@(l => l?.Label ?? "")" MaxItems="30" ResetValueOnEmptyText="true"
+                         HelperText="Suche nach Name, Stadt oder Alias." />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(_ziel!.Id)))" Disabled="@(_ziel is null)">Zusammenführen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid QuelleId { get; set; }
+    [Parameter] public string QuelleName { get; set; } = "";
+
+    private LokalRef? _ziel;
+    private List<LokalRef> _lokale = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var roh = await db.Lokale.Where(l => l.Id != QuelleId)
+            .OrderBy(l => l.Name)
+            .Select(l => new { l.Id, l.Name, l.Stadt, Aliase = l.Aliase.Select(a => a.Name).ToList() })
+            .ToListAsync();
+        _lokale = roh.Select(l =>
+        {
+            var label = l.Name + (string.IsNullOrWhiteSpace(l.Stadt) ? "" : $" · {l.Stadt}");
+            var such = string.Join(" ", new[] { l.Name, l.Stadt ?? "" }.Concat(l.Aliase)).ToLowerInvariant();
+            return new LokalRef(l.Id, label, such);
+        }).ToList();
+    }
+
+    private Task<IEnumerable<LokalRef>> Suche(string? v, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return Task.FromResult(_lokale.Take(30));
+        var tokens = v.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return Task.FromResult(_lokale.Where(l => tokens.All(t => l.Such.Contains(t))).Take(30));
+    }
+
+    public record LokalRef(Guid Id, string Label, string Such);
+}

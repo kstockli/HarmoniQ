@@ -107,7 +107,7 @@
     <MudPaper Class="pa-4 mb-8" Elevation="4" Style="background:#1a0030; border:1px solid #D4AF37;">
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
             <MudIcon Icon="@Icons.Material.Filled.Event" Style="color:#D4AF37;" />
-            <MudText Typo="Typo.h5" Style="color:#D4AF37;">Konzerte – demnächst & kürzlich</MudText>
+            <MudText Typo="Typo.h5" Style="color:#D4AF37;">Konzerte – demnächst</MudText>
             <MudSpacer />
             <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/konzerte"
                        EndIcon="@Icons.Material.Filled.ArrowForward">Alle Konzerte</MudButton>
@@ -455,15 +455,17 @@
 
     private async Task<List<KalenderZeile>> KalenderLadenAsync()
     {
-        // Konzert-Kalender: ±8 Tage um heute, chronologisch.
+        // Konzert-Kalender: bewusst vorwärtsschauend – ab gestern bis ~6 Wochen voraus,
+        // chronologisch aufsteigend, die nächsten 6 (nächstes zuerst).
         var heute = DateOnly.FromDateTime(DateTime.Today);
-        var von = heute.AddDays(-8);
-        var bis = heute.AddDays(8);
+        var von = heute.AddDays(-1);
+        var bis = heute.AddDays(42);
         await using var db = await DbFactory.CreateDbContextAsync();
         var konzerte = await db.Konzerte
             .Where(k => k.Datum >= von && k.Datum <= bis)
             .OrderBy(k => k.Datum)
-            .Select(k => new { k.Id, k.Datum, k.Name, k.Ort })
+            .Select(k => new { k.Id, k.Datum, k.Name, Ort = k.Lokal != null ? k.Lokal.Name : k.Ort })
+            .Take(6)
             .ToListAsync();
         return konzerte
             .Select(k => new KalenderZeile(k.Id, k.Datum, k.Name, k.Ort,

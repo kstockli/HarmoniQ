@@ -82,7 +82,8 @@ else
             .OrderByDescending(k => k.Datum)
             .Select(k => new
             {
-                k.Id, k.Datum, k.Name, k.Ort,
+                k.Id, k.Datum, k.Name,
+                Ort = k.Lokal != null ? k.Lokal.Name : k.Ort,
                 BandNamen = k.Bands.OrderBy(b => b.Band.Name).Select(b => b.Band.Name).ToList(),
                 VideoAnzahl = k.Videos.Count(v => v.Status == VideoStatus.Genehmigt)
             })

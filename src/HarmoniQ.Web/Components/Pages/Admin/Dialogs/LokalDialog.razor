@@ -1,0 +1,195 @@
+@using System.Globalization
+@using System.Text.RegularExpressions
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject HarmoniQ.Web.Services.GeocodingService Geo
+
+<MudDialog>
+    <DialogContent>
+        @if (_lokal == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            <MudTextField @bind-Value="_lokal.Name" Label="Name" Variant="Variant.Outlined" Required="true" Class="mb-2" />
+            <MudGrid>
+                <MudItem xs="12" sm="6"><MudTextField @bind-Value="_lokal.Saal" Label="Saal (optional)" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" sm="6"><MudTextField @bind-Value="_lokal.Stadt" Label="Stadt" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" sm="6"><MudTextField @bind-Value="_lokal.Adresse" Label="Adresse" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" sm="6"><MudTextField @bind-Value="_lokal.Kanton" Label="Kanton (z. B. LU)" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12"><MudTextField @bind-Value="_lokal.Webseite" Label="Webseite" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="double?" @bind-Value="_lokal.Lat" Label="Breitengrad (Lat)"
+                                     Variant="Variant.Outlined" Format="0.######" HideSpinButtons="true"
+                                     Culture="@System.Globalization.CultureInfo.InvariantCulture" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="double?" @bind-Value="_lokal.Lng" Label="Längengrad (Lng)"
+                                     Variant="Variant.Outlined" Format="0.######" HideSpinButtons="true"
+                                     Culture="@System.Globalization.CultureInfo.InvariantCulture" />
+                </MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.caption" Style="color:#6f5a86;">
+                Koordinaten (WGS84) für die Kartenanzeige – z. B. KKL Luzern: 47.0502, 8.3093.
+            </MudText>
+            @* Erfassungshilfe: Google-Maps-Link (oder „Lat, Lng") einfügen → füllt Lat/Lng automatisch. *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-2">
+                <MudTextField @bind-Value="_geoEingabe" Label="Google-Maps-Link oder 'Lat, Lng' einfügen"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Map" />
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                           OnClick="GeoUebernehmen" Disabled="@(string.IsNullOrWhiteSpace(_geoEingabe))">Übernehmen</MudButton>
+            </MudStack>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Class="mt-1" Style="color:#9B59B6;"
+                       StartIcon="@Icons.Material.Filled.MyLocation" OnClick="AdresseGeocodieren" Disabled="_geocoding">
+                @(_geocoding ? "Suche…" : "Aus Name/Adresse suchen (OpenStreetMap)")
+            </MudButton>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1" Style="color:#9B59B6;">Alternativ-Namen</MudText>
+            @foreach (var a in _aliase)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                    <MudText Typo="Typo.body2" Style="color:#F0E6FF;flex:1;">@a.Name</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => _aliase.Remove(a))" />
+                </MudStack>
+            }
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                <MudTextField @bind-Value="_neuerAlias" Label="Alias hinzufügen" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudButton Size="Size.Small" OnClick="AliasHinzu" Disabled="@(string.IsNullOrWhiteSpace(_neuerAlias))">+</MudButton>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                   OnClick="Speichern" Disabled="@(_lokal == null || string.IsNullOrWhiteSpace(_lokal.Name))">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid LokalId { get; set; }
+
+    private Lokal? _lokal;
+    private List<LokalAlias> _aliase = [];
+    private string? _neuerAlias;
+    private string? _geoEingabe;
+    private bool _geocoding;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _lokal = await db.Lokale.Include(l => l.Aliase).FirstOrDefaultAsync(l => l.Id == LokalId);
+        _aliase = _lokal?.Aliase.OrderBy(a => a.Name).ToList() ?? [];
+    }
+
+    private void AliasHinzu()
+    {
+        var name = _neuerAlias?.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (!_aliase.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(_lokal!.Name, name, StringComparison.OrdinalIgnoreCase))
+            _aliase.Add(new LokalAlias { LokalId = LokalId, Name = name });
+        _neuerAlias = "";
+    }
+
+    private async Task Speichern()
+    {
+        if (_lokal == null || string.IsNullOrWhiteSpace(_lokal.Name)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var l = await db.Lokale.Include(x => x.Aliase).FirstOrDefaultAsync(x => x.Id == LokalId);
+        if (l == null) { MudDialog.Cancel(); return; }
+
+        l.Name = _lokal.Name.Trim();
+        l.Saal = Leer(_lokal.Saal);
+        l.Adresse = Leer(_lokal.Adresse);
+        l.Stadt = Leer(_lokal.Stadt);
+        l.Kanton = Leer(_lokal.Kanton);
+        l.Webseite = Leer(_lokal.Webseite);
+        l.Lat = _lokal.Lat;
+        l.Lng = _lokal.Lng;
+
+        // Aliase differenziell abgleichen.
+        var behalten = _aliase.Select(a => a.Name.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var weg in l.Aliase.Where(a => !behalten.Contains(a.Name)).ToList())
+            db.LokalAliase.Remove(weg);
+        foreach (var name in behalten.Where(n => l.Aliase.All(a => !string.Equals(a.Name, n, StringComparison.OrdinalIgnoreCase))))
+            db.LokalAliase.Add(new LokalAlias { LokalId = LokalId, Name = name });
+
+        await db.SaveChangesAsync();
+        Snackbar.Add("Lokal gespeichert.", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void GeoUebernehmen()
+    {
+        if (_lokal == null || string.IsNullOrWhiteSpace(_geoEingabe)) return;
+        var (lat, lng) = GeoParse(_geoEingabe);
+        if (lat is double la && lng is double lo)
+        {
+            _lokal.Lat = la;
+            _lokal.Lng = lo;
+            _geoEingabe = "";
+            Snackbar.Add($"Koordinaten übernommen: {la.ToString(CultureInfo.InvariantCulture)}, {lo.ToString(CultureInfo.InvariantCulture)}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Keine Koordinaten erkannt. Google-Maps-Link (mit @... oder !3d...!4d...) oder 'Lat, Lng' einfügen.", Severity.Warning);
+        }
+    }
+
+    private async Task AdresseGeocodieren()
+    {
+        if (_lokal == null) return;
+        var q = string.Join(", ", new[] { _lokal.Name, _lokal.Adresse, _lokal.Stadt }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            Snackbar.Add("Bitte zuerst Name/Adresse/Stadt ausfüllen.", Severity.Info);
+            return;
+        }
+        if (!q.Contains("schweiz", StringComparison.OrdinalIgnoreCase)) q += ", Schweiz";
+
+        _geocoding = true;
+        var res = await Geo.GeocodeAsync(q);
+        _geocoding = false;
+        if (res is (double la, double lo))
+        {
+            _lokal.Lat = la;
+            _lokal.Lng = lo;
+            Snackbar.Add($"Gefunden: {la.ToString(CultureInfo.InvariantCulture)}, {lo.ToString(CultureInfo.InvariantCulture)}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Keine Koordinaten zu dieser Adresse gefunden. Ggf. Adresse/Stadt ergänzen oder Google-Maps-Link nutzen.", Severity.Warning);
+        }
+    }
+
+    // Extrahiert Koordinaten aus Google-Maps-Links oder freiem „Lat, Lng"-Text.
+    private static (double? Lat, double? Lng) GeoParse(string s)
+    {
+        // Reihenfolge = Präzision: place-data (!3d/!4d) → Kartenzentrum (@lat,lng) → freies „lat, lng".
+        foreach (var pat in new[]
+        {
+            @"!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)",
+            @"@(-?\d+\.\d+),(-?\d+\.\d+)",
+            @"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)"
+        })
+        {
+            var m = Regex.Match(s, pat);
+            if (m.Success
+                && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var la)
+                && double.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lo)
+                && Math.Abs(la) <= 90 && Math.Abs(lo) <= 180)
+                return (la, lo);
+        }
+        return (null, null);
+    }
+
+    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+}

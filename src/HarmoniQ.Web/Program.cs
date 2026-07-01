@@ -45,6 +45,13 @@ builder.Services.AddHttpClient<WikipediaService>(c =>
         builder.Configuration["Crawler:UserAgent"] ?? "HarmoniQBot/1.0 (+https://harmoniq.q-no.ch)");
     c.Timeout = TimeSpan.FromSeconds(20);
 });
+// Adress-Geocoding via Nominatim/OSM (Lokal-CRUD). Nominatim verlangt einen echten User-Agent.
+builder.Services.AddHttpClient<GeocodingService>(c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd(
+        builder.Configuration["Crawler:UserAgent"] ?? "HarmoniQBot/1.0 (+https://harmoniq.q-no.ch)");
+    c.Timeout = TimeSpan.FromSeconds(15);
+});
 // Extraktor: Mistral „La Plateforme", wenn konfiguriert (Crawler:Llm:Provider=mistral + ApiKey);
 // sonst Stub (manuelle Erfassung im Review).
 var llmProvider = builder.Configuration["Crawler:Llm:Provider"];

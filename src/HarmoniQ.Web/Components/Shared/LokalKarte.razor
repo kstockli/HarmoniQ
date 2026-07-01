@@ -1,0 +1,18 @@
+@inject IJSRuntime JS
+
+@* Zeigt eine OSM-/Leaflet-Karte mit Marker – nur sinnvoll, wenn Koordinaten vorhanden sind. *@
+<div id="@_elId" style="height:300px;width:100%;border-radius:8px;overflow:hidden;border:1px solid #3a1060;"></div>
+
+@code {
+    [Parameter, EditorRequired] public double Lat { get; set; }
+    [Parameter, EditorRequired] public double Lng { get; set; }
+    [Parameter] public string? Name { get; set; }
+
+    private readonly string _elId = "lokalkarte-" + Guid.NewGuid().ToString("N");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("lokalKarte.init", _elId, Lat, Lng, Name);
+    }
+}

@@ -239,12 +239,21 @@ else
             </MudGrid>
         }
     }
+
+    @* Karte des Veranstaltungsorts – nur wenn Koordinaten hinterlegt sind. *@
+    @if (_lokalLat is double la && _lokalLng is double lo)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Class="mt-4" Style="color:#D4AF37;">Veranstaltungsort</MudText>
+        <LokalKarte Lat="la" Lng="lo" Name="_lokalName" />
+    }
 }
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
     private KonzertKopf? _konzert;
+    private double? _lokalLat, _lokalLng;
+    private string? _lokalName;
     private List<BandZeile> _bands = [];
     private List<VideoZeile> _videos = [];
     private List<ProgrammZeile> _programm = [];
@@ -278,9 +287,14 @@ else
     {
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        var k = await db.Konzerte.FirstOrDefaultAsync(x => x.Id == Id);
+        var k = await db.Konzerte.Include(x => x.Lokal).FirstOrDefaultAsync(x => x.Id == Id);
         if (k == null) { Nav.NavigateTo("/konzerte"); return; }
-        _konzert = new KonzertKopf(k.Id, k.Datum, k.Name, k.Ort, k.Beschreibung, k.BildUrl);
+        _konzert = new KonzertKopf(k.Id, k.Datum, k.Name, k.Lokal?.Name ?? k.Ort, k.Beschreibung, k.BildUrl);
+
+        // Koordinaten für die Karte (nur wenn beide gesetzt).
+        _lokalLat = _lokalLng = null;
+        _lokalName = k.Lokal?.Name;
+        if (k.Lokal is { Lat: double la, Lng: double lo }) { _lokalLat = la; _lokalLng = lo; }
 
         // Videos dieses Konzerts (genehmigt), nach Band gruppierbar.
         var videos = await db.Videos

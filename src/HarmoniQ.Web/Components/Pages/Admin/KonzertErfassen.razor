@@ -41,8 +41,9 @@
                           Placeholder="z. B. Jahreskonzert 2025" />
         </MudItem>
         <MudItem xs="12" sm="6">
-            <MudTextField @bind-Value="_ort" Label="Ort / Lokal (optional)" Variant="Variant.Outlined"
-                          Placeholder="z. B. KKL Luzern" />
+            <MudAutocomplete T="string" @bind-Value="_ort" Label="Ort / Lokal (optional)" Variant="Variant.Outlined"
+                             Placeholder="z. B. KKL Luzern" SearchFunc="@((s, c) => Suche(_lokalNamen, s))"
+                             CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
         </MudItem>
         <MudItem xs="12" sm="6">
             <MudTextField @bind-Value="_bildUrl" Label="Bild-URL (optional)" Variant="Variant.Outlined" />
@@ -158,6 +159,7 @@
 
     private List<string> _stueckNamen = [];
     private List<string> _bandNamen = [];
+    private List<string> _lokalNamen = [];
     private List<string> _personNamen = [];
     private List<string> _komponistNamen = [];
     private Dictionary<string, PersonRolleTyp> _personPrimaerRolle = new(StringComparer.OrdinalIgnoreCase);
@@ -167,6 +169,10 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         _stueckNamen = await db.Stuecke.OrderBy(s => s.Titel).Select(s => s.Titel).ToListAsync();
         _bandNamen = await db.Bands.OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
+        // Lokal-Vorschläge = Namen + Aliase (Find-or-create beim Speichern über LokalService).
+        var lokalNamen = await db.Lokale.Select(l => l.Name).ToListAsync();
+        var lokalAliase = await db.LokalAliase.Select(a => a.Name).ToListAsync();
+        _lokalNamen = lokalNamen.Concat(lokalAliase).Distinct().OrderBy(n => n).ToList();
         _personNamen = await db.Personen.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
         // Komponist:innen-Vorschläge nur aus Personen mit Komponist-Rolle.
         _komponistNamen = await db.Personen
@@ -186,12 +192,12 @@
 
     private async Task BestehendesLaden(ApplicationDbContext db, Guid kid)
     {
-        var k = await db.Konzerte.FirstOrDefaultAsync(x => x.Id == kid);
+        var k = await db.Konzerte.Include(x => x.Lokal).FirstOrDefaultAsync(x => x.Id == kid);
         if (k == null) { Nav.NavigateTo("/admin/konzerte"); return; }
 
         _datum = k.Datum.ToDateTime(TimeOnly.MinValue);
         _name = k.Name;
-        _ort = k.Ort;
+        _ort = k.Lokal?.Name ?? k.Ort;
         _beschreibung = k.Beschreibung;
         _bildUrl = k.BildUrl;
 

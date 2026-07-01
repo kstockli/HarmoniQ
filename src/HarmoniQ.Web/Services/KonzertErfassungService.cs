@@ -32,6 +32,7 @@ public static class KonzertErfassungService
         var konzert = new Konzert();
         db.Konzerte.Add(konzert);
         KopfSetzen(konzert, e);
+        konzert.LokalId = await LokalService.FindeOderErstelleAsync(db, e.Ort);
 
         var desiredBands = new HashSet<Guid>();
         await BefuelleAsync(db, konzert, e, desiredBands);
@@ -97,6 +98,7 @@ public static class KonzertErfassungService
         var konzert = await db.Konzerte.FirstOrDefaultAsync(k => k.Id == konzertId)
             ?? throw new InvalidOperationException("Konzert nicht gefunden.");
         KopfSetzen(konzert, e);
+        konzert.LokalId = await LokalService.FindeOderErstelleAsync(db, e.Ort);
 
         // Programm und Mitwirkende komplett neu aufbauen (Surrogat-PKs → unkritisch).
         db.KonzertStuecke.RemoveRange(await db.KonzertStuecke.Where(x => x.KonzertId == konzertId).ToListAsync());

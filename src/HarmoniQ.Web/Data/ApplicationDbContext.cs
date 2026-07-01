@@ -36,6 +36,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     // Phase 8 – Vernetzung & Konzerte
     public DbSet<Konzert> Konzerte => Set<Konzert>();
+    public DbSet<Lokal> Lokale => Set<Lokal>();
+    public DbSet<LokalAlias> LokalAliase => Set<LokalAlias>();
     public DbSet<KonzertBand> KonzertBands => Set<KonzertBand>();
     public DbSet<KonzertStueck> KonzertStuecke => Set<KonzertStueck>();
     public DbSet<KonzertPerson> KonzertPersonen => Set<KonzertPerson>();
@@ -258,6 +260,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         });
 
         builder.Entity<Konzert>().HasIndex(k => k.Datum);
+
+        // Konzert → Lokal (optionaler Veranstaltungsort); Lokal-Löschung setzt die Referenz auf null.
+        builder.Entity<Konzert>()
+            .HasOne(k => k.Lokal).WithMany()
+            .HasForeignKey(k => k.LokalId).OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<Lokal>(e =>
+        {
+            e.HasIndex(l => l.Name);
+            e.HasIndex(l => l.Kanton);
+        });
+
+        // LokalAlias: clientseitiger Guid-Key → ValueGeneratedNever (wie BandAlias/StueckAlias);
+        // je Lokal eindeutiger Alias-Name.
+        builder.Entity<LokalAlias>(e =>
+        {
+            e.HasOne(a => a.Lokal).WithMany(l => l.Aliase)
+                .HasForeignKey(a => a.LokalId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(a => new { a.LokalId, a.Name }).IsUnique();
+            e.Property(a => a.Id).ValueGeneratedNever();
+        });
 
         // KonzertStueck (Programm): n:m Konzert↔Stück, optionale Band je Programmpunkt.
         builder.Entity<KonzertStueck>(e =>
