@@ -116,7 +116,7 @@ else
     private List<KonzertZeile>? _alle;
     private List<KonzertZeile> _gefiltert = [];
     private string _suche = "";
-    private Zeitraum _zeitraum = Zeitraum.Zeitnah;   // Default: zeitnah (±1 Monat)
+    private Zeitraum _zeitraum = Zeitraum.Kommende;   // Default: Kommende
 
     // Distanz-Filter: Bezugspunkt (Standort/PLZ) + Radius; nicht serverseitig gespeichert.
     private double? _refLat, _refLng;
