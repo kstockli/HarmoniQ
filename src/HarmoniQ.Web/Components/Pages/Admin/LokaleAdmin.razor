@@ -15,12 +15,12 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Lokale (Veranstaltungsorte)</MudText>
     <MudSpacer />
-    <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
-               StartIcon="@Icons.Material.Filled.Download" OnClick="OrteImportieren" Disabled="@(_importiert || _geoLaeuft)">
-        Bestehende Orte importieren
+    <MudButton Variant="Variant.Filled" Style="background:#D4AF37;color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="NeuesLokal" Disabled="_geoLaeuft">
+        Neues Lokal
     </MudButton>
     <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#9B59B6;"
-               StartIcon="@Icons.Material.Filled.MyLocation" OnClick="KoordinatenErgaenzen" Disabled="@(_geoLaeuft || _importiert)">
+               StartIcon="@Icons.Material.Filled.MyLocation" OnClick="KoordinatenErgaenzen" Disabled="_geoLaeuft">
         @(_geoLaeuft ? $"Koordinaten… {_geoFortschritt}" : "Koordinaten via Nominatim ergänzen")
     </MudButton>
 </MudStack>
@@ -31,9 +31,13 @@
 }
 else
 {
-    <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name / Stadt)"
-                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
-                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-3" />
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-3" Wrap="Wrap.Wrap">
+        <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name / Stadt)"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="flex:1;min-width:220px;" />
+        <MudCheckBox T="bool" @bind-Value="_nurOhneKoord" @bind-Value:after="Filtern"
+                     Label="Nur ohne Koordinaten" Color="Color.Primary" />
+    </MudStack>
 
     <MudSimpleTable Dense="true" Hover="true" Bordered="true"
                     Style="background:#1a0030; border:1px solid #3a1060;">
@@ -73,7 +77,7 @@ else
     private List<Zeile>? _lokale;
     private List<Zeile> _gefiltert = [];
     private string _suche = "";
-    private bool _importiert;
+    private bool _nurOhneKoord;
     private bool _geoLaeuft;
     private string _geoFortschritt = "";
 
@@ -85,7 +89,8 @@ else
         _lokale = await db.Lokale
             .OrderBy(l => l.Name)
             .Select(l => new Zeile(l.Id, l.Name, l.Stadt, l.Kanton,
-                db.Konzerte.Count(k => k.LokalId == l.Id), l.Aliase.Count))
+                db.Konzerte.Count(k => k.LokalId == l.Id), l.Aliase.Count,
+                l.Lat != null && l.Lng != null))
             .ToListAsync();
         Filtern();
     }
@@ -94,10 +99,21 @@ else
     {
         var s = _suche.Trim();
         _gefiltert = (_lokale ?? [])
-            .Where(l => s.Length == 0
-                || l.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
-                || (l.Stadt ?? "").Contains(s, StringComparison.OrdinalIgnoreCase))
+            .Where(l => (!_nurOhneKoord || !l.HatKoordinaten)
+                && (s.Length == 0
+                    || l.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                    || (l.Stadt ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)))
             .ToList();
+    }
+
+    private async Task NeuesLokal()
+    {
+        // LokalId = Guid.Empty → Dialog im Anlege-Modus.
+        var parameters = new DialogParameters<LokalDialog> { { x => x.LokalId, Guid.Empty } };
+        var dialog = await DialogService.ShowAsync<LokalDialog>("Neues Lokal", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false }) await Laden();
     }
 
     private async Task Bearbeiten(Guid id)
@@ -126,24 +142,6 @@ else
             Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
             if (ok) await Laden();
         }
-    }
-
-    // Einmaliger Import: bestehende Freitext-Orte → Lokal (find-or-create) + Konzert.LokalId setzen.
-    private async Task OrteImportieren()
-    {
-        _importiert = true;
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var konzerte = await db.Konzerte
-            .Where(k => k.LokalId == null && k.Ort != null && k.Ort != "")
-            .ToListAsync();
-        foreach (var k in konzerte)
-            k.LokalId = await LokalService.FindeOderErstelleAsync(db, k.Ort);
-
-        var neueLokale = db.ChangeTracker.Entries<Lokal>().Count(e => e.State == EntityState.Added);
-        await db.SaveChangesAsync();
-        Snackbar.Add($"{konzerte.Count} Konzerte verknüpft, {neueLokale} Lokale angelegt.", Severity.Success);
-        _importiert = false;
-        await Laden();
     }
 
     // Batch: füllt Koordinaten (+ Kanton, falls leer) für alle Lokale ohne Koordinaten via Nominatim.
@@ -183,5 +181,6 @@ else
         await Laden();
     }
 
-    private record Zeile(Guid Id, string Name, string? Stadt, string? Kanton, int KonzertAnzahl, int AliasAnzahl);
+    private record Zeile(Guid Id, string Name, string? Stadt, string? Kanton, int KonzertAnzahl, int AliasAnzahl,
+        bool HatKoordinaten);
 }

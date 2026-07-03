@@ -83,6 +83,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (LokalId == Guid.Empty) { _lokal = new Lokal { Name = "" }; _aliase = []; return; }  // Anlege-Modus
         await using var db = await DbFactory.CreateDbContextAsync();
         _lokal = await db.Lokale.Include(l => l.Aliase).FirstOrDefaultAsync(l => l.Id == LokalId);
         _aliase = _lokal?.Aliase.OrderBy(a => a.Name).ToList() ?? [];
@@ -102,8 +103,17 @@
     {
         if (_lokal == null || string.IsNullOrWhiteSpace(_lokal.Name)) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var l = await db.Lokale.Include(x => x.Aliase).FirstOrDefaultAsync(x => x.Id == LokalId);
-        if (l == null) { MudDialog.Cancel(); return; }
+        Lokal? l;
+        if (LokalId == Guid.Empty)
+        {
+            l = new Lokal();                 // Anlegen
+            db.Lokale.Add(l);
+        }
+        else
+        {
+            l = await db.Lokale.Include(x => x.Aliase).FirstOrDefaultAsync(x => x.Id == LokalId);
+            if (l == null) { MudDialog.Cancel(); return; }
+        }
 
         l.Name = _lokal.Name.Trim();
         l.Saal = Leer(_lokal.Saal);
@@ -119,18 +129,19 @@
         foreach (var weg in l.Aliase.Where(a => !behalten.Contains(a.Name)).ToList())
             db.LokalAliase.Remove(weg);
         foreach (var name in behalten.Where(n => l.Aliase.All(a => !string.Equals(a.Name, n, StringComparison.OrdinalIgnoreCase))))
-            db.LokalAliase.Add(new LokalAlias { LokalId = LokalId, Name = name });
+            db.LokalAliase.Add(new LokalAlias { LokalId = l.Id, Name = name });
 
         await db.SaveChangesAsync();
         Snackbar.Add("Lokal gespeichert.", Severity.Success);
         MudDialog.Close(DialogResult.Ok(true));
     }
 
-    private void GeoUebernehmen()
+    private async Task GeoUebernehmen()
     {
         if (_lokal == null || string.IsNullOrWhiteSpace(_geoEingabe)) return;
-        var (lat, lng) = GeoParse(_geoEingabe);
-        if (lat is double la && lng is double lo)
+        // Löst auch Google-Kurzlinks (maps.app.goo.gl) serverseitig auf.
+        var res = await Geo.KoordinatenAusLinkAsync(_geoEingabe);
+        if (res is (double la, double lo))
         {
             _lokal.Lat = la;
             _lokal.Lng = lo;
@@ -139,7 +150,7 @@
         }
         else
         {
-            Snackbar.Add("Keine Koordinaten erkannt. Google-Maps-Link (mit @... oder !3d...!4d...) oder 'Lat, Lng' einfügen.", Severity.Warning);
+            Snackbar.Add("Keine Koordinaten erkannt. Tipp: in Google Maps Rechtsklick → Koordinaten kopieren, oder 'Aus Name/Adresse suchen' nutzen.", Severity.Warning);
         }
     }
 
@@ -168,27 +179,6 @@
         {
             Snackbar.Add("Keine Koordinaten zu dieser Adresse gefunden. Ggf. Adresse/Stadt ergänzen oder Google-Maps-Link nutzen.", Severity.Warning);
         }
-    }
-
-    // Extrahiert Koordinaten aus Google-Maps-Links oder freiem „Lat, Lng"-Text.
-    private static (double? Lat, double? Lng) GeoParse(string s)
-    {
-        // Reihenfolge = Präzision: place-data (!3d/!4d) → Kartenzentrum (@lat,lng) → freies „lat, lng".
-        foreach (var pat in new[]
-        {
-            @"!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)",
-            @"@(-?\d+\.\d+),(-?\d+\.\d+)",
-            @"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)"
-        })
-        {
-            var m = Regex.Match(s, pat);
-            if (m.Success
-                && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var la)
-                && double.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lo)
-                && Math.Abs(la) <= 90 && Math.Abs(lo) <= 180)
-                return (la, lo);
-        }
-        return (null, null);
     }
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

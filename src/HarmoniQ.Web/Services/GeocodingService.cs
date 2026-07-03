@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace HarmoniQ.Web.Services;
 
@@ -31,6 +32,57 @@ public class GeocodingService(HttpClient http)
         if (string.IsNullOrWhiteSpace(plz)) return null;
         var t = await AbfrageAsync("format=jsonv2&limit=1&countrycodes=ch&postalcode=" + Uri.EscapeDataString(plz), plz, ct);
         return t is null ? null : (t.Lat, t.Lng);
+    }
+
+    /// <summary>
+    /// Ermittelt Koordinaten aus freiem Text ODER einem Google-Maps-Link (inkl. Kurzlink
+    /// <c>maps.app.goo.gl</c>/<c>goo.gl/maps</c>): erst direktes Parsen, sonst der Weiterleitung folgen
+    /// und die Ziel-URL/den Seiteninhalt parsen.
+    /// </summary>
+    public async Task<(double Lat, double Lng)?> KoordinatenAusLinkAsync(string? input, CancellationToken ct = default)
+    {
+        input = input?.Trim();
+        if (string.IsNullOrWhiteSpace(input)) return null;
+
+        // 1. Direkt parsen (fertige URL mit @…/!3d!4d oder „lat, lng").
+        if (ParseKoord(input) is { } direkt) return direkt;
+
+        // 2. Kurzlink auflösen (HttpClient folgt Weiterleitungen automatisch).
+        if (input.Contains("goo.gl", StringComparison.OrdinalIgnoreCase)
+            || input.Contains("maps.app", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var resp = await http.GetAsync(input, ct);
+                if (resp.RequestMessage?.RequestUri?.ToString() is { } ziel && ParseKoord(ziel) is { } p1)
+                    return p1;
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                if (ParseKoord(body) is { } p2) return p2;
+            }
+            catch { /* nicht auflösbar */ }
+        }
+        return null;
+    }
+
+    /// <summary>Extrahiert Koordinaten aus Google-Maps-URLs/Text (!3d!4d, @lat,lng, „lat, lng").</summary>
+    public static (double Lat, double Lng)? ParseKoord(string s)
+    {
+        foreach (var pat in new[]
+        {
+            @"!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)",
+            @"@(-?\d+\.\d+),(-?\d+\.\d+)",
+            @"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)",
+            @"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)"
+        })
+        {
+            var m = Regex.Match(s, pat);
+            if (m.Success
+                && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var la)
+                && double.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lo)
+                && Math.Abs(la) <= 90 && Math.Abs(lo) <= 180)
+                return (la, lo);
+        }
+        return null;
     }
 
     private async Task<Treffer?> AbfrageAsync(string queryString, string? original, CancellationToken ct)
