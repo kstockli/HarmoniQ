@@ -78,9 +78,19 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   Aufnahmen; Statistik klein/weit unten), **Bottom-Navigation** (mobil, 5 Tabs), Komponist:innen bereits
   eigener Menüpunkt, vereinheitlichte **Stück-Zeile** (`StueckZeilen`: Karten mobil / Tabelle Desktop,
   in Person-Werke & Band-Stücke). [Block 6/7]
-- **Claim Modell B** (erfassen → später Merge vorschlagen) + Trigger + Verifizierungs-Gate. [Block 3]
-- **`Lokal`-Entität** (+ `LokalAlias` + Merge) für Region-Filter. [Block 4.3]
-- **Wiederkehr-Schleife** (Benachrichtigungen) + **„Demnächst"-Empfehlungen** (Crawler). [Block 4.2/4.3]
+- ✅ **`Lokal`-Entität** (+ `LokalAlias` + Merge + CRUD, Koordinaten/Geocoding/Karte) — umgesetzt;
+  ersetzt den Freitext-Ort, Basis für Distanz. [Block 4.3]
+- ✅ **„Demnächst"-Distanz** — `/konzerte`-Distanzfilter (Standort/PLZ + Radius, Auto-Standort) und
+  km-Anzeige; Startseite datums-sortiert mit dekorativem km, einheitliche `KonzertKarte`. [Block 4.3]
+- ⏳ **Claim Modell B** (erfassen → später **evidenzbasiert** Merge vorschlagen) + Trigger +
+  Verifizierungs-Gate. [Block 3] — **OFFEN.** Bisher nur **Modell A** live (Onboarding „DAS BIN ICH"
+  = Sofort-Claim per `PersonAnspruch`, + „mich neu anlegen" mit Default Zuhörer:in). Der evidenzbasierte
+  Vorschlag („Bist du dieselbe Person wie X?" aus Name + Band + besuchten Konzerten) und das
+  Verifizierungs-Gate für **sichtbare Rollen** (Dirigent:in/Vorstand) fehlen noch. (Hinweis: „Das bin
+  ich" ist derzeit **auto-bestätigt** — temporär.)
+- ⏳ **Wiederkehr-Schleife (Benachrichtigungen)** [Block 4.2] — **OFFEN.** Freundschafts-Mails existieren
+  (`IBenachrichtigungsMail`), aber der Flywheel fehlt: „warst du gestern bei X? → eintragen",
+  „nächste Woche spielt <deine Band>", „neues Video deiner Band", E-Mail-Digest / PWA-Push.
 
 **Phase 2 — Verbreitung starten (wenn Readiness-Checkliste 9.4 erfüllt):**
 - **Band-Admin**-Rolle (`BandAdministrator` + Audit-Log) + **Crawler-Einladung** an offizielle

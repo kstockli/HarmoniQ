@@ -25,11 +25,13 @@
                 <MudItem xs="12" sm="6">
                     <MudNumericField T="double?" @bind-Value="_lokal.Lat" Label="Breitengrad (Lat)"
                                      Variant="Variant.Outlined" Format="0.######" HideSpinButtons="true"
+                                     Min="-90" Max="90"
                                      Culture="@System.Globalization.CultureInfo.InvariantCulture" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudNumericField T="double?" @bind-Value="_lokal.Lng" Label="Längengrad (Lng)"
                                      Variant="Variant.Outlined" Format="0.######" HideSpinButtons="true"
+                                     Min="-180" Max="180"
                                      Culture="@System.Globalization.CultureInfo.InvariantCulture" />
                 </MudItem>
             </MudGrid>

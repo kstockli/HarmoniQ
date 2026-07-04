@@ -68,7 +68,7 @@ else
                          OnClose="StandortZuruecksetzen">Bezugspunkt gesetzt</MudChip>
                 @if (_ausgeblendet > 0)
                 {
-                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">@_ausgeblendet ohne Ortsangabe ausgeblendet</MudText>
+                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">@_ausgeblendet außerhalb Umkreis ausgeblendet (Konzerte ohne Ortsangabe bleiben sichtbar)</MudText>
                 }
             }
             else
@@ -201,18 +201,26 @@ else
         if (_refLat is double rlat && _refLng is double rlng)
         {
             foreach (var k in liste)
-                k.Distanz = (k.Lat is double la && k.Lng is double lo) ? Distanz(rlat, rlng, la, lo) : null;
+                k.Distanz = GueltigeKoord(k.Lat, k.Lng) ? Distanz(rlat, rlng, k.Lat!.Value, k.Lng!.Value) : null;
 
             if (_radiusKm is int r)
             {
                 var davor = liste.Count;
-                liste = liste.Where(k => k.Distanz is double d && d <= r).OrderBy(k => k.Distanz).ToList();
+                // Nur Konzerte mit BEKANNTER Distanz ausserhalb des Radius ausblenden. Konzerte OHNE
+                // (gültige) Koordinaten bleiben sichtbar (ohne km) – sonst gingen bekannte Konzerte verloren.
+                liste = liste.Where(k => k.Distanz is not double d || d <= r)
+                             .OrderBy(k => k.Distanz ?? double.MaxValue)
+                             .ToList();
                 _ausgeblendet = davor - liste.Count;
             }
         }
 
         _gefiltert = liste;
     }
+
+    // Nur plausible Koordinaten verwenden (schützt vor fehlerhaften Daten wie 123/123).
+    private static bool GueltigeKoord(double? lat, double? lng)
+        => lat is double la && lng is double lo && Math.Abs(la) <= 90 && Math.Abs(lo) <= 180;
 
     // Haversine-Distanz in km.
     private static double Distanz(double lat1, double lng1, double lat2, double lng2)
