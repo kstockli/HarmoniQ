@@ -96,9 +96,11 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   statt Sofort-Verknüpfung). [Block 3]
   **Follow-up:** Merge-on-confirm im Admin für gegateten sichtbaren Claim (heute manuell via Person-Merge);
   Signal „besuchte Konzerte" (Tagebuch) als zusätzlicher Trigger (v1 nutzt Band / Instrument+Band).
-- ⏳ **Wiederkehr-Schleife (Benachrichtigungen)** [Block 4.2] — **OFFEN.** Freundschafts-Mails existieren
-  (`IBenachrichtigungsMail`), aber der Flywheel fehlt: „warst du gestern bei X? → eintragen",
-  „nächste Woche spielt <deine Band>", „neues Video deiner Band", E-Mail-Digest / PWA-Push.
+- ⏳ **Wiederkehr-Schleife (Benachrichtigungen)** [Block 4.2] — **v1 ausdiskutiert (2026-07-04),
+  Umsetzung offen.** Freundschafts-Mails existieren (`IBenachrichtigungsMail`), aber der Flywheel fehlt.
+  Beschlossener v1: **ein Wochen-Digest** über **zwei Kanäle (E-Mail + PWA-Push)**, gespeist aus
+  Band-Bezug (Mitgliedschaft ∪ **Folgen** ∪ impliziten Signalen). Details siehe 4.2. Voraussetzung:
+  neue **„Band folgen"-Beziehung** (privat), damit die Schlaufe auch für Zuhörer:innen greift.
 
 **Phase 2 — Verbreitung starten (wenn Readiness-Checkliste 9.4 erfüllt):**
 - **Band-Admin**-Rolle (`BandAdministrator` + Audit-Log) + **Crawler-Einladung** an offizielle
@@ -395,6 +397,41 @@ und/oder **PWA-Push** (PWA-Basis steht, A7). Alles opt-in, frequenzbegrenzt.*
 - **Sozial:** „Dein:e Freund:in war am gleichen Konzert" / Aushilfe-Anfrage / Freundschaftsanfrage.
 - **Flywheel:** *entdecken (Crawler) → besuchen → eintragen (Tagebuch) → Anstoß zum nächsten →
   wiederholen.* Das ist die eigentliche Bindung; einzelne Features sind nur Stationen darin.
+
+**Beschluss v1 (2026-07-04, ausdiskutiert — Umsetzung offen):**
+- **Format:** *ein* **Wochen-Digest** („Deine Woche in der Blasmusik", z. B. So-Abend), gebündelt statt
+  ereignisgesteuert → einfaches Frequenz-Cap (max. 1/Woche), geringstes Abmelde-Risiko.
+- **Kanäle:** **E-Mail + PWA-Push** (beide v1). *Eine* Digest-Zusammenstellung, zwei Kanal-Adapter.
+  Push braucht zusätzlich: Service-Worker-Push-Handler, gespeicherte `PushSubscription`, **VAPID-Keys**,
+  Web-Push-Lib (iOS: „zum Homescreen").
+- **Trigger v1** (alle band-/follow-basiert, kein Zwang zu Geocoding):
+  - **B** Tagebuch-Nudge: Konzert deiner/gefolgter Band letzte Woche **ohne** eigenen KonzertBesuch →
+    „Warst du dabei? → eintragen." (Herz von Phase 1: füllt Tagebuch + Claim-Evidenz.)
+  - **C** „Neues Video deiner/gefolgter Band" (nutzt Video-`createtime` + Band-Bezug).
+  - **A** „Kommende Konzerte deiner/gefolgter Bands" — durch **Folgen** erst für Zuhörer:innen sinnvoll.
+  - **F** „Konzerte in deiner Nähe" (Crawler-Funde): Nähe aus **privat gespeichertem, vergröbertem
+    letztem Standort** der Person (opt-in) bzw. Fallback **Heimat-PLZ**; sonst aus den Orten der
+    Band-/Follow-Konzerte. (Server-Job hat keinen localStorage-Standort → braucht dieses private Datum.)
+- **Neue „Band folgen"-Beziehung** `BandInteresse` (Person ↔ Band, **privat**, kein öffentlicher
+  Fan-Zähler, **kein** Roster-Eintrag): „Band folgen"-Button auf der Band-Seite + „Bands, denen ich
+  folge" unter „Meine Person". Trigger-Quelle = **Mitgliedschaft ∪ Follow ∪ implizit** (≥2 besuchte
+  Konzerte / hoch bewertetes Stück der Band). Mitgliedschaft impliziert Folgen (Union).
+- **Consent (DSG):** Opt-in **beim Onboarding, Default an**, klar beschriftet, granulare
+  Präferenzseite unter „Konto", **tokenbasierte One-Click-Abmeldung** (ohne Login).
+- **Kanäle unabhängig wählbar (wichtig):** E-Mail und PWA-Push sind **getrennte Schalter** — der User
+  kann **nur Push** (Infos aufs Smartphone), **nur E-Mail**, **beides** oder **keins** wählen. Die
+  Digest-Zusammenstellung ist kanal-neutral; jeder aktive Kanal-Adapter versendet sie eigenständig.
+  Präferenz-Struktur daher **pro Kanal** (nicht ein globales Ein/Aus): `EmailAktiv` / `PushAktiv`
+  (später ausbaubar zu Toggles pro Trigger-Typ). Push wählbar erst, wenn auf dem Gerät eine
+  Push-Berechtigung erteilt/`PushSubscription` vorhanden ist; die One-Click-Abmeldung im Mail-Footer
+  betrifft nur den E-Mail-Kanal.
+- **Architektur:** geplanter Hintergrund-Job (täglich, sendet pro User nur bei fälliger Kadenz +
+  Opt-in + vorhandenem Inhalt) → Digest-Zusammenstellung → **`BenachrichtigungGesendet`-Log**
+  (User, Typ, EntitätsId) gegen Wiederholung/Leer-Digests → Versand über bestehende Mail-Infra + Push.
+- **Neue Daten (bei Umsetzung migrieren, dann `Spezifikation.md` synchronisieren):** `BandInteresse`;
+  privater vergröberter Person-Standort + Heimat-PLZ (opt-in); Benachrichtigungs-Präferenzen;
+  `BenachrichtigungGesendet`; `PushSubscription`.
+- **Prod-Hinweis E-Mail:** Deliverability braucht korrektes **SPF/DKIM** auf der Domain (sonst Spam).
 
 ### 4.3 Crawler-Konzert-Empfehlungen „Was als Nächstes besuchen?" (User-Idee 2026-06-29)
 Der Crawler findet ohnehin **kommende Konzerte** (KKL/EMF/Vereinsseiten). Daraus eine

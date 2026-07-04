@@ -414,6 +414,28 @@ BandMitgliedschaft                  (Person ↔ Band über die Zeit, alles optio
 > Band-Funktionen sind vielfältiger (Vorstand, Registerleitung …). `StimmeId` wurde weggelassen
 > (für eine Mitgliedschaft i. d. R. nicht relevant; Stimmen gehören zur konkreten VideoMitwirkung).
 
+BandInteresse                       (Person „folgt" Band – privat, KEIN Roster-Eintrag) — UMGESETZT
+├── Id (Guid)
+├── PersonId (FK → Person)          ← wer folgt (die verknüpfte Person des Kontos)
+├── BandId (FK → Band)
+└── (Audit: CreateTime/CreateUser/… via AuditierteEntitaet)
+   • Eindeutig pro (PersonId, BandId).
+
+> **Zweck & Abgrenzung:** `BandInteresse` ist die leichte „Fan/Folgen"-Beziehung für die
+> **Wiederkehr-Schleife** (UX-Spec 4.2). Im Gegensatz zur `BandMitgliedschaft` erscheint sie **nicht**
+> im Band-Roster und ist **privat** (nur die folgende Person sieht sie; kein öffentlicher Fan-Zähler).
+> Sie erlaubt v. a. **Zuhörer:innen** (die selten Bandmitglied sind), Neuigkeiten einer Band zu
+> erhalten. Trigger-Quelle der Benachrichtigungen = **Mitgliedschaft ∪ Folgen ∪ implizit**
+> (≥2 besuchte Konzerte / hoch bewertetes Stück der Band). Mitgliedschaft impliziert Folgen (Union),
+> es braucht dafür keinen zusätzlichen `BandInteresse`-Eintrag.
+
+> **Wiederkehr-Schleife – weitere geplante Entitäten (Details UX-Spec 4.2, noch NICHT umgesetzt):**
+> `BenachrichtigungPraeferenz` (pro Konto, Kanäle **unabhängig**: `EmailAktiv`/`PushAktiv`, Default an),
+> `BenachrichtigungGesendet` (Dedup-Log: Konto, Typ, EntitätsId, Zeit), `PushSubscription` (Endpoint +
+> Keys für Web-Push/VAPID), sowie an `Person` ein privater, **vergröberter** letzter Standort + optionale
+> **Heimat-PLZ** (opt-in, für den serverseitigen „in deiner Nähe"-Digest, da der Job keinen
+> localStorage-Standort hat).
+
 BandbeitrittAntrag                  (Vorschlag „Band beitreten" – UMGESETZT)
 ├── Id (Guid)
 ├── PersonId (FK)

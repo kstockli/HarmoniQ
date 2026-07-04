@@ -167,6 +167,10 @@ else
                    StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="BandVorschlagen">
             Band beitreten
         </MudButton>
+        <MudText Typo="Typo.caption" Class="d-block mt-3" Style="color:#A78FC0;">
+            Bands, denen du <b>folgst</b> (ohne Mitglied zu sein), findest du unter
+            <MudLink Href="/account/freunde">Mein Netzwerk</MudLink>.
+        </MudText>
     </MudPaper>
     }
 }
@@ -272,6 +276,7 @@ else
             .OrderBy(a => a.Band.Name)
             .Select(a => a.Band.Name)
             .ToListAsync();
+
     }
 
     private async Task BandVorschlagen()

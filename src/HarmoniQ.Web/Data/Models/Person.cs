@@ -28,6 +28,8 @@ public class Person : AuditierteEntitaet
     public ICollection<StueckBeitrag> StueckBeitraege { get; set; } = [];
     public ICollection<VideoMitwirkung> Mitwirkungen { get; set; } = [];
     public ICollection<BandMitgliedschaft> Bandmitgliedschaften { get; set; } = [];
+    /// <summary>Bands, denen diese Person „folgt" (privat, kein Roster-Eintrag) – UX-Spec 4.2.</summary>
+    public ICollection<BandInteresse> GefolgteBands { get; set; } = [];
     /// <summary>Alternative Namen derselben Person (für Find-or-create &amp; Merge).</summary>
     public ICollection<PersonAlias> Aliase { get; set; } = [];
 

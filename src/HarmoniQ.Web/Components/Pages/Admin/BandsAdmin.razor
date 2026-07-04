@@ -3,6 +3,7 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IDialogService DialogService
@@ -24,11 +25,29 @@
                StartIcon="@Icons.Material.Filled.Add" OnClick="Neu">Neu</MudButton>
 </MudStack>
 
-<MudDataGrid T="Band" Items="_items" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+@* ── Filter ──────────────────────────────────────────────────────── *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-3" Wrap="Wrap.Wrap">
+    <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name / Land)"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="flex:1;min-width:220px;" />
+    <MudSelect T="BandKategorie?" @bind-Value="_kategorie" @bind-Value:after="Filtern" Label="Kategorie"
+               Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Style="min-width:200px;">
+        @foreach (var k in Enum.GetValues<BandKategorie>())
+        {
+            <MudSelectItem T="BandKategorie?" Value="@k">@KategorieLabel(k)</MudSelectItem>
+        }
+    </MudSelect>
+    <MudCheckBox T="bool" @bind-Value="_nurOhneVideos" @bind-Value:after="Filtern"
+                 Label="Nur ohne Videos" Color="Color.Primary" />
+</MudStack>
+
+<MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
     <Columns>
-        <PropertyColumn Property="b => b.Name" Title="Name" />
-        <PropertyColumn Property="b => b.Land" Title="Land" />
-        <TemplateColumn Title="Videos"><CellTemplate>@context.Item.Videos.Count</CellTemplate></TemplateColumn>
+        <PropertyColumn Property="z => z.Name" Title="Name" />
+        <PropertyColumn Property="z => z.Land" Title="Land" />
+        <TemplateColumn Title="Kategorie" Sortable="false"><CellTemplate>@(context.Item.Kategorie is { } k ? KategorieLabel(k) : "")</CellTemplate></TemplateColumn>
+        <PropertyColumn Property="z => z.VideoAnzahl" Title="Videos" />
+        <PropertyColumn Property="z => z.FolgtAnzahl" Title="Folgen" />
         @if (_zeigeAudit)
         {
             <TemplateColumn Title="Erstellt" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.CreateTime)@AuditFormat.Wer(context.Item.CreateUser)</span></CellTemplate></TemplateColumn>
@@ -38,15 +57,22 @@
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                title="Bearbeiten (Stammdaten & Mitglieder)" Href="@($"/admin/bands/{context.Item.Id}")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Merge" Size="Size.Small" Style="color:#9B59B6;"
+                               title="Zusammenführen" OnClick="@(() => Zusammenfuehren(context.Item))" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                               OnClick="@(() => Loeschen(context.Item))" />
+                               title="Löschen" OnClick="@(() => Loeschen(context.Item))" />
             </CellTemplate>
         </TemplateColumn>
     </Columns>
 </MudDataGrid>
+<MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count</MudText>
 
 @code {
-    private List<Band> _items = [];
+    private List<Zeile> _alle = [];
+    private List<Zeile> _gefiltert = [];
+    private string _suche = "";
+    private BandKategorie? _kategorie;
+    private bool _nurOhneVideos;
     private bool _zeigeAudit;
 
     protected override async Task OnInitializedAsync() => await Laden();
@@ -54,7 +80,23 @@
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _items = await db.Bands.Include(b => b.Videos).OrderBy(b => b.Name).ToListAsync();
+        _alle = await db.Bands.OrderBy(b => b.Name)
+            .Select(b => new Zeile(b.Id, b.Name, b.Land, b.Kategorie, b.Videos.Count, b.Interessenten.Count,
+                b.CreateTime, b.CreateUser, b.ModifyTime, b.ModifyUser))
+            .ToListAsync();
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = _alle
+            .Where(z => (!_nurOhneVideos || z.VideoAnzahl == 0)
+                && (_kategorie == null || z.Kategorie == _kategorie)
+                && (s.Length == 0
+                    || z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                    || (z.Land ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
     }
 
     // „Neu" legt die Band per Dialog an und öffnet dann die Detailseite (Stammdaten + Mitglieder).
@@ -74,13 +116,31 @@
         Nav.NavigateTo($"/admin/bands/{model.Id}");
     }
 
-    private async Task Loeschen(Band b)
+    private async Task Zusammenfuehren(Zeile quelle)
     {
-        var hatVideos = b.Videos.Count;
+        var parameters = new DialogParameters<BandMergeDialog>
+        {
+            { x => x.QuelleId, quelle.Id },
+            { x => x.QuelleName, quelle.Name }
+        };
+        var dialog = await DialogService.ShowAsync<BandMergeDialog>("Band zusammenführen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: Guid zielId })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var (ok, meldung) = await BandMergeService.MergeAsync(db, quelle.Id, zielId);
+            Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+            if (ok) await Laden();
+        }
+    }
+
+    private async Task Loeschen(Zeile b)
+    {
         var parameters = new DialogParameters<ConfirmDialog>
         {
-            { x => x.Text, hatVideos > 0
-                ? $"Band \"{b.Name}\" wird gelöscht. Die {hatVideos} zugeordneten Videos bleiben erhalten (Band wird entfernt)."
+            { x => x.Text, b.VideoAnzahl > 0
+                ? $"Band \"{b.Name}\" wird gelöscht. Die {b.VideoAnzahl} zugeordneten Videos bleiben erhalten (Band wird entfernt)."
                 : $"Band \"{b.Name}\" löschen?" }
         };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
@@ -100,4 +160,19 @@
         }
         await Laden();
     }
+
+    private static string KategorieLabel(BandKategorie k) => k switch
+    {
+        BandKategorie.Harmonie => "Harmonie",
+        BandKategorie.Brassband => "Brassband",
+        BandKategorie.Fanfare => "Fanfare",
+        BandKategorie.Unterhaltung => "Unterhaltung",
+        BandKategorie.JugendmusikHarmonie => "Jugendmusik Harmonie",
+        BandKategorie.JugendmusikBrassband => "Jugendmusik Brassband",
+        BandKategorie.Blaeserensemble => "Bläserensemble",
+        _ => "Sonstige"
+    };
+
+    private record Zeile(Guid Id, string Name, string? Land, BandKategorie? Kategorie, int VideoAnzahl,
+        int FolgtAnzahl, DateTime? CreateTime, string? CreateUser, DateTime? ModifyTime, string? ModifyUser);
 }

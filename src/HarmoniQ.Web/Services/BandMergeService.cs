@@ -62,6 +62,15 @@ public static class BandMergeService
         foreach (var a in await db.BandbeitrittAntraege.Where(a => a.BandId == quelleId).ToListAsync())
             a.BandId = zielId;
 
+        // ── BandInteresse (Folgen): umhängen, Dublette (gleiche Person) verwerfen ──
+        var zielInteressenten = await db.BandInteressen.Where(i => i.BandId == zielId)
+            .Select(i => i.PersonId).ToHashSetAsync();
+        foreach (var i in await db.BandInteressen.Where(i => i.BandId == quelleId).ToListAsync())
+        {
+            if (zielInteressenten.Contains(i.PersonId)) db.BandInteressen.Remove(i);
+            else { i.BandId = zielId; zielInteressenten.Add(i.PersonId); }
+        }
+
         // ── Stammdaten-Lücken der Ziel-Band aus der Quelle füllen ─────────────
         ziel.Land ??= quelle.Land;
         ziel.Webseite ??= quelle.Webseite;

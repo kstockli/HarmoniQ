@@ -33,6 +33,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<BandMitgliedschaft> BandMitgliedschaften => Set<BandMitgliedschaft>();
     public DbSet<PersonAnspruch> PersonAnsprueche => Set<PersonAnspruch>();
     public DbSet<BandbeitrittAntrag> BandbeitrittAntraege => Set<BandbeitrittAntrag>();
+    public DbSet<BandInteresse> BandInteressen => Set<BandInteresse>();
 
     // Phase 8 – Vernetzung & Konzerte
     public DbSet<Konzert> Konzerte => Set<Konzert>();
@@ -211,6 +212,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasOne(m => m.Instrument).WithMany()
                 .HasForeignKey(m => m.InstrumentId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(m => new { m.BandId, m.PersonId });
+        });
+
+        // BandInteresse (Person „folgt" Band – privat, UX-Spec 4.2)
+        builder.Entity<BandInteresse>(e =>
+        {
+            // Clientseitiger Guid-Key → ValueGeneratedNever (wie BandAlias/BandLink): sonst hält EF
+            // die Zeile für vorhanden und macht UPDATE statt INSERT.
+            e.Property(i => i.Id).ValueGeneratedNever();
+            e.HasOne(i => i.Person).WithMany(p => p.GefolgteBands)
+                .HasForeignKey(i => i.PersonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.Band).WithMany(b => b.Interessenten)
+                .HasForeignKey(i => i.BandId).OnDelete(DeleteBehavior.Cascade);
+            // Eine Person folgt einer Band höchstens einmal.
+            e.HasIndex(i => new { i.PersonId, i.BandId }).IsUnique();
         });
 
         builder.Entity<PersonAnspruch>(e =>

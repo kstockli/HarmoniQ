@@ -270,6 +270,29 @@ else
         }
     </MudPaper>
 
+    @* ── Interessent:innen (Folgen, UX-Spec 4.2) ──────────────────── *@
+    <MudPaper Class="pa-4 mt-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">Interessent:innen – folgen (@_interessenten.Count)</MudText>
+        <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
+            Personen, die dieser Band „folgen" (privat, kein Roster-Eintrag) und Neuigkeiten über die
+            Wiederkehr-Schleife erhalten. Aktive/ehemalige Mitglieder folgen ohnehin (hier nicht doppelt gezählt).
+        </MudText>
+        @if (_interessenten.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color:#6f5a86;">Niemand folgt dieser Band (ausser Mitgliedern).</MudText>
+        }
+        else
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                @foreach (var p in _interessenten)
+                {
+                    <MudChip T="string" Size="Size.Small" Href="@($"/personen/{p.PersonId}")"
+                             Style="background:#103d36; color:#1ABC9C;">@p.Name</MudChip>
+                }
+            </MudStack>
+        }
+    </MudPaper>
+
     <AuditInfo CreateTime="@_band.CreateTime" CreateUser="@_band.CreateUser"
                ModifyTime="@_band.ModifyTime" ModifyUser="@_band.ModifyUser" />
 }
@@ -288,6 +311,7 @@ else
     private List<AliasZeile> _aliase = [];
     private List<KonzertZeile> _konzerte = [];
     private List<VideoZeile> _videos = [];
+    private List<(Guid PersonId, string Name)> _interessenten = [];
     private string? _neuerAlias;
     private List<string> _personNamen = [];
     private List<string> _instrumentNamen = [];
@@ -337,6 +361,14 @@ else
             .Select(m => new Zeile(m.Id, m.PersonId, m.Person.Name,
                 m.Instrument != null ? m.Instrument.Name : null,
                 m.Funktion, m.VonJahr, m.BisJahr))
+            .ToListAsync();
+
+        // Folgende Personen (ohne Mitglieder – die folgen implizit).
+        _interessenten = await db.BandInteressen
+            .Where(i => i.BandId == BandId && !db.BandMitgliedschaften
+                .Any(m => m.BandId == BandId && m.PersonId == i.PersonId))
+            .OrderBy(i => i.Person.Name)
+            .Select(i => new ValueTuple<Guid, string>(i.PersonId, i.Person.Name))
             .ToListAsync();
 
         _personNamen = await db.Personen.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();

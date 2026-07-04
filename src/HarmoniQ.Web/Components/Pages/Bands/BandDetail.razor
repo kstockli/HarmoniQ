@@ -7,6 +7,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
 
 <PageTitle>@(_band?.Name ?? "Band") – HarmoniQ</PageTitle>
 
@@ -53,6 +54,24 @@ else
             }
         </div>
     </MudStack>
+
+    @* „Band folgen" (UX-Spec 4.2): private Fan-Beziehung für die Wiederkehr-Schleife. *@
+    @if (_personId != null && !_istMitglied)
+    {
+        <MudButton Class="mb-4" Variant="@(_folgt ? Variant.Outlined : Variant.Filled)"
+                   Style="@(_folgt ? "color:#1ABC9C;border-color:#1ABC9C;" : "background:#1ABC9C;color:#0e0018;")"
+                   StartIcon="@(_folgt ? Icons.Material.Filled.NotificationsActive : Icons.Material.Filled.NotificationsNone)"
+                   OnClick="FolgenUmschalten" Disabled="_folgenLaeuft">
+            @(_folgt ? "Folge ich" : "Band folgen")
+        </MudButton>
+    }
+    else if (_istMitglied)
+    {
+        <MudChip T="string" Class="mb-4" Icon="@Icons.Material.Filled.Groups"
+                 Style="background:#103d36; color:#1ABC9C;">
+            Du spielst in dieser Band – du erhältst ihre Neuigkeiten automatisch.
+        </MudChip>
+    }
 
     @if (!string.IsNullOrWhiteSpace(_band.Geschichte))
     {
@@ -225,6 +244,10 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private Band? _band;
+    private Guid? _personId;
+    private bool _folgt;
+    private bool _istMitglied;
+    private bool _folgenLaeuft;
     private List<string> _aliase = [];
     private List<VideoZeile> _videos = [];
     private List<StueckZeile> _stuecke = [];
@@ -310,6 +333,15 @@ else
 
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        // Folgen-Status (UX-Spec 4.2): nur für die verknüpfte Person; Mitgliedschaft impliziert Folgen.
+        _personId = await BandFolgenService.PersonIdAsync(db, userId);
+        if (_personId is { } pid)
+        {
+            _istMitglied = await BandFolgenService.IstMitgliedAsync(db, pid, Id);
+            _folgt = !_istMitglied && await BandFolgenService.FolgtAsync(db, pid, Id);
+        }
+
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
         var heuer = DateTime.Now.Year;
 
@@ -334,6 +366,17 @@ else
             .GroupBy(m => m.Instrument ?? "Ohne Instrument")
             .OrderBy(g => g.Key)
             .ToList();
+    }
+
+    private async Task FolgenUmschalten()
+    {
+        if (_personId is not { } pid || _folgenLaeuft) return;
+        _folgenLaeuft = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _folgt = await BandFolgenService.UmschaltenAsync(db, pid, Id);
+        _folgenLaeuft = false;
+        Snackbar.Add(_folgt ? $"Du folgst „{_band?.Name}\" jetzt." : $"Du folgst „{_band?.Name}\" nicht mehr.",
+            _folgt ? Severity.Success : Severity.Info);
     }
 
     private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel, Guid StueckId, string StueckTitel);

@@ -20,6 +20,8 @@ public class Band : AuditierteEntitaet
 
     public ICollection<Video> Videos { get; set; } = [];
     public ICollection<BandMitgliedschaft> Mitgliedschaften { get; set; } = [];
+    /// <summary>Personen, die dieser Band „folgen" (privat) – UX-Spec 4.2.</summary>
+    public ICollection<BandInteresse> Interessenten { get; set; } = [];
     public ICollection<KonzertBand> Konzertteilnahmen { get; set; } = [];
     public ICollection<BandAlias> Aliase { get; set; } = [];
     public ICollection<BandLink> Links { get; set; } = [];

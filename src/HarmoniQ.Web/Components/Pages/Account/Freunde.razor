@@ -1,4 +1,5 @@
 @page "/account/freunde"
+@page "/account/netzwerk"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
@@ -11,9 +12,9 @@
 @inject IBenachrichtigungsMail Mail
 @inject NavigationManager Nav
 
-<PageTitle>Freunde – HarmoniQ</PageTitle>
+<PageTitle>Mein Netzwerk – HarmoniQ</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Freunde</MudText>
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Mein Netzwerk</MudText>
 
 @if (!_geladen)
 {
@@ -86,6 +87,28 @@ else
                     }
                 </MudPaper>
             }
+
+            @* Bands, denen ich folge (privat, UX-Spec 4.2) – Abo-Übersicht (Feed liegt auf der Startseite). *@
+            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C;">
+                <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">Bands, denen ich folge (@_gefolgteBands.Count)</MudText>
+                @if (_gefolgteBands.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                        Du folgst noch keiner Band. Auf einer <MudLink Href="/bands">Band-Seite</MudLink> kannst du
+                        mit „Band folgen" ihre Neuigkeiten abonnieren – auch ohne Mitglied zu sein.
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                        @foreach (var b in _gefolgteBands)
+                        {
+                            <MudChip T="string" Size="Size.Small" OnClose="@(() => Entfolgen(b.BandId))"
+                                     Href="@($"/bands/{b.BandId}")" Style="background:#103d36; color:#1ABC9C;">@b.Name</MudChip>
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
         </MudItem>
 
         <MudItem xs="12" md="7">
@@ -102,6 +125,7 @@ else
     private List<Zeile> _eingehend = [];
     private List<Zeile> _ausgehend = [];
     private List<Zeile> _freunde = [];
+    private List<(Guid BandId, string Name)> _gefolgteBands = [];
 
     protected override async Task OnInitializedAsync() => await Laden();
 
@@ -144,8 +168,25 @@ else
                     : new Zeile(f.Id, f.AnfragerPersonId, f.AnfragerName))
                 .OrderBy(z => z.Name)
                 .ToList();
+
+            // Gefolgte Bands (ohne Mitglieds-Bands – die folgen implizit).
+            _gefolgteBands = await db.BandInteressen
+                .Where(i => i.PersonId == me && !db.BandMitgliedschaften
+                    .Any(m => m.PersonId == me && m.BandId == i.BandId))
+                .OrderBy(i => i.Band.Name)
+                .Select(i => new ValueTuple<Guid, string>(i.BandId, i.Band.Name))
+                .ToListAsync();
         }
         _geladen = true;
+    }
+
+    private async Task Entfolgen(Guid bandId)
+    {
+        if (_meineId is not Guid me) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await BandFolgenService.UmschaltenAsync(db, me, bandId);
+        await Laden();
+        Snackbar.Add("Du folgst dieser Band nicht mehr.", Severity.Info);
     }
 
     private async Task Bestaetigen(Guid id)
