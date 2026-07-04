@@ -1,0 +1,57 @@
+@inject NavigationManager Nav
+
+@* Einheitliche Konzert-Karte (Mobil-Liste + Startseiten-„Demnächst"). Minimale Labels,
+   klar abgegrenzt, ganze Karte klickbar. Layout je nach Band-Anzahl (≤3 / >3). *@
+<MudPaper Class="pa-3 cursor-pointer" Elevation="3"
+          Style="background:#1a0030; border:1px solid #3a1060; border-left:4px solid #1ABC9C;"
+          @onclick="@(() => Nav.NavigateTo($"/konzerte/{Id}"))">
+    @if (BandNamen.Count <= 3)
+    {
+        <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+            @Kopf@(BandNamen.Count > 0 ? " · " + string.Join(", ", BandNamen) : "")
+        </MudText>
+        <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;font-weight:600;line-height:1.2;">@Titel</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Style="color:#A78FC0;">@Kopf</MudText>
+        <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;font-weight:600;line-height:1.2;">@Titel</MudText>
+        <MudText Typo="Typo.body2" Style="color:#C4B0D8;">@BandMobil</MudText>
+    }
+    @if (!string.IsNullOrWhiteSpace(Ort) || Distanz is not null)
+    {
+        <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@OrtMitKm</MudText>
+    }
+    @if (VideoAnzahl > 0)
+    {
+        <MudText Typo="Typo.caption" Style="color:#D4AF37;">▶ @VideoAnzahl Video@(VideoAnzahl == 1 ? "" : "s")</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Guid Id { get; set; }
+    [Parameter, EditorRequired] public DateOnly Datum { get; set; }
+    [Parameter, EditorRequired] public string Titel { get; set; } = "";
+    [Parameter] public List<string> BandNamen { get; set; } = [];
+    [Parameter] public string? Ort { get; set; }
+    [Parameter] public double? Distanz { get; set; }
+    [Parameter] public int VideoAnzahl { get; set; }
+    /// <summary>Optional („morgen", „in 9 Tagen") – für die Startseiten-„Demnächst"-Ansicht.</summary>
+    [Parameter] public string? RelativLabel { get; set; }
+
+    // Kopf-Zeile: [Relativ ·] Datum
+    private string Kopf =>
+        (string.IsNullOrWhiteSpace(RelativLabel) ? "" : RelativLabel + " · ") + Datum.ToString("dd.MM.yyyy");
+
+    private string OrtMitKm
+    {
+        get
+        {
+            var o = Ort ?? "";
+            if (Distanz is double d) o = o.Length > 0 ? $"{o} ({d:0} km)" : $"{d:0} km";
+            return o;
+        }
+    }
+
+    private string BandMobil => string.Join(", ", BandNamen.Take(3)) + $" + {BandNamen.Count - 3} weitere";
+}

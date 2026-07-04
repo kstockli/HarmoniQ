@@ -84,31 +84,45 @@ else
     }
     else
     {
-        <MudDataGrid T="KonzertZeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single"
-                     Style="background:#1a0030;" RowClick="@(args => Nav.NavigateTo($"/konzerte/{args.Item.Id}"))">
-            <Columns>
-                <TemplateColumn Title="Datum" SortBy="@(k => k.Datum)">
-                    <CellTemplate>@context.Item.Datum.ToString("dd.MM.yyyy")</CellTemplate>
-                </TemplateColumn>
-                <TemplateColumn Title="Konzert" SortBy="@(k => k.Titel)">
-                    <CellTemplate>
-                        <MudLink Href="@($"/konzerte/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
-                                 Underline="Underline.Hover">@context.Item.Titel</MudLink>
-                    </CellTemplate>
-                </TemplateColumn>
-                <PropertyColumn Property="k => k.Ort" Title="Ort" />
-                @if (_refLat is not null)
-                {
-                    <TemplateColumn Title="Entfernung" SortBy="@(k => k.Distanz ?? double.MaxValue)">
+        @* ── Desktop (md+): Tabelle ─────────────────────────────────────── *@
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudDataGrid T="KonzertZeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single"
+                         Style="background:#1a0030;" RowClick="@(args => Nav.NavigateTo($"/konzerte/{args.Item.Id}"))">
+                <Columns>
+                    <TemplateColumn Title="Datum" SortBy="@(k => k.Datum)">
+                        <CellTemplate>@context.Item.Datum.ToString("dd.MM.yyyy")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Konzert" SortBy="@(k => k.Titel)">
                         <CellTemplate>
-                            @(context.Item.Distanz is double d ? $"{d:0} km" : "–")
+                            <MudLink Href="@($"/konzerte/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                                     Underline="Underline.Hover">@context.Item.Titel</MudLink>
                         </CellTemplate>
                     </TemplateColumn>
+                    <PropertyColumn Property="k => k.Ort" Title="Ort" />
+                    @if (_refLat is not null)
+                    {
+                        <TemplateColumn Title="Entfernung" SortBy="@(k => k.Distanz ?? double.MaxValue)">
+                            <CellTemplate>
+                                @(context.Item.Distanz is double d ? $"{d:0} km" : "–")
+                            </CellTemplate>
+                        </TemplateColumn>
+                    }
+                    <PropertyColumn Property="k => k.BandAnzeige" Title="Bands" />
+                    <PropertyColumn Property="k => k.VideoAnzahl" Title="Videos" />
+                </Columns>
+            </MudDataGrid>
+        </MudHidden>
+
+        @* ── Smartphone (bis sm): klar getrennte Karten, minimale Labels ──── *@
+        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+            <MudStack Spacing="3">
+                @foreach (var k in _gefiltert)
+                {
+                    <KonzertKarte Id="k.Id" Datum="k.Datum" Titel="@k.Titel" BandNamen="k.BandNamen"
+                                  Ort="@k.Ort" Distanz="k.Distanz" VideoAnzahl="k.VideoAnzahl" />
                 }
-                <PropertyColumn Property="k => k.BandAnzeige" Title="Bands" />
-                <PropertyColumn Property="k => k.VideoAnzahl" Title="Videos" />
-            </Columns>
-        </MudDataGrid>
+            </MudStack>
+        </MudHidden>
     }
 }
 
@@ -144,7 +158,7 @@ else
             .ToListAsync();
         _alle = roh
             .Select(k => new KonzertZeile(k.Id, k.Datum, k.Name, k.Ort, BandAnzeigeText(k.BandNamen), k.VideoAnzahl)
-            { Lat = k.Lat, Lng = k.Lng })
+            { Lat = k.Lat, Lng = k.Lng, BandNamen = k.BandNamen })
             .ToList();
         Filtern();
     }
@@ -268,11 +282,13 @@ else
         return string.Join(", ", namen.Take(3)) + $" +{namen.Count - 3}";
     }
 
+
     private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort, string BandAnzeige, int VideoAnzahl)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
         public double? Lat { get; init; }
         public double? Lng { get; init; }
         public double? Distanz { get; set; }   // je Bezugspunkt berechnet
+        public List<string> BandNamen { get; init; } = [];
     }
 }

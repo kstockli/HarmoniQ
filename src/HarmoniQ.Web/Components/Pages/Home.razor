@@ -117,22 +117,9 @@
             @foreach (var k in _kalender)
             {
                 <MudItem xs="12" sm="6" md="4">
-                    <MudPaper Class="pa-3 cursor-pointer" Elevation="2"
-                              Style="@($"background:#241640; border-left:4px solid {(k.IstHeute ? "#D4AF37" : k.IstVergangen ? "#6f5a86" : "#1ABC9C")};")"
-                              @onclick="@(() => Nav.NavigateTo($"/konzerte/{k.Id}"))">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                            <div style="text-align:center;min-width:48px;">
-                                <MudText Typo="Typo.h5" Style="color:#F0E6FF;line-height:1;">@k.Datum.Day</MudText>
-                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">@k.Datum.ToString("MMM")</MudText>
-                            </div>
-                            <div style="flex:1;min-width:0;">
-                                <MudText Typo="Typo.subtitle2" Style="color:#F0E6FF;">@k.Titel</MudText>
-                                <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                                    @k.RelativLabel@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")@(k.Distanz is double d ? $" · {d:0} km" : "")
-                                </MudText>
-                            </div>
-                        </MudStack>
-                    </MudPaper>
+                    <KonzertKarte Id="k.Id" Datum="k.Datum" Titel="@k.Titel" BandNamen="k.BandNamen"
+                                  Ort="@k.Ort" Distanz="k.Distanz" VideoAnzahl="k.VideoAnzahl"
+                                  RelativLabel="@k.RelativLabel" />
                 </MudItem>
             }
         </MudGrid>
@@ -470,14 +457,16 @@
                 k.Id, k.Datum, k.Name,
                 Ort = k.Lokal != null ? k.Lokal.Name : k.Ort,
                 Lat = k.Lokal != null ? k.Lokal.Lat : null,
-                Lng = k.Lokal != null ? k.Lokal.Lng : null
+                Lng = k.Lokal != null ? k.Lokal.Lng : null,
+                BandNamen = k.Bands.OrderBy(b => b.Band.Name).Select(b => b.Band.Name).ToList(),
+                VideoAnzahl = k.Videos.Count(v => v.Status == VideoStatus.Genehmigt)
             })
             .Take(6)
             .ToListAsync();
         return konzerte
             .Select(k => new KalenderZeile(k.Id, k.Datum, k.Name, k.Ort,
                 RelativLabel(k.Datum, heute), k.Datum == heute, k.Datum < heute)
-            { Lat = k.Lat, Lng = k.Lng })
+            { Lat = k.Lat, Lng = k.Lng, BandNamen = k.BandNamen, VideoAnzahl = k.VideoAnzahl })
             .ToList();
     }
 
@@ -615,5 +604,7 @@
         public double? Lat { get; init; }
         public double? Lng { get; init; }
         public double? Distanz { get; set; }   // dekorativ, nur wenn Bezugspunkt bekannt
+        public List<string> BandNamen { get; init; } = [];
+        public int VideoAnzahl { get; init; }
     }
 }
