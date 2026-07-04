@@ -14,18 +14,12 @@
 
 <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Wer bist du?</MudText>
 
+@* Der frühere Onboarding-Zwischenschritt (Namens-Dialog) entfällt: „Meine Person" zeigt das Profil-
+   Formular direkt und legt beim Speichern die eigene Person an. Diese Seite leitet nur noch weiter
+   (bestehende Links/Buttons bleiben so gültig). Ausnahme: ein offener „Das bin ich"-Anspruch. *@
 @if (!_geladen)
 {
     <MudProgressCircular Indeterminate="true" />
-}
-else if (_bereitsVerknuepft)
-{
-    <MudAlert Severity="Severity.Success" Class="mb-2">
-        Dein Konto ist bereits mit einer Person verknüpft.
-    </MudAlert>
-    <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Href="/account/person">
-        Zu „Meine Person“
-    </MudButton>
 }
 else if (_offenerAnspruch != null)
 {
@@ -34,87 +28,11 @@ else if (_offenerAnspruch != null)
         Sobald er genehmigt ist, kannst du dein Profil unter <MudLink Href="/account/person">Meine Person</MudLink> pflegen.
     </MudAlert>
 }
-else
-{
-    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0; max-width:640px;">
-        Verknüpfe dein Konto mit „deiner“ Person, damit du dein Profil pflegen und dich vernetzen kannst.
-        Wähle deine Band und tippe deinen Namen – vielleicht bist du schon erfasst. Wenn nicht, legen wir dich neu an.
-    </MudText>
-
-    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:640px;">
-        <MudGrid Spacing="3">
-            <MudItem xs="12" sm="6">
-                <MudAutocomplete T="BandOpt" Label="Deine Band (optional)" Variant="Variant.Outlined"
-                                 Value="_band" ValueChanged="OnBandChanged" SearchFunc="SucheBand"
-                                 ToStringFunc="@(b => b?.Name ?? "")" Clearable="true" MaxItems="20"
-                                 ResetValueOnEmptyText="true" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_name" @bind-Value:after="KandidatenAktualisieren" Immediate="true"
-                              Label="Dein Name" Variant="Variant.Outlined" Placeholder="Vor- und Nachname" />
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-
-    @if (_name.Trim().Length >= 2)
-    {
-        <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:640px;">
-            <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color:#F0E6FF;">Bist du eine dieser Personen?</MudText>
-            @if (_kandidaten.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine passende Person gefunden.</MudText>
-            }
-            else
-            {
-                <MudList T="string" Dense="true">
-                    @foreach (var k in _kandidaten)
-                    {
-                        <MudListItem T="string">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@Icons.Material.Filled.Person" Style="color:#9B59B6;" />
-                                <div style="flex:1;">
-                                    <MudText Style="color:#F0E6FF;">@k.Name</MudText>
-                                    @if (k.Bands.Length > 0)
-                                    {
-                                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">@k.Bands</MudText>
-                                    }
-                                </div>
-                                <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
-                                           OnClick="@(() => DasBinIch(k.Id, k.Name))">Das bin ich</MudButton>
-                            </MudStack>
-                        </MudListItem>
-                    }
-                </MudList>
-            }
-        </MudPaper>
-    }
-
-    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:640px;">
-        <MudText Typo="Typo.subtitle1" Class="mb-1" Style="color:#F0E6FF;">Noch nicht dabei?</MudText>
-        <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
-            Wir legen dich als neue Person an (als Zuhörer:in) und verknüpfen sie direkt mit deinem Konto.
-            Rollen, Band und Instrumente kannst du danach jederzeit ergänzen.
-        </MudText>
-        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
-                   StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="NeuAnlegen"
-                   Disabled="@(_name.Trim().Length < 2 || _speichert)">
-            Mich neu anlegen@(_name.Trim().Length >= 2 ? $" als „{_name.Trim()}“" : "")
-        </MudButton>
-    </MudPaper>
-}
 
 @code {
     private bool _geladen;
-    private bool _bereitsVerknuepft;
     private string? _offenerAnspruch;
-    private bool _speichert;
     private string? _userId;
-    private string? _kontoEmail;
-
-    private BandOpt? _band;
-    private string _name = "";
-    private List<BandOpt> _bands = [];
-    private List<Kandidat> _kandidaten = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -122,10 +40,11 @@ else
         _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
         await using var db = await DbFactory.CreateDbContextAsync();
-        _kontoEmail = await db.Users.Where(u => u.Id == _userId).Select(u => u.Email).FirstOrDefaultAsync();
 
-        _bereitsVerknuepft = await db.Personen.AnyAsync(p => p.BenutzerId == _userId);
-        if (!_bereitsVerknuepft)
+        // Verknüpft ODER noch nicht verknüpft: In beiden Fällen ist „Meine Person" der richtige Ort
+        // (dort wird das Profil angelegt bzw. gepflegt). Nur ein offener Anspruch bleibt hier stehen.
+        var verknuepft = await db.Personen.AnyAsync(p => p.BenutzerId == _userId);
+        if (!verknuepft)
         {
             _offenerAnspruch = await db.PersonAnsprueche
                 .Where(a => a.BenutzerId == _userId && a.Status == PersonAnspruchStatus.Offen)
@@ -133,118 +52,11 @@ else
                 .FirstOrDefaultAsync();
         }
 
-        _bands = await db.Bands.OrderBy(b => b.Name)
-            .Select(b => new BandOpt(b.Id, b.Name)).ToListAsync();
-
-        _geladen = true;
-    }
-
-    private Task<IEnumerable<BandOpt>> SucheBand(string? wert, CancellationToken ct)
-    {
-        IEnumerable<BandOpt> r = string.IsNullOrWhiteSpace(wert)
-            ? _bands
-            : _bands.Where(b => b.Name.Contains(wert, StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult(r.Take(20));
-    }
-
-    private async Task OnBandChanged(BandOpt? b)
-    {
-        _band = b;
-        await KandidatenAktualisieren();
-    }
-
-    private async Task KandidatenAktualisieren()
-    {
-        var term = _name.Trim();
-        if (term.Length < 2) { _kandidaten = []; return; }
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var lower = term.ToLower();
-        var bandId = _band?.Id;
-        // Nur noch nicht verknüpfte Personen sind beanspruchbar.
-        var treffer = await db.Personen
-            .Where(p => p.BenutzerId == null && p.Name.ToLower().Contains(lower))
-            .OrderBy(p => p.Name)
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                Bands = p.Bandmitgliedschaften.Select(m => m.Band.Name).ToList(),
-                InGewaehlterBand = bandId != null && p.Bandmitgliedschaften.Any(m => m.BandId == bandId)
-            })
-            .Take(25)
-            .ToListAsync();
-
-        // Mitglieder der gewählten Band zuerst.
-        _kandidaten = treffer
-            .OrderByDescending(t => t.InGewaehlterBand)
-            .ThenBy(t => t.Name)
-            .Take(10)
-            .Select(t => new Kandidat(t.Id, t.Name, string.Join(", ", t.Bands)))
-            .ToList();
-    }
-
-    private async Task DasBinIch(Guid personId, string personName)
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        // Auto-Bestätigung (vorübergehend aktiv): direkt verknüpfen statt Admin-Antrag.
-        var (ok, meldung) = await VerknuepfungService.DirektVerknuepfenAsync(db, personId, _userId!, "Über den Onboarding-Assistenten.");
-        if (ok)
+        if (_offenerAnspruch == null)
         {
-            _bereitsVerknuepft = true;
-            Snackbar.Add($"Du bist jetzt mit {personName} verknüpft.", Severity.Success);
-            Nav.NavigateTo("/account/person");
-        }
-        else
-        {
-            Snackbar.Add(meldung, Severity.Error);
-        }
-    }
-
-    private async Task NeuAnlegen()
-    {
-        var name = _name.Trim();
-        if (name.Length < 2) return;
-        _speichert = true;
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-        if (await db.Personen.AnyAsync(p => p.BenutzerId == _userId))
-        {
-            _bereitsVerknuepft = true;
-            _speichert = false;
+            Nav.NavigateTo("/account/person", replace: true);
             return;
         }
-
-        var person = new Person
-        {
-            Name = name,
-            Sichtbarkeit = Sichtbarkeit.NurInitialen,   // Default für Zuhörer:in
-            BenutzerId = _userId
-        };
-        person.Rollen.Add(new PersonRolle { Rolle = PersonRolleTyp.Zuhoerer });
-        db.Personen.Add(person);
-
-        // Optionalen Band-Beitritt vorschlagen (Admin bestätigt).
-        if (_band != null)
-        {
-            db.BandbeitrittAntraege.Add(new BandbeitrittAntrag
-            {
-                Person = person,
-                BandId = _band.Id,
-                BeantragtVonId = _userId
-            });
-        }
-
-        await db.SaveChangesAsync();
-        // Konto-E-Mail in den E-Mail-Link spiegeln.
-        await PersonLinkSync.SyncEmailAsync(db, _userId, _kontoEmail);
-
-        Snackbar.Add(_band != null
-            ? "Profil angelegt. Dein Band-Beitritt wird von einer Admin-Person bestätigt."
-            : "Profil angelegt.", Severity.Success);
-        Nav.NavigateTo("/account/person");
+        _geladen = true;
     }
-
-    private record BandOpt(Guid Id, string Name);
-    private record Kandidat(Guid Id, string Name, string Bands);
 }

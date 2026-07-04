@@ -9,6 +9,7 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NavigationManager Nav
 
 <PageTitle>Meine Person – HarmoniQ</PageTitle>
 
@@ -18,21 +19,54 @@
 {
     <MudProgressCircular Indeterminate="true" />
 }
-else if (_personId == null)
-{
-    <MudAlert Severity="Severity.Info" Class="mb-3">
-        Dein Konto ist noch mit keiner Person verknüpft. Der <b>Onboarding-Assistent</b> hilft dir,
-        dich zu finden oder neu anzulegen.
-    </MudAlert>
-    <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
-               StartIcon="@Icons.Material.Filled.PersonSearch" Href="/account/onboarding">Person verknüpfen</MudButton>
-}
 else
 {
-    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
-        Du bist mit dieser Person verknüpft und kannst ihre Daten selbst pflegen.
-        <MudLink Href="@($"/personen/{_personId}")">Öffentliche Ansicht</MudLink>
-    </MudText>
+    @if (_personId == null)
+    {
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0; max-width:720px;">
+            Wir legen dich als <b>eigene Person</b> an – so gehört dein Profil dir. Fülle einfach dein Profil
+            aus und speichere. Rollen, Bands und Instrumente kannst du danach jederzeit ergänzen.
+            <b>Falls du später stark mit einer bereits erfassten Person übereinstimmst</b>
+            (gleicher Name + gemeinsame Band), schlagen wir dir hier vor, sie zusammenzuführen –
+            nichts wird ungefragt verknüpft.
+        </MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+            Du bist mit dieser Person verknüpft und kannst ihre Daten selbst pflegen.
+            <MudLink Href="@($"/personen/{_personId}")">Öffentliche Ansicht</MudLink>
+        </MudText>
+    }
+
+    @* Claim „Modell B": dezenter, wegklickbarer Merge-Vorschlag. *@
+    @if (_vorschlag is { } v)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="2" Style="background:#103d36; border:1px solid #1ABC9C; max-width:720px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Style="color:#1ABC9C;" />
+                <MudText Typo="Typo.body2" Style="color:#F0E6FF;flex:1;min-width:220px;">
+                    Gehörst du zu dieser bereits erfassten Person: <b>@v.Name</b>@(string.IsNullOrWhiteSpace(v.Bands) ? "" : $" ({v.Bands})")?
+                </MudText>
+                @if (v.Sichtbar)
+                {
+                    <MudButton Size="Size.Small" OnClick="@(() => _vorschlag = null)">Ausblenden</MudButton>
+                }
+                else
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                               OnClick="VorschlagAnnehmen" Disabled="_vorschlagLaeuft">Ja, zusammenführen</MudButton>
+                    <MudButton Size="Size.Small" OnClick="@(() => _vorschlag = null)">Nein</MudButton>
+                }
+            </MudStack>
+            @if (v.Sichtbar)
+            {
+                <MudText Typo="Typo.caption" Class="mt-1" Style="color:#A78FC0;">
+                    Öffentliches Profil (z. B. Dirigent:in/Komponist:in) – die Zusammenführung bestätigt eine Admin-Person / dein Verein.
+                </MudText>
+            }
+        </MudPaper>
+    }
 
     <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:720px;">
         <MudGrid Spacing="3">
@@ -95,10 +129,12 @@ else
 
         <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-4"
                    StartIcon="@Icons.Material.Filled.Save" OnClick="Speichern"
-                   Disabled="@(string.IsNullOrWhiteSpace(_m.Name))">Speichern</MudButton>
+                   Disabled="@(string.IsNullOrWhiteSpace(_m.Name))">@(_personId == null ? "Person anlegen" : "Speichern")</MudButton>
     </MudPaper>
 
-    @* Bandmitgliedschaften *@
+    @* Bandmitgliedschaften – erst nach dem Anlegen der Person. *@
+    @if (_personId != null)
+    {
     <MudPaper Class="pa-4 mt-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:720px;">
         <MudText Typo="Typo.h6" Class="mb-1" Style="color:#F0E6FF;">Meine Bands</MudText>
         @if (_meineBands.Count == 0)
@@ -132,6 +168,7 @@ else
             Band beitreten
         </MudButton>
     </MudPaper>
+    }
 }
 
 @code {
@@ -139,6 +176,8 @@ else
     private Guid? _personId;
     private string? _userId;
     private string? _kontoEmail;
+    private ClaimVorschlagService.Kandidat? _vorschlag;
+    private bool _vorschlagLaeuft;
     private Modell _m = new();
     private List<(Guid Id, string Name)> _instrumente = [];
     private IReadOnlyCollection<Guid> _instrumentSel = new HashSet<Guid>();
@@ -160,6 +199,17 @@ else
     private string NameOf(Guid id) => _instrumente.FirstOrDefault(i => i.Id == id).Name ?? "?";
     private string NamenText(IReadOnlyList<string> vals) => string.Join(", ", vals.Select(v => NameOf(Guid.Parse(v))));
 
+    private async Task VorschlagAnnehmen()
+    {
+        if (_vorschlag is not { } v) return;
+        _vorschlagLaeuft = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var (ok, meldung) = await ClaimVorschlagService.ZusammenfuehrenAsync(db, _userId!, v.Id);
+        _vorschlagLaeuft = false;
+        Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
+        if (ok) Nav.NavigateTo("/account/person", forceLoad: true);   // neu laden (Person ist jetzt zusammengeführt)
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
@@ -179,6 +229,8 @@ else
         if (person != null)
         {
             _personId = person.Id;
+            // Claim „Modell B": evidenzbasierter Merge-Vorschlag (Name + gemeinsame Band).
+            _vorschlag = await ClaimVorschlagService.FindeAsync(db, _userId);
             _instrumentSel = new HashSet<Guid>(person.Instrumente.Select(pi => pi.InstrumentId));
             _rollenSel = new HashSet<PersonRolleTyp>(person.Rollen.Select(r => r.Rolle));
             _m = new Modell
@@ -197,6 +249,12 @@ else
             };
 
             await LadeBandsAsync(db, person.Id);
+        }
+        else
+        {
+            // Noch nicht verknüpft: leeres Profil zum Direkt-Anlegen (Default Zuhörer:in / nur Initialen).
+            _m = new Modell { Sichtbarkeit = Sichtbarkeit.NurInitialen };
+            _rollenSel = new HashSet<PersonRolleTyp> { PersonRolleTyp.Zuhoerer };
         }
         _geladen = true;
     }
@@ -281,11 +339,29 @@ else
 
     private async Task Speichern()
     {
-        if (_personId == null) return;
+        if (string.IsNullOrWhiteSpace(_m.Name)) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente).Include(p => p.Rollen)
-            .FirstOrDefaultAsync(p => p.Id == _personId && p.BenutzerId == _userId);
-        if (person == null) { Snackbar.Add("Person nicht gefunden oder nicht (mehr) verknüpft.", Severity.Error); return; }
+
+        Person? person;
+        var neu = _personId == null;
+        if (neu)
+        {
+            // Direkt-Anlegen: eigene Person zum Konto (ersetzt den früheren Onboarding-Zwischenschritt).
+            if (await db.Personen.AnyAsync(p => p.BenutzerId == _userId))
+            {
+                Snackbar.Add("Dein Konto ist bereits mit einer Person verknüpft.", Severity.Warning);
+                Nav.NavigateTo("/account/person", forceLoad: true);
+                return;
+            }
+            person = new Person { BenutzerId = _userId };
+            db.Personen.Add(person);
+        }
+        else
+        {
+            person = await db.Personen.Include(p => p.Links).Include(p => p.Instrumente).Include(p => p.Rollen)
+                .FirstOrDefaultAsync(p => p.Id == _personId && p.BenutzerId == _userId);
+            if (person == null) { Snackbar.Add("Person nicht gefunden oder nicht (mehr) verknüpft.", Severity.Error); return; }
+        }
 
         person.Name = _m.Name.Trim();
         person.Biografie = Leer(_m.Biografie);
@@ -329,7 +405,19 @@ else
         }
 
         await db.SaveChangesAsync();
-        Snackbar.Add("Gespeichert.", Severity.Success);
+
+        if (neu)
+        {
+            _personId = person.Id;
+            await PersonLinkSync.SyncEmailAsync(db, _userId!, _kontoEmail);
+            _vorschlag = await ClaimVorschlagService.FindeAsync(db, _userId);
+            await LadeBandsAsync(db, person.Id);
+            Snackbar.Add("Profil angelegt. Du kannst jetzt Bands beitreten.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Gespeichert.", Severity.Success);
+        }
     }
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

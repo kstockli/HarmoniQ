@@ -82,12 +82,20 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   ersetzt den Freitext-Ort, Basis für Distanz. [Block 4.3]
 - ✅ **„Demnächst"-Distanz** — `/konzerte`-Distanzfilter (Standort/PLZ + Radius, Auto-Standort) und
   km-Anzeige; Startseite datums-sortiert mit dekorativem km, einheitliche `KonzertKarte`. [Block 4.3]
-- ⏳ **Claim Modell B** (erfassen → später **evidenzbasiert** Merge vorschlagen) + Trigger +
-  Verifizierungs-Gate. [Block 3] — **OFFEN.** Bisher nur **Modell A** live (Onboarding „DAS BIN ICH"
-  = Sofort-Claim per `PersonAnspruch`, + „mich neu anlegen" mit Default Zuhörer:in). Der evidenzbasierte
-  Vorschlag („Bist du dieselbe Person wie X?" aus Name + Band + besuchten Konzerten) und das
-  Verifizierungs-Gate für **sichtbare Rollen** (Dirigent:in/Vorstand) fehlen noch. (Hinweis: „Das bin
-  ich" ist derzeit **auto-bestätigt** — temporär.)
+- ✅ **Claim Modell B** — umgesetzt: (1) **„Meine Person" legt beim ersten Speichern IMMER eine eigene
+  Person an** (Default Zuhörer:in) – der frühere Onboarding-Zwischenschritt (Namens-Dialog) entfällt,
+  `/account/onboarding` leitet nur noch auf `/account/person` weiter. **Keine Identitäts-Pickliste**
+  (datenschutz-heikel, Block 2/3 ausdiskutiert) – es werden keine fremden Personen zur Auswahl
+  vorgeschlagen. (2) **Evidenzbasierter
+  Merge-Vorschlag** erst *später* (`ClaimVorschlagService`): auf „Meine Person" ein dezenter,
+  wegklickbarer Hinweis „Gehörst du zu dieser bereits erfassten Person X?", nur bei **starker Konfidenz**
+  (Name-Gleichheit normalisiert **+ gemeinsame Band**); Annahme → Merge der Selbst-Person in die erfasste
+  Person (Verknüpfung wandert mit). (3) **Verifizierungs-Gate** für **sichtbare Rollen**
+  (Dirigent:in/Komponist:in/öffentlich): **kein Auto-Merge**, Hinweis auf Admin/Verein-Bestätigung; für
+  „DAS BIN ICH"-Restpfade steht `VerknuepfungService.BeanspruchenAsync` (offener `PersonAnspruch`
+  statt Sofort-Verknüpfung). [Block 3]
+  **Follow-up:** Merge-on-confirm im Admin für gegateten sichtbaren Claim (heute manuell via Person-Merge);
+  Signal „besuchte Konzerte" (Tagebuch) als zusätzlicher Trigger (v1 nutzt Band / Instrument+Band).
 - ⏳ **Wiederkehr-Schleife (Benachrichtigungen)** [Block 4.2] — **OFFEN.** Freundschafts-Mails existieren
   (`IBenachrichtigungsMail`), aber der Flywheel fehlt: „warst du gestern bei X? → eintragen",
   „nächste Woche spielt <deine Band>", „neues Video deiner Band", E-Mail-Digest / PWA-Push.
