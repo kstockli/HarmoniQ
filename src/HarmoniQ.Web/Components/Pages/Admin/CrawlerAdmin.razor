@@ -245,7 +245,7 @@ else
         _quellen = await db.CrawlQuellen.Include(q => q.Band)
             .OrderByDescending(q => q.Aktiv).ThenByDescending(q => q.ErstelltAm).ToListAsync();
         var rohe = await db.CrawlLaeufe
-            .OrderByDescending(l => l.StartAm).Take(20)
+            .OrderByDescending(l => l.StartAm).Take(40)
             .Select(l => new { l.Id, Url = l.Quelle.StartUrl, l.Status, l.SeitenBesucht, l.StartAm, l.Meldung })
             .ToListAsync();
         var laufIds = rohe.Select(r => r.Id).ToList();
