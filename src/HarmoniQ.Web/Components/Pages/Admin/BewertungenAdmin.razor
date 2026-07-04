@@ -15,6 +15,11 @@
     <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
                StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Bewertungen</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#6f5a86;"
+               StartIcon="@Icons.Material.Filled.History" OnClick="@(() => _zeigeAudit = !_zeigeAudit)">
+        @(_zeigeAudit ? "Audit-Infos ausblenden" : "Audit-Infos")
+    </MudButton>
 </MudStack>
 
 @if (_alle.Count > 0)
@@ -62,6 +67,10 @@
         <TemplateColumn Title="Datum" SortBy="@(z => z.ErstelltAm)">
             <CellTemplate>@context.Item.ErstelltAm.ToString("dd.MM.yyyy")</CellTemplate>
         </TemplateColumn>
+        @if (_zeigeAudit)
+        {
+            <TemplateColumn Title="Geändert" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.ModifyTime)@AuditFormat.Wer(context.Item.ModifyUser)</span></CellTemplate></TemplateColumn>
+        }
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
@@ -77,6 +86,7 @@
     private List<Zeile> _alle = [];
     private List<Zeile> _gefiltert = [];
     private string _suche = "";
+    private bool _zeigeAudit;
     private int[] _verteilung = new int[6];  // Index 1..5 = Anzahl Bewertungen mit diesem Gesamteindruck
     private double _schnitt;
 
@@ -95,7 +105,7 @@
                 b.Video.Stueck.Titel,
                 b.Benutzer != null ? (b.Benutzer.Email ?? "Benutzer") : "anonym (Cookie)",
                 b.GesamtEindruck, b.Praezision, b.Musikalitaet, b.AkustischeQualitaet, b.VideoQualitaet,
-                b.Kommentar, b.ErstelltAm))
+                b.Kommentar, b.ErstelltAm, b.ModifyTime, b.ModifyUser))
             .ToListAsync();
 
         _verteilung = new int[6];
@@ -165,5 +175,6 @@
 
     private record Zeile(Guid Id, Guid StueckId, string StueckTitel, string Bewerter,
         int GesamtEindruck, int Praezision, int Musikalitaet, int AkustischeQualitaet, int VideoQualitaet,
-        string? Kommentar, DateTime ErstelltAm);
+        string? Kommentar, DateTime ErstelltAm,
+        DateTime? ModifyTime, string? ModifyUser);
 }

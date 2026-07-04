@@ -39,6 +39,7 @@ else
                         <MudIcon Icon="@Icons.Material.Filled.MusicNote" Style="color:#D4AF37;" />
                         <MudText Style="color:#F0E6FF;">@i.Name</MudText>
                         <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@i.Stimmen.Count Stimmen</MudChip>
+                        <MudText Typo="Typo.caption" Style="color:#6f5a86;">angelegt @AuditFormat.Zeit(i.CreateTime)@AuditFormat.Wer(i.CreateUser)</MudText>
                         <MudSpacer />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                        OnClick="@(() => InstrumentLoeschen(i.Id))" />

@@ -175,6 +175,39 @@ Schritt 3: Speichern
 > für diese App relevanten Felder aufgeführt. Maßgeblich ist immer das Identity-Schema,
 > nicht diese vereinfachte Darstellung.
 
+### Technische Audit-Spalten (ALLE eigenen Tabellen)
+Jede eigene Entität (nicht die von ASP.NET Identity verwalteten Tabellen) trägt **vier technische
+Audit-Spalten**. Sie werden **automatisch** beim Speichern gesetzt (SaveChanges-Override), nicht
+manuell.
+
+| Spalte (DB) | Typ | Bedeutung |
+|---|---|---|
+| `createtime` | `timestamptz` (UTC) | Zeitpunkt des Anlegens (einmalig beim INSERT) |
+| `createuser` | `text?` | Wer angelegt hat — **E-Mail** der eingeloggten Person, `"System"` bei automatischen Läufen (Crawler/Import/Backfill), sonst null |
+| `modifytime` | `timestamptz` (UTC) | Zeitpunkt der letzten Änderung (INSERT + jedes UPDATE) |
+| `modifyuser` | `text?` | Wer zuletzt geändert hat (E-Mail / `"System"`) |
+
+- **Umsetzung:** Marker-Interface `IAuditiert { DateTime CreateTime; string? CreateUser; DateTime ModifyTime;
+  string? ModifyUser; }`. In `ApplicationDbContext.SaveChangesAsync` werden für `Added`-Einträge
+  `createtime`+`modifytime`+`createuser`+`modifyuser`, für `Modified`-Einträge `modifytime`+`modifyuser`
+  gesetzt. **Zeitstempel** immer zuverlässig; der **Benutzer** kommt aus einem zirkuit-gebundenen
+  `BenutzerKontext` (E-Mail aus dem Auth-State), bei Hintergrund-Läufen `"System"`.
+- **Initialisierung des Bestands (Migration):** vorhandene Zeilen werden einmalig mit
+  `createtime = modifytime = 2026-06-30` und `createuser = modifyuser = "me@q-no.ch"` befüllt (Baseline
+  vor Einführung der Audit-Spalten).
+- **Benutzer-Wert:** bewusst die **E-Mail** (menschenlesbar, stabil), nicht die interne User-Id.
+- Diese Spalten sind in den einzelnen Entitäts-Definitionen unten **nicht** je wiederholt — sie gelten
+  **implizit für alle**.
+- **CLR-Mapping:** Entitäten mit CRUD-GUI erben `AuditierteEntitaet` (echte Properties, direkt bindbar);
+  alle übrigen tragen die Spalten als **Shadow-Properties** (nur erfasst). SaveChanges stempelt beide.
+- **Anzeige (readonly):** Komponente `AuditInfo` als Fußzeile in Einzel-Objekt-CRUDs
+  (Detail/Dialog, „Erstellt … · geändert …", UTC→lokal); in Admin-Tabellen ein **Umschalter
+  „Audit-Infos"**, der die Spalten *Erstellt/Geändert* einblendet (`AuditFormat`-Helfer). Umgesetzt in
+  Lokale/Bands/Konzerte/Videos/Personen/Stücke/Bewertungen/Instrumente + Person-/Band-Detail.
+  **Crawler:** CrawlQuelle/-Lauf/-Fund/-Seite ebenfalls mit echten Audit-Props; Funde-Fenster zeigt
+  „Gecrawlt" (AbgerufenAm) + „übernommen/bearbeitet" (modifytime/-user), Quellen zeigen „angelegt".
+  „Geändert" nur, wenn abweichend.
+
 ### Konzept
 Zentrale Entität ist **Person**. Eine Person kann **mehrere Rollen** haben
 (Komponist:in, Dirigent:in, Musikant:in, **Zuhörer:in**) – einen separaten „Komponist"-Typ gibt es nicht.

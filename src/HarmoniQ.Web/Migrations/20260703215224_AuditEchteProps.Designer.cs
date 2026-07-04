@@ -3,6 +3,7 @@ using System;
 using HarmoniQ.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HarmoniQ.Web.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260703215224_AuditEchteProps")]
+    partial class AuditEchteProps
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -432,14 +435,6 @@ namespace HarmoniQ.Web.Migrations
                     b.Property<DateTime>("AbgerufenAm")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("createtime");
-
-                    b.Property<string>("CreateUser")
-                        .HasColumnType("text")
-                        .HasColumnName("createuser");
-
                     b.Property<string>("DatenJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -459,14 +454,6 @@ namespace HarmoniQ.Web.Migrations
                     b.Property<Guid?>("LaufId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("ModifyTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modifytime");
-
-                    b.Property<string>("ModifyUser")
-                        .HasColumnType("text")
-                        .HasColumnName("modifyuser");
-
                     b.Property<string>("QuellUrl")
                         .IsRequired()
                         .HasColumnType("text");
@@ -476,6 +463,18 @@ namespace HarmoniQ.Web.Migrations
 
                     b.Property<int>("Typ")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("createtime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("createuser")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("modifytime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("modifyuser")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -494,14 +493,6 @@ namespace HarmoniQ.Web.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("createtime");
-
-                    b.Property<string>("CreateUser")
-                        .HasColumnType("text")
-                        .HasColumnName("createuser");
-
                     b.Property<DateTime?>("EndeAm")
                         .HasColumnType("timestamp with time zone");
 
@@ -510,14 +501,6 @@ namespace HarmoniQ.Web.Migrations
 
                     b.Property<string>("Meldung")
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("ModifyTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modifytime");
-
-                    b.Property<string>("ModifyUser")
-                        .HasColumnType("text")
-                        .HasColumnName("modifyuser");
 
                     b.Property<Guid>("QuelleId")
                         .HasColumnType("uuid");
@@ -530,6 +513,18 @@ namespace HarmoniQ.Web.Migrations
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("createtime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("createuser")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("modifytime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("modifyuser")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -560,14 +555,6 @@ namespace HarmoniQ.Web.Migrations
                     b.Property<bool>("BrauchtRendering")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("createtime");
-
-                    b.Property<string>("CreateUser")
-                        .HasColumnType("text")
-                        .HasColumnName("createuser");
-
                     b.Property<string>("Domain")
                         .HasColumnType("text");
 
@@ -586,20 +573,24 @@ namespace HarmoniQ.Web.Migrations
                     b.Property<int>("MaxTiefe")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("ModifyTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modifytime");
-
-                    b.Property<string>("ModifyUser")
-                        .HasColumnType("text")
-                        .HasColumnName("modifyuser");
-
                     b.Property<string>("StartUrl")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("Typ")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("createtime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("createuser")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("modifytime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("modifyuser")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -619,24 +610,8 @@ namespace HarmoniQ.Web.Migrations
                     b.Property<DateTime>("AbgerufenAm")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("createtime");
-
-                    b.Property<string>("CreateUser")
-                        .HasColumnType("text")
-                        .HasColumnName("createuser");
-
                     b.Property<string>("InhaltsHash")
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("ModifyTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modifytime");
-
-                    b.Property<string>("ModifyUser")
-                        .HasColumnType("text")
-                        .HasColumnName("modifyuser");
 
                     b.Property<Guid>("QuelleId")
                         .HasColumnType("uuid");
@@ -646,6 +621,18 @@ namespace HarmoniQ.Web.Migrations
 
                     b.Property<string>("Url")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("createtime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("createuser")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("modifytime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("modifyuser")
                         .HasColumnType("text");
 
                     b.HasKey("Id");

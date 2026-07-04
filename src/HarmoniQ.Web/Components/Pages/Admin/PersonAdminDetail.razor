@@ -177,12 +177,17 @@ else
             </MudSimpleTable>
         }
     </MudPaper>
+
+    <AuditInfo CreateTime="@_createtime" CreateUser="@_createuser"
+               ModifyTime="@_modifytime" ModifyUser="@_modifyuser" />
 }
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
     private string? _name;
+    private DateTime? _createtime, _modifytime;
+    private string? _createuser, _modifyuser;
     private Modell _m = new();
     private List<(Guid Id, string Name)> _instrumente = [];
     private IReadOnlyCollection<PersonRolleTyp> _rollenSel = new HashSet<PersonRolleTyp>();
@@ -208,6 +213,8 @@ else
             .FirstOrDefaultAsync(p => p.Id == Id);
         if (person == null) { Nav.NavigateTo("/admin/personen"); return; }
         _name = person.Name;
+        _createtime = person.CreateTime; _createuser = person.CreateUser;
+        _modifytime = person.ModifyTime; _modifyuser = person.ModifyUser;
         _m = new Modell
         {
             Name = person.Name, Sichtbarkeit = person.Sichtbarkeit, Geburtsjahr = person.Geburtsjahr,

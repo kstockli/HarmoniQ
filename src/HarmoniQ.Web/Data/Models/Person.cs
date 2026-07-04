@@ -6,7 +6,7 @@ namespace HarmoniQ.Web.Data.Models;
 /// Eine Person im Musik-Kontext (ersetzt langfristig „Komponist"). Kann mehrere Rollen haben
 /// (Komponist:in / Dirigent:in / Musikant:in). Optional mit einem Benutzerkonto verknüpft.
 /// </summary>
-public class Person
+public class Person : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;

@@ -1,0 +1,26 @@
+@* Readonly-Anzeige der technischen Audit-Spalten (createtime/createuser/modifytime/modifyuser).
+   UTC → lokale Zeit. Für die Fußzeile in Einzel-Objekt-CRUDs. *@
+@if (CreateTime is not null || ModifyTime is not null)
+{
+    <MudText Typo="Typo.caption" Class="d-block mt-2" Style="color:#6f5a86;">
+        <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Style="vertical-align:middle;font-size:1rem;" />
+        Erstellt @Fmt(CreateTime)@Wer(CreateUser)@if (ZeigeAenderung)
+        {
+            <text> · geändert @Fmt(ModifyTime)@Wer(ModifyUser)</text>
+        }
+    </MudText>
+}
+
+@code {
+    [Parameter] public DateTime? CreateTime { get; set; }
+    [Parameter] public string? CreateUser { get; set; }
+    [Parameter] public DateTime? ModifyTime { get; set; }
+    [Parameter] public string? ModifyUser { get; set; }
+
+    // Änderung nur zeigen, wenn sie sich vom Anlegen unterscheidet.
+    private bool ZeigeAenderung =>
+        ModifyTime is not null && (ModifyTime != CreateTime || ModifyUser != CreateUser);
+
+    private static string Fmt(DateTime? dt) => dt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "–";
+    private static string Wer(string? u) => string.IsNullOrWhiteSpace(u) ? "" : $" von {u}";
+}

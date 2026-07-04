@@ -16,6 +16,10 @@
                StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Videos</MudText>
     <MudSpacer />
+    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#6f5a86;"
+               StartIcon="@Icons.Material.Filled.History" OnClick="@(() => _zeigeAudit = !_zeigeAudit)">
+        @(_zeigeAudit ? "Audit-Infos ausblenden" : "Audit-Infos")
+    </MudButton>
     <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
 </MudStack>
@@ -42,6 +46,11 @@
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
+        @if (_zeigeAudit)
+        {
+            <TemplateColumn Title="Erstellt" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.CreateTime)@AuditFormat.Wer(context.Item.CreateUser)</span></CellTemplate></TemplateColumn>
+            <TemplateColumn Title="Geändert" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.ModifyTime)@AuditFormat.Wer(context.Item.ModifyUser)</span></CellTemplate></TemplateColumn>
+        }
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
                 <MudTooltip Text="Besetzung">
@@ -60,6 +69,7 @@
 @code {
     private List<Video> _alle = [];
     private List<Video> _gefiltert = [];
+    private bool _zeigeAudit;
     private List<Stueck> _stuecke = [];
     private List<Band> _bands = [];
     private List<Konzert> _konzerte = [];

@@ -6,7 +6,7 @@ namespace HarmoniQ.Web.Data.Models;
 /// Gruppierung „Konzerte an diesem Lokal", Dublettenfreiheit (Find-or-create über Name/Alias)
 /// und später Karte/Geocoding. Siehe UX-Spec 4.3.
 /// </summary>
-public class Lokal
+public class Lokal : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

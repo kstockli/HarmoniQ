@@ -151,10 +151,12 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Früher gesetzten Bezugspunkt (localStorage) übernehmen.
+        // Bezugspunkt bestimmen: bei erteilter Berechtigung still den AKTUELLEN Standort (kein
+        // Prompt), sonst den zuletzt gespeicherten. So muss man „Mein Standort" nicht neu klicken.
         if (firstRender && _refLat is null)
         {
-            var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
+            var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
+                      ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
             if (pos is { Length: 2 }) { _refLat = pos[0]; _refLng = pos[1]; Filtern(); StateHasChanged(); }
         }
     }

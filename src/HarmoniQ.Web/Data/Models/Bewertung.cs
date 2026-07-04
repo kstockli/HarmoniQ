@@ -1,6 +1,6 @@
 namespace HarmoniQ.Web.Data.Models;
 
-public class Bewertung
+public class Bewertung : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid VideoId { get; set; }

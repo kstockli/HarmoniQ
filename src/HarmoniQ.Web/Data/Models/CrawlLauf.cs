@@ -1,7 +1,7 @@
 namespace HarmoniQ.Web.Data.Models;
 
 /// <summary>Ein Durchlauf einer <see cref="CrawlQuelle"/> (Spec §5).</summary>
-public class CrawlLauf
+public class CrawlLauf : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

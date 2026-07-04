@@ -404,6 +404,10 @@ realistische v1:
     Bezugspunkt wird in **localStorage** gemerkt (nicht serverseitig gespeichert → datensparsam;
     Distanz client-seitig berechnet). Konzerte ohne Lokal-Koordinaten werden bei aktivem Filter
     ausgeblendet (mit Hinweis).
+  - **Standort-Automatik (2026-07-04):** Ist die Geolocation-Berechtigung bereits erteilt, wird der
+    Standort beim Seitenaufruf **still** aktualisiert (kein erneuter Prompt; `navigator.permissions`
+    prüft den Status, gecachter Fix bis 10 min, ~1 km genügt) — man muss „Mein Standort" nicht neu
+    klicken. Ohne Berechtigung: gespeicherter Bezugspunkt bzw. Button/PLZ.
   - **Voraussetzung:** Lokal-Koordinaten. Admin-Batch **„Koordinaten via Nominatim ergänzen"**
     (rate-limitiert ~1/s) füllt bestehende `Lokale`. Kein Profilfeld nötig (Standort/PLZ deckt
     eingeloggt wie anonym ab).

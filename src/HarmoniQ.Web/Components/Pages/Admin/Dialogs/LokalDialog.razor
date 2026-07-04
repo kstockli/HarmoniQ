@@ -62,6 +62,12 @@
                 <MudTextField @bind-Value="_neuerAlias" Label="Alias hinzufügen" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 <MudButton Size="Size.Small" OnClick="AliasHinzu" Disabled="@(string.IsNullOrWhiteSpace(_neuerAlias))">+</MudButton>
             </MudStack>
+
+            @if (LokalId != Guid.Empty)
+            {
+                <AuditInfo CreateTime="@_lokal.CreateTime" CreateUser="@_lokal.CreateUser"
+                           ModifyTime="@_lokal.ModifyTime" ModifyUser="@_lokal.ModifyUser" />
+            }
         }
     </DialogContent>
     <DialogActions>

@@ -4,7 +4,7 @@ namespace HarmoniQ.Web.Data.Models;
 /// Seed/Quelle für den Crawler (Spec §5): eine Band-Domain, ein Dokument/PDF oder eine Event-Seite.
 /// Isoliert vom Kernmodell – einziger FK-Berührungspunkt ist die optionale Ziel-<see cref="Band"/>.
 /// </summary>
-public class CrawlQuelle
+public class CrawlQuelle : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

@@ -6,7 +6,7 @@ namespace HarmoniQ.Web.Data.Models;
 /// gemappt (Konzert → KonzertErfassungService, Leitung → BandMitgliedschaft). Nichts wird
 /// automatisch publiziert – die Übernahme erfolgt nur durch Admin-Klick.
 /// </summary>
-public class CrawlFund
+public class CrawlFund : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

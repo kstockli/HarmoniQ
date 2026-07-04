@@ -17,6 +17,10 @@
                StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Stücke</MudText>
     <MudSpacer />
+    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#6f5a86;"
+               StartIcon="@Icons.Material.Filled.History" OnClick="@(() => _zeigeAudit = !_zeigeAudit)">
+        @(_zeigeAudit ? "Audit-Infos ausblenden" : "Audit-Infos")
+    </MudButton>
     <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
 </MudStack>
@@ -52,6 +56,11 @@
             </CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="z => z.Besetzung" Title="Besetzung" />
+        @if (_zeigeAudit)
+        {
+            <TemplateColumn Title="Erstellt" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.CreateTime)@AuditFormat.Wer(context.Item.CreateUser)</span></CellTemplate></TemplateColumn>
+            <TemplateColumn Title="Geändert" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.ModifyTime)@AuditFormat.Wer(context.Item.ModifyUser)</span></CellTemplate></TemplateColumn>
+        }
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
@@ -72,6 +81,7 @@
     private List<Zeile> _gefiltert = [];
     private List<(Guid Id, string Name)> _komponisten = [];
     private string _suche = "";
+    private bool _zeigeAudit;
 
     protected override async Task OnInitializedAsync() => await Laden();
 
@@ -93,7 +103,8 @@
             s.Id, s.Titel, s.KomponistenText,
             s.Komponisten.Select(p => p.Id).FirstOrDefault(),
             s.Jahr, s.Schwierigkeitsgrad, s.Besetzung,
-            s.Aliase.Select(a => a.Name).OrderBy(n => n).ToList())).ToList();
+            s.Aliase.Select(a => a.Name).OrderBy(n => n).ToList(),
+            s.CreateTime, s.CreateUser, s.ModifyTime, s.ModifyUser)).ToList();
         Filtern();
     }
 
@@ -205,7 +216,8 @@
     }
 
     private record Zeile(Guid Id, string Titel, string KomponistText, Guid KomponistId,
-        int? Jahr, Schwierigkeitsgrad Grad, string? Besetzung, List<string> Aliase)
+        int? Jahr, Schwierigkeitsgrad Grad, string? Besetzung, List<string> Aliase,
+        DateTime? CreateTime, string? CreateUser, DateTime? ModifyTime, string? ModifyUser)
     {
         public string AliasText => string.Join(" • ", Aliase);
     }

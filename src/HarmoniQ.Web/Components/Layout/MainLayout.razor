@@ -1,6 +1,9 @@
 @inherits LayoutComponentBase
 @using Microsoft.Extensions.Hosting
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IWebHostEnvironment Env
+@inject AuthenticationStateProvider AuthProvider
+@inject HarmoniQ.Web.Data.BenutzerKontext BenutzerKontext
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -86,6 +89,13 @@
         _dev = Env.IsDevelopment();
         if (_dev)
             _appBarStyle = "background: linear-gradient(90deg, #5a1111 0%, #a11111 100%);";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Aktuelle Person für die Audit-Spalten (createuser/modifyuser) im Circuit hinterlegen.
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        BenutzerKontext.Setzen(state.User.Identity?.IsAuthenticated == true ? state.User.Identity.Name : null);
     }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;

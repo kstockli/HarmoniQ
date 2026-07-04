@@ -5,7 +5,7 @@ namespace HarmoniQ.Web.Data.Models;
 /// <see cref="Video"/>s können optional auf ein Konzert verweisen (<see cref="Video.KonzertId"/>).
 /// Bewusst schlank: nur <see cref="Datum"/> ist Pflicht, Name/Ort sind optional.
 /// </summary>
-public class Konzert
+public class Konzert : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

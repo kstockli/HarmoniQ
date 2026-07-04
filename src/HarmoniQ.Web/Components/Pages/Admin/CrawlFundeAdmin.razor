@@ -78,6 +78,15 @@ else
                     <MudLink Href="@f.QuellUrl" Target="_blank" Style="color:#9B59B6;">Quelle ↗</MudLink>
                 </MudStack>
 
+                <MudText Typo="Typo.caption" Class="d-block mb-1" Style="color:#6f5a86;">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Style="vertical-align:middle;font-size:1rem;" />
+                    Gecrawlt @AuditFormat.Zeit(f.Gecrawlt)
+                    @if (f.Status != CrawlFundStatus.Offen && f.Geaendert is not null)
+                    {
+                        <text> · @(f.Status == CrawlFundStatus.Uebernommen ? "übernommen" : "bearbeitet") @AuditFormat.Zeit(f.Geaendert)@AuditFormat.Wer(f.Bearbeiter)</text>
+                    }
+                </MudText>
+
                 @if (!string.IsNullOrWhiteSpace(f.DublettHinweis))
                 {
                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@f.DublettHinweis</MudAlert>
@@ -184,7 +193,8 @@ else
             .Select(f => new FundEdit
             {
                 Id = f.Id, Typ = f.Typ, QuellUrl = f.QuellUrl, Konfidenz = f.Konfidenz,
-                DublettHinweis = f.DublettHinweis, Json = f.DatenJson, Status = f.Status
+                DublettHinweis = f.DublettHinweis, Json = f.DatenJson, Status = f.Status,
+                Gecrawlt = f.AbgerufenAm, Geaendert = f.ModifyTime, Bearbeiter = f.ModifyUser
             })
             .ToListAsync();
 
@@ -445,6 +455,9 @@ else
         public string? DublettHinweis { get; set; }
         public string Json { get; set; } = "";
         public CrawlFundStatus Status { get; set; }
+        public DateTime Gecrawlt { get; set; }
+        public DateTime? Geaendert { get; set; }
+        public string? Bearbeiter { get; set; }
 
         // Aufbereitete Anzeige (aus Json berechnet beim Laden und nach jeder JSON-Änderung)
         public string FriendlyTitel { get; set; } = "";

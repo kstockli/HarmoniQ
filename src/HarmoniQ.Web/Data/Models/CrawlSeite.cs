@@ -4,7 +4,7 @@ namespace HarmoniQ.Web.Data.Models;
 /// Besuchte Seite je Quelle – für Dedup/Politeness über Läufe hinweg (Spec §5, optional).
 /// Verhindert Doppel-Abrufe und erlaubt „nur bei geändertem Inhalt neu extrahieren“.
 /// </summary>
-public class CrawlSeite
+public class CrawlSeite : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

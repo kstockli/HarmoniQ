@@ -3,7 +3,7 @@ using HarmoniQ.Web.Services;
 
 namespace HarmoniQ.Web.Data.Models;
 
-public class Video
+public class Video : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid StueckId { get; set; }

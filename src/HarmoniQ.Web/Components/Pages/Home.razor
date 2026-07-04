@@ -563,7 +563,8 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || _kalender.All(k => k.Lat is null)) return;
-        var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
+        var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
+                  ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
         if (pos is not { Length: 2 }) return;
         foreach (var k in _kalender)
             if (k.Lat is double la && k.Lng is double lo)

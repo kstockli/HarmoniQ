@@ -16,6 +16,10 @@
                StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">Personen</MudText>
     <MudSpacer />
+    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#6f5a86;"
+               StartIcon="@Icons.Material.Filled.History" OnClick="@(() => _zeigeAudit = !_zeigeAudit)">
+        @(_zeigeAudit ? "Audit-Infos ausblenden" : "Audit-Infos")
+    </MudButton>
     <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
 </MudStack>
@@ -32,6 +36,11 @@
         <PropertyColumn Property="z => z.AnzahlBands" Title="Bands" />
         <PropertyColumn Property="z => z.AnzahlWerke" Title="Werke" />
         <PropertyColumn Property="z => z.AnzahlAuftritte" Title="Auftritte" />
+        @if (_zeigeAudit)
+        {
+            <TemplateColumn Title="Erstellt" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.CreateTime)@AuditFormat.Wer(context.Item.CreateUser)</span></CellTemplate></TemplateColumn>
+            <TemplateColumn Title="Geändert" Sortable="false"><CellTemplate><span style="color:#6f5a86;font-size:.8rem;">@AuditFormat.Zeit(context.Item.ModifyTime)@AuditFormat.Wer(context.Item.ModifyUser)</span></CellTemplate></TemplateColumn>
+        }
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Style="color:#9B59B6;"
@@ -47,6 +56,7 @@
 
 @code {
     private List<Zeile> _alle = [];
+    private bool _zeigeAudit;
     private List<Zeile> _gefiltert = [];
     private List<PersonDialog.InstrumentOption> _instrumente = [];
     private string _suche = "";
@@ -72,7 +82,8 @@
         _alle = personen.Select(p => new Zeile(
             p.Id, p.Name, p.Sichtbarkeit,
             p.Rollen.Select(r => r.Rolle).ToList(),
-            bands.GetValueOrDefault(p.Id), werke.GetValueOrDefault(p.Id), auftritte.GetValueOrDefault(p.Id))).ToList();
+            bands.GetValueOrDefault(p.Id), werke.GetValueOrDefault(p.Id), auftritte.GetValueOrDefault(p.Id),
+            p.CreateTime, p.CreateUser, p.ModifyTime, p.ModifyUser)).ToList();
         Filtern();
     }
 
@@ -227,5 +238,6 @@
     };
 
     private record Zeile(Guid Id, string Name, Sichtbarkeit Sichtbarkeit, List<PersonRolleTyp> Rollen,
-        int AnzahlBands, int AnzahlWerke, int AnzahlAuftritte);
+        int AnzahlBands, int AnzahlWerke, int AnzahlAuftritte,
+        DateTime? CreateTime, string? CreateUser, DateTime? ModifyTime, string? ModifyUser);
 }

@@ -37,6 +37,10 @@ else
                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="flex:1;min-width:220px;" />
         <MudCheckBox T="bool" @bind-Value="_nurOhneKoord" @bind-Value:after="Filtern"
                      Label="Nur ohne Koordinaten" Color="Color.Primary" />
+        <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#6f5a86;"
+                   StartIcon="@Icons.Material.Filled.History" OnClick="@(() => _zeigeAudit = !_zeigeAudit)">
+            @(_zeigeAudit ? "Audit-Infos ausblenden" : "Audit-Infos")
+        </MudButton>
     </MudStack>
 
     <MudSimpleTable Dense="true" Hover="true" Bordered="true"
@@ -48,6 +52,11 @@ else
                 <th style="color:#9B59B6;">Kanton</th>
                 <th style="color:#9B59B6;">Konzerte</th>
                 <th style="color:#9B59B6;">Aliase</th>
+                @if (_zeigeAudit)
+                {
+                    <th style="color:#6f5a86;">Erstellt</th>
+                    <th style="color:#6f5a86;">Geändert</th>
+                }
                 <th style="color:#9B59B6;"></th>
             </tr>
         </thead>
@@ -60,6 +69,11 @@ else
                     <td style="color:#A78FC0;">@(l.Kanton ?? "–")</td>
                     <td style="color:#A78FC0;">@l.KonzertAnzahl</td>
                     <td style="color:#A78FC0;">@l.AliasAnzahl</td>
+                    @if (_zeigeAudit)
+                    {
+                        <td style="color:#6f5a86;font-size:.8rem;">@Fmt(l.CreateTime)@Wer(l.CreateUser)</td>
+                        <td style="color:#6f5a86;font-size:.8rem;">@Fmt(l.ModifyTime)@Wer(l.ModifyUser)</td>
+                    }
                     <td>
                         <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;"
                                    OnClick="@(() => Bearbeiten(l.Id))">Bearbeiten</MudButton>
@@ -78,6 +92,7 @@ else
     private List<Zeile> _gefiltert = [];
     private string _suche = "";
     private bool _nurOhneKoord;
+    private bool _zeigeAudit;
     private bool _geoLaeuft;
     private string _geoFortschritt = "";
 
@@ -90,7 +105,8 @@ else
             .OrderBy(l => l.Name)
             .Select(l => new Zeile(l.Id, l.Name, l.Stadt, l.Kanton,
                 db.Konzerte.Count(k => k.LokalId == l.Id), l.Aliase.Count,
-                l.Lat != null && l.Lng != null))
+                l.Lat != null && l.Lng != null,
+                l.CreateTime, l.CreateUser, l.ModifyTime, l.ModifyUser))
             .ToListAsync();
         Filtern();
     }
@@ -181,6 +197,9 @@ else
         await Laden();
     }
 
+    private static string Fmt(DateTime? dt) => dt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "–";
+    private static string Wer(string? u) => string.IsNullOrWhiteSpace(u) ? "" : $" · {u}";
+
     private record Zeile(Guid Id, string Name, string? Stadt, string? Kanton, int KonzertAnzahl, int AliasAnzahl,
-        bool HatKoordinaten);
+        bool HatKoordinaten, DateTime? CreateTime, string? CreateUser, DateTime? ModifyTime, string? ModifyUser);
 }

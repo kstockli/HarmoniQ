@@ -269,6 +269,9 @@ else
             </MudList>
         }
     </MudPaper>
+
+    <AuditInfo CreateTime="@_band.CreateTime" CreateUser="@_band.CreateUser"
+               ModifyTime="@_band.ModifyTime" ModifyUser="@_band.ModifyUser" />
 }
 
 @code {

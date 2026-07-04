@@ -182,7 +182,7 @@ else
                     }
                     <MudSpacer />
                     <MudText Typo="Typo.caption" Style="color:#6f5a86;">
-                        letzter Lauf: @(q.LetzterLaufAm?.ToLocalTime().ToString("dd.MM.yy HH:mm") ?? "nie")
+                        angelegt @AuditFormat.Zeit(q.CreateTime)@AuditFormat.Wer(q.CreateUser) · letzter Lauf: @(q.LetzterLaufAm?.ToLocalTime().ToString("dd.MM.yy HH:mm") ?? "nie")
                     </MudText>
                 </MudStack>
                 <MudTextField @bind-Value="q.ExtraktionsHinweis" Variant="Variant.Outlined" Lines="2" Margin="Margin.Dense"

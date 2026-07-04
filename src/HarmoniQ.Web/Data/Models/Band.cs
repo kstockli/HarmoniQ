@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace HarmoniQ.Web.Data.Models;
 
-public class Band
+public class Band : AuditierteEntitaet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;

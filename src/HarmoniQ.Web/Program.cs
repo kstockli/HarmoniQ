@@ -116,9 +116,12 @@ if (!string.IsNullOrWhiteSpace(microsoftClientId) && !string.IsNullOrWhiteSpace(
 // den wir in das Npgsql-Format umwandeln.
 var connectionString = AufloesenConnectionString(builder.Configuration);
 
+// Zirkuit-gebundener Benutzer-Kontext für die Audit-Spalten (createuser/modifyuser).
+builder.Services.AddScoped<HarmoniQ.Web.Data.BenutzerKontext>();
 // Factory für interaktive Blazor-Komponenten (thread-sicher: pro Operation ein eigener Kontext).
+// Scoped, damit der erzeugte Kontext den circuit-scoped BenutzerKontext injiziert bekommt.
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString), ServiceLifetime.Scoped);
 // Zusätzlich ein scoped Kontext aus der Factory – wird von ASP.NET Core Identity benötigt.
 builder.Services.AddScoped<ApplicationDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());

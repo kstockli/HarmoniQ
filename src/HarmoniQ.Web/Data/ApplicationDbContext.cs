@@ -5,7 +5,7 @@ using HarmoniQ.Web.Data.Models;
 
 namespace HarmoniQ.Web.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, BenutzerKontext? benutzer = null)
     : IdentityDbContext<ApplicationUser>(options), IDataProtectionKeyContext
 {
     /// <summary>Persistente DataProtection-Schlüssel (Cookies/Tokens überleben Neustart/Redeploy).</summary>
@@ -386,5 +386,70 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             // Dedup/Politeness: je Quelle jede URL nur einmal.
             e.HasIndex(s => new { s.QuelleId, s.Url }).IsUnique();
         });
+
+        // ── Technische Audit-Spalten (alle eigenen Entitäten) ──────────────────
+        // createtime/createuser/modifytime/modifyuser als Shadow-Properties auf jeder Entität im
+        // Namespace Data.Models (schließt Identity- + DataProtection-Tabellen aus). Automatisch in
+        // SaveChanges gestempelt. Zeitstempel nullable → einfache Migration; Bestand per Baseline gefüllt.
+        foreach (var et in builder.Model.GetEntityTypes())
+        {
+            if (et.ClrType.Namespace != "HarmoniQ.Web.Data.Models") continue;
+            var e = builder.Entity(et.ClrType);
+            if (typeof(IAuditiert).IsAssignableFrom(et.ClrType))
+            {
+                // Entitäten mit CRUD-GUI: echte Properties → auf die Spaltennamen mappen.
+                e.Property(nameof(IAuditiert.CreateTime)).HasColumnName("createtime");
+                e.Property(nameof(IAuditiert.CreateUser)).HasColumnName("createuser");
+                e.Property(nameof(IAuditiert.ModifyTime)).HasColumnName("modifytime");
+                e.Property(nameof(IAuditiert.ModifyUser)).HasColumnName("modifyuser");
+            }
+            else
+            {
+                // Übrige: Shadow-Properties (nur erfasst, nicht angezeigt).
+                e.Property<DateTime?>("createtime");
+                e.Property<string>("createuser");
+                e.Property<DateTime?>("modifytime");
+                e.Property<string>("modifyuser");
+            }
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        Stempeln();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        Stempeln();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    // Setzt die Audit-Spalten: INSERT → alle vier, UPDATE → nur modify*.
+    private void Stempeln()
+    {
+        var jetzt = DateTime.UtcNow;
+        var wer = benutzer?.AuditName ?? "System";
+        foreach (var e in ChangeTracker.Entries())
+        {
+            if (e.State is not (EntityState.Added or EntityState.Modified)) continue;
+            if (e.Entity is IAuditiert a)   // echte Properties (Entitäten mit GUI)
+            {
+                if (e.State == EntityState.Added) { a.CreateTime = jetzt; a.CreateUser = wer; }
+                a.ModifyTime = jetzt;
+                a.ModifyUser = wer;
+            }
+            else if (e.Metadata.FindProperty("createtime") is not null)   // Shadow-Properties
+            {
+                if (e.State == EntityState.Added)
+                {
+                    e.Property("createtime").CurrentValue = jetzt;
+                    e.Property("createuser").CurrentValue = wer;
+                }
+                e.Property("modifytime").CurrentValue = jetzt;
+                e.Property("modifyuser").CurrentValue = wer;
+            }
+        }
     }
 }
