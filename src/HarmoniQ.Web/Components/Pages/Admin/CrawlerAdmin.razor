@@ -110,10 +110,17 @@
 </MudPaper>
 
 <!-- Läufe (oben: man will den Fortschritt sehen und aktualisieren) -->
-<MudText Typo="Typo.h6" Style="color:#D4AF37;" Class="mb-2">Letzte Läufe</MudText>
-@if (_laeufe.Count == 0)
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudText Typo="Typo.h6" Style="color:#D4AF37;">Letzte Läufe</MudText>
+    <MudSpacer />
+    <MudCheckBox T="bool" @bind-Value="_nurLaeufeMitFunden" Dense="true" Color="Color.Secondary"
+                 Label="Nur mit offenen Funden" />
+</MudStack>
+@if (!LaeufeGefiltert.Any())
 {
-    <MudAlert Severity="Severity.Info" Class="mb-6">Noch keine Läufe.</MudAlert>
+    <MudAlert Severity="Severity.Info" Class="mb-6">
+        @(_laeufe.Count == 0 ? "Noch keine Läufe." : "Keine Läufe mit offenen Funden.")
+    </MudAlert>
 }
 else
 {
@@ -122,7 +129,7 @@ else
             <tr><th>Start</th><th>Quelle</th><th>Status</th><th>Seiten</th><th>Offene Funde</th><th>Meldung</th><th></th></tr>
         </thead>
         <tbody>
-            @foreach (var l in _laeufe)
+            @foreach (var l in LaeufeGefiltert)
             {
                 <tr>
                     <td style="white-space:nowrap;">@l.StartAm.ToLocalTime().ToString("dd.MM HH:mm")</td>
@@ -144,9 +151,11 @@ else
 }
 
 <!-- Quellen -->
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h6" Style="color:#D4AF37;">Quellen</MudText>
     <MudSpacer />
+    <MudCheckBox T="bool" @bind-Value="_nurQuellenOhneLaeufe" Dense="true" Color="Color.Secondary"
+                 Label="Nur ohne Läufe" />
     @if (_quellen.Any(q => !q.Aktiv))
     {
         <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
@@ -154,14 +163,16 @@ else
                    OnClick="VorschlaegeLoeschen">Alle Vorschläge löschen</MudButton>
     }
 </MudStack>
-@if (_quellen.Count == 0)
+@if (!QuellenGefiltert.Any())
 {
-    <MudAlert Severity="Severity.Info" Class="mb-6">Noch keine Quellen erfasst.</MudAlert>
+    <MudAlert Severity="Severity.Info" Class="mb-6">
+        @(_quellen.Count == 0 ? "Noch keine Quellen erfasst." : "Keine Quellen ohne Läufe.")
+    </MudAlert>
 }
 else
 {
     <MudStack Spacing="3" Class="mb-6">
-        @foreach (var q in _quellen)
+        @foreach (var q in QuellenGefiltert)
         {
             <MudPaper Class="pa-3" Elevation="3" Style="background:#1a0030; border:1px solid #3a1060;">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1" Wrap="Wrap.Wrap">
@@ -236,6 +247,14 @@ else
     private List<LaufZeile> _laeufe = [];
     private NeueQuelle _neu = new();
     private Band? _neuBand;
+    private bool _nurLaeufeMitFunden;
+    private bool _nurQuellenOhneLaeufe;
+
+    // Filter: Läufe mit offenen Funden / Quellen, die noch nie liefen (LetzterLaufAm == null).
+    private IEnumerable<LaufZeile> LaeufeGefiltert =>
+        _nurLaeufeMitFunden ? _laeufe.Where(l => l.OffeneFunde > 0) : _laeufe;
+    private IEnumerable<CrawlQuelle> QuellenGefiltert =>
+        _nurQuellenOhneLaeufe ? _quellen.Where(q => q.LetzterLaufAm == null) : _quellen;
 
     protected override async Task OnInitializedAsync() => await Laden();
 

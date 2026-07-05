@@ -136,8 +136,8 @@ else
         }
     </div>
 
-    @* Freundschaft *@
-    @if (_meineId is not null && _meineId != _person.Id && !_verknuepftMitMir)
+    @* Freundschaft – nur sinnvoll, wenn hinter der Person ein Konto steht. *@
+    @if (_meineId is not null && _meineId != _person.Id && !_verknuepftMitMir && _personVerknuepft)
     {
         <div class="mb-2">
             @switch (_beziehung)
