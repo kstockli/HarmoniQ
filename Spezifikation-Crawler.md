@@ -80,7 +80,8 @@ beendet: am Laufende werden aktive Gremiums-Mitgliedschaften, die der Crawl nich
 **Hinweis-Fund** gemeldet (nur wenn überhaupt Mitglieder gefunden wurden) – der Admin setzt ggf. `BisJahr`.
 
 **Noch offen:** C2-Rest (Join/Rück-Zuordnung, `Band.Webseite`-Autofill), C4 (Ort→Kanton-Regionfilter,
-geplante Läufe), `Crawler:Llm:TagesLimit` durchsetzen, Rendering in Prod aktivieren.
+geplante Läufe), C6 (Eventfrog-Einleser, §4.4 — Konzept spezifiziert, nicht umgesetzt),
+`Crawler:Llm:TagesLimit` durchsetzen, Rendering in Prod aktivieren.
 
 ## 1. Ziel & Abgrenzung
 
@@ -160,7 +161,7 @@ Eine `CrawlQuelle` hat einen **Typ**, der das Vorgehen bestimmt:
 | **Dokument** | Rangliste-/Spielplan-**PDF** | PDF-Text extrahieren → LLM strukturiert zu Zeilen |
 | **Event** | Festival-Spielplan (HTML/JS) | Seite **rendern** (JS) → Programm-Tabelle extrahieren |
 | **Wettbewerb** | SBBW (swissbrass.ch) | Spezial-Handler: Jahres-PDF (Rangliste je Kategorie) **+** Video-Seiten zusammenführen → je Jahr/Kategorie ein **Konzert mit Rangliste & Videos** (siehe §4.2) |
-| **Veranstalter** | KKL Luzern (vivenu) | Spezial-Handler: Eventliste rendern → vivenu-API-Daten je Event, **LLM-Stilfilter** (z. B. Blasmusik) + Band-Erkennung → Konzert-Funde (siehe §4.3) |
+| **Veranstalter** | KKL Luzern (vivenu); Eventfrog.ch (Public API) | Spezial-Handler je Anbieter: Eventliste laden (Rendering bei KKL, direkte REST-API bei Eventfrog), Stilfilter (serverseitig per Genre-Parameter bei KKL, Keyword+LLM bei Eventfrog) + Band-Erkennung → Konzert-Funde (siehe §4.3, §4.4) |
 
 **Fähigkeiten der Fetch-Stufe:**
 - **PDF:** Dokument laden (Admin gibt Link **oder** Upload; Links können Ablauf-Token haben → frischer Link
@@ -290,12 +291,73 @@ Einzelband); auf Railway noch im Betrieb zu prüfen (realer Render-UA umgeht den
 könnte zusätzlich Headless fingerprinten). Hinweis: Ein bereits **übernommener** Fund wird beim erneuten Lauf per
 ExternKey übersprungen – um ihn mit verbesserter Extraktion neu zu ziehen, den Fund löschen und neu crawlen.
 
+### 4.4 Veranstalter: Eventfrog.ch (Public API) — Spezial-Crawler
+
+**Ziel:** Schweizweit **neue** Blasmusik-Konzerte finden, die (noch) nicht über eigene Vereins-Crawls (§4.1
+BandDomain) oder andere Quellen bekannt sind. Anders als bei KKL (§4.3, ein einzelner Veranstaltungsort)
+deckt Eventfrog **viele tausend Veranstalter schweizweit** ab — entsprechend unspezifischer ist das
+Rohmaterial, entsprechend wichtiger die Filterstufen vor der Fund-Erzeugung.
+
+**Quelle:** Eventfrog **Public API** (dokumentiert unter `docs.api.eventfrog.net/#publicapi-v1`), read-only.
+Zugriff per API-Key vom Typ „Public API", erzeugt im Eventfrog-Cockpit unter Einstellungen → API-Keys.
+Reine REST-API — **kein Rendering nötig** (im Unterschied zu KKL entfällt Playwright hier vollständig).
+
+**Unterschied zu KKL (entscheidend für den Handler-Entwurf):** KKL filtert Genre serverseitig
+(`?genre=Blasmusik`); Eventfrog kennt nur die grobe Rubrik **„Konzerte"** (Rubrik-ID vermutlich `908` —
+vor dem ersten Lauf über den Rubriken-Endpoint der API verifizieren und cachen, nicht hart codieren). Eine
+Blasmusik-Filterung muss deshalb **clientseitig** erfolgen — Aufbau analog dem generischen
+Seiten-Filter-Prinzip aus §8 (billige Heuristik zuerst, LLM nur bei Bedarf), nicht analog KKLs
+direktem Genre-Parameter.
+
+**Pipeline (Vorschlag `EventfrogImporter` + `CrawlRunner.EventfrogImportierenAsync`, Aufbau analog
+`KklImporter`):**
+1. **Rubrik-Filter (serverseitig):** Events der Rubrik „Konzerte" abrufen, paginiert, Zeitraum „ab heute" bis
+   konfigurierbarem Horizont (z. B. +6 Monate).
+2. **Blasmusik-Vorfilter (billig, Heuristik zuerst):** Titel/Beschreibung/Veranstalter-Name gegen eine
+   Keyword-Liste prüfen (`Blasmusik, Blasorchester, Musikgesellschaft, Musikverein, Stadtmusik, Harmonie,
+   Brass Band, Jugendmusik, Bürgermusik, Feldmusik, Fanfare, Spielmannszug, Tambouren, Blaskapelle` …).
+   Eindeutige Vereinstyp-Treffer („Musikgesellschaft", „Blasorchester") erzeugen **ohne LLM** direkt einen
+   Fund (Kostenkontrolle). Mehrdeutige Treffer (z. B. „Harmonie", „Fanfare" — auch ausserhalb der Blasmusik
+   gebräuchliche Wörter) gehen an einen **LLM-Filter** je Event (`IExtraktion.EventfrogEventAsync`, analog
+   `KklEventAsync`), grounded auf Titel+Beschreibung, statt zu raten.
+3. **Regionsfilter (Deutschschweiz):** Location-Objekt der API auswerten (Ort, ggf. PLZ). Zuordnung zu Kanton
+   über die bereits als offen geführte **Ort→Kanton-Anreicherung** (§4.1, Phase C4) — kein neuer Mechanismus,
+   sondern Wiederverwendung. Bis diese existiert: Übergangslösung über PLZ-Bereiche/Ortsnamen-Liste
+   Deutschschweizer Kantone (fehleranfällig bei zweisprachigen Kantonen FR/VS/BE-Jura).
+4. **Konzert-Fund:** Datum, Titel, Ort, Veranstalter-Name (sofern von der API geliefert), Quell-URL,
+   **Konfidenz** (Hoch bei eindeutigem Keyword-Treffer, Mittel/Tief bei LLM-Filter-Treffer) — nutzt das
+   bestehende `CrawlFund.Konfidenz`-Feld, kein neues Feld nötig. **Programm/Stücke** liefert Eventfrog nicht
+   (reine Ticketing-Plattform ohne Werkangaben) — im Unterschied zu KKL bleibt das Programm hier grundsätzlich
+   **leer**; ein Programm käme frühestens über einen kaskadierenden Zweitlauf auf die Vereins-Webseite
+   (Zweiter-Durchgang-Muster aus §4.1), sofern diese aus dem Fund erkennbar/verlinkt ist.
+5. **Band-Zuordnung:** Vereinsname aus Titel/Veranstalter-Feld wird — wie bei den übrigen Quelltypen — gegen
+   `Band`/`BandAlias` gematcht (Find-or-create beim Übernehmen); ohne eindeutigen Treffer bleibt das Konzert
+   bandlos, der Admin ordnet in der Review zu.
+6. **Dedup über Läufe:** `ExternKey = Eventfrog-Event-ID` — exakt das bestehende Muster aus §7 (analog
+   vivenu-Event-ID bei KKL). Jeder erneute Lauf liefert dadurch automatisch **nur neue** Konzerte als offene
+   Funde; bereits übernommene oder verworfene Events werden übersprungen bzw. aktualisiert statt verdoppelt.
+   Damit ist die gewünschte Eigenschaft „von Zeit zu Zeit starten und nur neuere Konzerte als Funde erhalten"
+   **ohne zusätzliches Datenmodell** abgedeckt — es braucht keine separate Sichtungstabelle, `CrawlFund` +
+   `ExternKey` reichen.
+
+**Offene Punkte (vor Umsetzung zu klären):**
+- Tatsächliche Rubrik-ID(s) und Query-Parameter-Name der Public API verifizieren (Website nutzt
+  `?rubrics=908`; ob die API denselben Parameter/Wert erwartet, ist zu testen).
+- Zuverlässigkeit des Location-Objekts (liefert es Kanton direkt, oder nur Freitext-Ort/Koordinaten?) —
+  entscheidet, ob die Ort→Kanton-Anreicherung (C4) Voraussetzung wird oder ein einfacherer Zwischenschritt reicht.
+- Rate-Limits/Antwortgrösse der Public API bei einer schweizweiten Alle-Konzerte-Abfrage (deutlich höheres
+  Volumen als bei KKL); ggf. serverseitig zusätzlich nach Datum/Region einschränken statt alles zu laden und
+  erst clientseitig zu filtern.
+- Keyword-Liste ist ein lebendes Artefakt (vgl. §10) — Pflege anhand beobachteter Fehlklassifikationen vorsehen.
+- Verhältnis zu Musiktreff.info als mögliche zweite Quelle (nur RSS, kein Rubrik-/Regionsfilter) — falls
+  gewünscht, eigener Quelltyp/Handler, nicht Teil dieses Abschnitts.
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```
 CrawlQuelle                         (Seed: Band-Domain, Dokument/PDF oder Event)
 ├── Id (Guid)
-├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb / Veranstalter)   ← Wettbewerb=SBBW (§4.2), Veranstalter=KKL (§4.3)
+├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb / Veranstalter)   ← Wettbewerb=SBBW (§4.2), Veranstalter=KKL (§4.3) / Eventfrog (§4.4)
 ├── BandId (FK → Band?)             ← Zielband (bei BandDomain; sonst optional)
 ├── StartUrl (string)               ← Domain-Start, PDF-/Dokument-Link oder Event-Seite
 ├── Domain (string?)                ← bei BandDomain; Crawler bleibt darauf
@@ -448,6 +510,12 @@ geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
   `VideoEinbettung.Thumbnail`. **Normale Konzerte** (ohne Rang) zeigen das Programm ebenfalls als **Tabelle**
   (Stück | Komponist:in | Band, eine Zeile pro Stück, alles klickbar). Am echten SBBW-2025-Konzert verifiziert.
 
+**Phase C6 – Veranstalter: Eventfrog.ch (offen, §4.4):** Quelltyp **Veranstalter**, zweiter Handler neben
+`KklImporter`. API-Key/Rubrik-ID verifizieren; `EventfrogImporter` (Rubrik-Abruf, Keyword-Vorfilter,
+LLM-Fallback-Filter bei mehrdeutigen Treffern, Kanton-Regionsfilter — wiederverwendet C4 sobald vorhanden,
+bis dahin Übergangslösung über Ortsliste); Dedup über `ExternKey` (Eventfrog-Event-ID) nach bestehendem
+Muster (§7); kein Programm/keine Stücke (nur bei kaskadierendem Zweitlauf auf die Vereins-Webseite, §4.1).
+
 ## 10. Offene Punkte / Risiken
 
 - **LLM-Anbieter & Budget** – **entschieden:** Mistral `mistral-large-latest`; Kosten gering
@@ -455,6 +523,10 @@ geplante Läufe; **später** Mitglieder mit Datenschutz-Schranken.
 - **Qualität/False Positives** der Extraktion – mitigiert durch Pflicht-Review.
 - **Rechtliches** – robots.txt, Quellen-Provenienz, kein Mitglieder-Scraping vorerst.
 - **Heterogene Seiten** – manche Vereine haben kein brauchbares HTML (PDF-Programme, Social-only) → out of scope.
+- **Eventfrog-Keyword-Filter (§4.4)** – schweizweiter Konzert-Rubrik-Abruf ohne native Blasmusik-Kategorie
+  → Keyword-/LLM-Filter kann sowohl False Positives (generische Wörter wie „Harmonie") als auch False
+  Negatives (Vereine ohne Treffer-Wort im Titel) liefern; mitigiert durch Konfidenz-Flag + Pflicht-Review,
+  gleiches Prinzip wie bei der generischen Extraktion.
 - **Wartung** – Seiten ändern sich; Heuristiken müssen pflegbar/abschaltbar bleiben.
 - **Selbstwahlstück-Komponist:in (SBBW, §4.2) – umgesetzt (`KomponistSuche`):** Web-Suche → Snippets →
   LLM-Extraktion (grounded, kein Raten). **Provider = Google Programmable Search JSON API**, aktiv sobald
