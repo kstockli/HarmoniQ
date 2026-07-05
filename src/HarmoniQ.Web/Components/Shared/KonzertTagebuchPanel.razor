@@ -61,69 +61,65 @@
                       Lines="2" Class="mb-4" Immediate="false" OnBlur="NotizSpeichern" />
     }
 
-    @* ── Programm-Tabelle (mit Bewertungs-Spalten, wenn „dabei") ───────────── *@
+    @* ── Programm (Bewertung/Notiz, wenn „dabei") — Desktop: Tabelle · Mobile: Karten ── *@
     @if (Programm.Count > 0)
     {
         var bewertbar = _besuch is not null;
         <MudText Typo="Typo.h6" GutterBottom="true" Style="color:#D4AF37;">Programm (@Programm.Count)</MudText>
-        <MudSimpleTable Dense="true" Hover="true" Bordered="true"
-                        Style="background:#1a0030; border:1px solid #3a1060;">
-            <thead>
-                <tr>
-                    <th style="color:#9B59B6;">Stück</th>
-                    <th style="color:#9B59B6;">Komponist:in</th>
-                    <th style="color:#9B59B6;">Band</th>
-                    @if (bewertbar)
-                    {
-                        <th style="color:#9B59B6;">Meine Bewertung</th>
-                        <th style="color:#9B59B6;">Meine Notiz</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var p in Programm)
-                {
-                    var e = Eindruck(p.KonzertStueckId);
+
+        @* Desktop (md und grösser): Tabelle *@
+        <div class="d-none d-md-block">
+            <MudSimpleTable Dense="true" Hover="true" Bordered="true"
+                            Style="background:#1a0030; border:1px solid #3a1060;">
+                <thead>
                     <tr>
-                        <td>
-                            <MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.Titel</MudLink>
-                        </td>
-                        <td>
-                            @if (p.Komponisten.Count > 0)
-                            {
-                                var erster = true;
-                                foreach (var k in p.Komponisten)
-                                {
-                                    @(!erster ? (MarkupString)", " : (MarkupString)"")
-                                    <MudLink Href="@($"/personen/{k.Id}")" Style="color:#9B59B6;" Underline="Underline.Hover">@k.Name</MudLink>
-                                    erster = false;
-                                }
-                            }
-                            else { <span style="color:#A78FC0;">–</span> }
-                        </td>
-                        <td>
-                            @if (p.BandId is { } bid)
-                            {
-                                <MudLink Href="@($"/bands/{bid}")" Style="color:#A78FC0;" Underline="Underline.Hover">@p.BandName</MudLink>
-                            }
-                            else { <span style="color:#A78FC0;">–</span> }
-                        </td>
+                        <th style="color:#9B59B6;">Stück</th>
+                        <th style="color:#9B59B6;">Komponist:in</th>
+                        <th style="color:#9B59B6;">Band</th>
                         @if (bewertbar)
                         {
-                            <td>
-                                <MudRating MaxValue="5" SelectedValue="e.Sterne ?? 0"
-                                           SelectedValueChanged="@(v => SterneSpeichern(p.KonzertStueckId, v))" />
-                            </td>
-                            <td>
-                                <MudTextField T="string" Value="e.Notiz" ValueChanged="@(v => NotizStueckSetzen(p.KonzertStueckId, v))"
-                                              Placeholder="Notiz…" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                              Style="min-width:160px;" OnBlur="@(() => StueckSpeichern(p.KonzertStueckId))" />
-                            </td>
+                            <th style="color:#9B59B6;">Meine Bewertung</th>
+                            <th style="color:#9B59B6;">Meine Notiz</th>
                         }
                     </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in Programm)
+                    {
+                        <tr>
+                            <td>@StueckTitel(p)</td>
+                            <td>@KomponistenMarkup(p)</td>
+                            <td>@BandMarkup(p)</td>
+                            @if (bewertbar)
+                            {
+                                <td>@SterneControl(p)</td>
+                                <td>@NotizControl(p, "min-width:160px;")</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+
+        @* Mobile (kleiner als md): Karten – kein horizontales Scrollen *@
+        <div class="d-md-none">
+            <MudStack Spacing="3">
+                @foreach (var p in Programm)
+                {
+                    <MudPaper Class="pa-3" Style="background:#1a0030; border:1px solid #3a1060;">
+                        <div>@StueckTitel(p)</div>
+                        <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color:#A78FC0;">
+                            @KomponistenMarkup(p)<span style="color:#6f5a86;"> · </span>@BandMarkup(p)
+                        </MudText>
+                        @if (bewertbar)
+                        {
+                            <div class="mt-2">@SterneControl(p)</div>
+                            <div class="mt-1">@NotizControl(p, "width:100%;")</div>
+                        }
+                    </MudPaper>
                 }
-            </tbody>
-        </MudSimpleTable>
+            </MudStack>
+        </div>
     }
 </MudPaper>
 
@@ -172,6 +168,45 @@
         }
         return e;
     }
+
+    // ── Gemeinsame Darstellung eines Programmpunkts (für Desktop-Tabelle UND Mobile-Karten) ──
+    private RenderFragment StueckTitel(Programmpunkt p) =>@<MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.Titel</MudLink>;
+
+    private RenderFragment KomponistenMarkup(Programmpunkt p) =>@<text>
+        @if (p.Komponisten.Count > 0)
+        {
+            var erster = true;
+            foreach (var k in p.Komponisten)
+            {
+                @(!erster ? (MarkupString)", " : (MarkupString)"")
+                <MudLink Href="@($"/personen/{k.Id}")" Style="color:#9B59B6;" Underline="Underline.Hover">@k.Name</MudLink>
+                erster = false;
+            }
+        }
+        else
+        {
+            <span style="color:#A78FC0;">–</span>
+        }
+    </text>;
+
+    private RenderFragment BandMarkup(Programmpunkt p) =>@<text>
+        @if (p.BandId is { } bid)
+        {
+            <MudLink Href="@($"/bands/{bid}")" Style="color:#A78FC0;" Underline="Underline.Hover">@p.BandName</MudLink>
+        }
+        else
+        {
+            <span style="color:#A78FC0;">–</span>
+        }
+    </text>;
+
+    private RenderFragment SterneControl(Programmpunkt p) =>@<MudRating MaxValue="5" SelectedValue="@(Eindruck(p.KonzertStueckId).Sterne ?? 0)"
+                                                                       SelectedValueChanged="@(v => SterneSpeichern(p.KonzertStueckId, v))" />;
+
+    private RenderFragment NotizControl(Programmpunkt p, string style) =>@<MudTextField T="string" Value="@Eindruck(p.KonzertStueckId).Notiz"
+                                                                                        ValueChanged="@(v => NotizStueckSetzen(p.KonzertStueckId, v))"
+                                                                                        Placeholder="Notiz…" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                        Style="@style" OnBlur="@(() => StueckSpeichern(p.KonzertStueckId))" />;
 
     private async Task BesuchAnlegen()
     {

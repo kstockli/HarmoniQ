@@ -4,6 +4,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using System.Text.Json
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
@@ -11,6 +12,14 @@
 @inject ISnackbar Snackbar
 
 <PageTitle>@(_konzert?.Titel ?? "Konzert") – HarmoniQ</PageTitle>
+
+@* Strukturierte Daten (Schema.org MusicEvent) für Rich Results – nur öffentliche Konzertdaten.
+   Bewusst im Body (nicht HeadContent): so erscheint es auch im prerenderten HTML; Google akzeptiert
+   JSON-LD an beliebiger Stelle im Dokument. *@
+@if (_jsonLd.Value is { Length: > 0 })
+{
+    @_jsonLd
+}
 
 @if (_konzert == null)
 {
@@ -252,6 +261,7 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private KonzertKopf? _konzert;
+    private MarkupString _jsonLd;
     private double? _lokalLat, _lokalLng;
     private string? _lokalName;
     private List<BandZeile> _bands = [];
@@ -414,6 +424,41 @@ else
         }
 
         await EindrueckeLadenAsync(db, userId, freundIds);
+
+        _jsonLd = BaueJsonLd();
+    }
+
+    // Schema.org MusicEvent (JSON-LD) – nur öffentliche Konzertdaten (Titel/Datum/Ort/Geo/Bands),
+    // keine privaten Personen. System.Text.Json escapt < > & sicher fürs Einbetten im <script>.
+    private MarkupString BaueJsonLd()
+    {
+        if (_konzert is null) return default;
+        var obj = new Dictionary<string, object?>
+        {
+            ["@context"] = "https://schema.org",
+            ["@type"] = "MusicEvent",
+            ["name"] = _konzert.Titel,
+            ["startDate"] = _konzert.Datum.ToString("yyyy-MM-dd"),
+            ["url"] = Nav.Uri
+        };
+        if (!string.IsNullOrWhiteSpace(_konzert.BildUrl)) obj["image"] = _konzert.BildUrl;
+        if (!string.IsNullOrWhiteSpace(_konzert.Beschreibung)) obj["description"] = _konzert.Beschreibung;
+        var ort = _lokalName ?? _konzert.Ort;
+        if (!string.IsNullOrWhiteSpace(ort))
+        {
+            var place = new Dictionary<string, object?> { ["@type"] = "Place", ["name"] = ort };
+            if (_lokalLat is double la && _lokalLng is double lo)
+                place["geo"] = new Dictionary<string, object?>
+                { ["@type"] = "GeoCoordinates", ["latitude"] = la, ["longitude"] = lo };
+            obj["location"] = place;
+        }
+        if (_bands.Count > 0)
+            obj["performer"] = _bands
+                .Select(b => new Dictionary<string, object?> { ["@type"] = "MusicGroup", ["name"] = b.Name })
+                .ToList();
+        // Als MarkupString inkl. <script>-Hülle: literale <script> in .razor werden beim Prerender
+        // gestrippt, roher MarkupString-Inhalt nicht. JSON escapt < > & sicher (kein </script>-Ausbruch).
+        return (MarkupString)($"<script type=\"application/ld+json\">{JsonSerializer.Serialize(obj)}</script>");
     }
 
     // Geteilte Tagebuch-Eindrücke für die Konzertseite: öffentliche für alle, Freundes-Einträge für mich.

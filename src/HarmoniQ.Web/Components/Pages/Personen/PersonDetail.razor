@@ -4,6 +4,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using System.Text.Json
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
@@ -12,6 +13,13 @@
 @inject IBenachrichtigungsMail Mail
 
 <PageTitle>@AnzeigeName – HarmoniQ</PageTitle>
+
+@* Strukturierte Daten (Schema.org Person) – nur für öffentlich sichtbare Personen (Block 2).
+   Bewusst im Body (nicht HeadContent): erscheint so auch im prerenderten HTML. *@
+@if (_jsonLd.Value is { Length: > 0 })
+{
+    @_jsonLd
+}
 
 @if (_person == null)
 {
@@ -205,6 +213,25 @@ else
     private bool _ichHabeSchonPerson; // mein Konto ist bereits mit (irgend)einer Person verknüpft
     private bool _istAdmin;
     private Sichtbarkeit _eff = Sichtbarkeit.Oeffentlich;  // effektive Sichtbarkeit für DICH
+    private MarkupString _jsonLd;
+
+    // Schema.org Person (JSON-LD) – NUR für öffentlich sichtbare Personen (Block 2), ohne
+    // Kontaktangaben (kein Leak). Leere MarkupString ⇒ nichts wird gerendert.
+    private MarkupString BauePersonJsonLd()
+    {
+        if (_person is null || _eff != Sichtbarkeit.Oeffentlich) return default;
+        var obj = new Dictionary<string, object?>
+        {
+            ["@context"] = "https://schema.org",
+            ["@type"] = "Person",
+            ["name"] = AnzeigeName,
+            ["url"] = Nav.Uri
+        };
+        if (!string.IsNullOrWhiteSpace(BildAnzeige)) obj["image"] = BildAnzeige;
+        if (!string.IsNullOrWhiteSpace(_person.Biografie)) obj["description"] = _person.Biografie;
+        // MarkupString inkl. <script>-Hülle (siehe KonzertDetail): überlebt den Prerender.
+        return (MarkupString)($"<script type=\"application/ld+json\">{JsonSerializer.Serialize(obj)}</script>");
+    }
 
     private Guid? _meineId;                 // meine verknüpfte Person
     private FreundschaftService.Beziehung _beziehung = FreundschaftService.Beziehung.Keine;
@@ -270,6 +297,7 @@ else
 
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, _userId);
         _eff = PersonenSicht.Effektiv(_person.Id, _person.Sichtbarkeit, vollSichtbar);
+        _jsonLd = BauePersonJsonLd();
 
         // Freundschafts-Status (nur wenn eingeloggt + eigene Person + nicht ich selbst).
         _meineId = await FreundschaftService.MeinePersonIdAsync(db, _userId);

@@ -1,4 +1,4 @@
-<svg width="780" height="220" viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HarmoniQ - The Music Database">
+<svg width="780" height="220" viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HarmoniQ – die Blasmusik-Datenbank">
   <title>HarmoniQ</title>
   <desc>HarmoniQ logo with Beethoven's fifth symphony motif (G G G E flat)</desc>
 
@@ -35,5 +35,5 @@
 
   <!-- Wordmark (groß: Versalhöhe ~ Kachelhöhe) -->
   <text x="196" y="138" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="700" letter-spacing="-2"><tspan fill="#D8B4FE">Harmoni</tspan><tspan fill="#A855F7">Q</tspan></text>
-  <text x="200" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" letter-spacing="6" fill="#7C3AED" opacity="0.85">THE MUSIC DATABASE</text>
+  <text x="200" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" letter-spacing="4" fill="#7C3AED" opacity="0.85">DIE BLASMUSIK-DATENBANK</text>
 </svg>

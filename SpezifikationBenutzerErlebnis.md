@@ -972,6 +972,32 @@ API später eine dünne Schicht ist. Bauen, sobald eine Band konkret danach frag
 *Empfehlung:* OG-Tags + `meta description` + `lang=de` + canonical sind **kleiner Aufwand, hohe
 Wirkung** für Sichtbarkeit/Sharing — gute frühe Maßnahme, bevor größerer Outreach startet (Block 9).
 
+### A10 — Phase-1-Review (Browser, mobil ~520 px, 2026-07-05)
+**Gesamturteil: Phase 1 ist beeindruckend vollständig & wirklich smartphone-first umgesetzt.**
+Umgesetzt & gut:
+- **Neuer Einstieg B+A** (anonym): Hero „Dein Konzert-Tagebuch für Blasmusik" + KOSTENLOS STARTEN +
+  „Stöbern geht auch ohne Konto". **Bottom-Navigation** (Start·Konzerte·Tagebuch·Videos·Mehr).
+- **Phase-0 gleich mit:** `lang=de`, Meta-Description, 7 OG-Tags, Twitter-Cards, **Umami-Analytics**;
+  **TTFB 1472 → 910 ms**.
+- **Eingeloggter Einstieg:** „Mein Konzert-Jahr 2026" (Tagebuch-Teaser mit echten Zahlen) · „Für
+  dich → Kommende Konzerte deiner Bands" (personalisiert, CH-relevant) · **„Wochenüberblick" (Glocke
+  = Wiederkehr-Schleife)** · neue Videos deiner Bands.
+- **Tagebuch-Seite** (`/account/tagebuch`): Jahres-Statistik (3 Konzerte · 15 Stücke bewertet ·
+  ⌀ 4.3★), „Deine Höhepunkte" (Top-Stücke), chronologische Timeline. Sehr nah an der Letterboxd-Idee.
+- **Konzert-Detail:** `Lokal` mit Saal + **Leaflet/OSM-Karte mit Pin** (Veranstaltungsort);
+  Programm mit **Bewertung + Notiz pro Stück** (5-Sterne interaktiv) + Privatsphäre-Zeile „Freunde
+  sehen nur, dass ich dabei war" (= Entscheid privat/teilbar).
+
+**Kritik / To-do (nach User-Feedback repriorisiert 2026-07-05):**
+1. **Anonyme „Demnächst" ohne Region-Bezug** (nur WMC/NL). **Vom User herabgestuft (tiefe Prio):**
+   aktuell Sommerpause, WMC Kerkrade ist realistisch das nächste grosse Event → nicht überbewerten.
+   Später Region-Filter (Block 4.3). Eingeloggt „Für dich" ist ohnehin relevant.
+2. **Programm+Bewertung-Tabelle zu breit fürs Handy** (5 Spalten, H-Scroll, `KonzertTagebuchPanel.
+   razor`) → **Block-7 „Mobile → Karten" umsetzen. Wichtig (User).** Umsetzung:
+   `Umsetzung-Mobile-Programm-Karten.md`.
+3. **TTFB 910 ms** (Ziel <500) + **JSON-LD fehlt** + Logo-Tagline englisch → **Wichtig (User).**
+   Umsetzung: `Umsetzung-Performance-und-SEO-Feinschliff.md`.
+
 ### A8 — Mobile-Ansicht (Browser, 2026-06-29) — NICHT abschließend prüfbar
 - **Tool-Limitierung:** `resize_window` (auf 390–400 px) wirkte sich **nicht** auf den gerenderten
   Viewport aus (`window.innerWidth` blieb 1536; Screenshot blieb Desktop-Layout). Mobile-Layout
