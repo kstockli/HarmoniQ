@@ -96,11 +96,15 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   statt Sofort-Verknüpfung). [Block 3]
   **Follow-up:** Merge-on-confirm im Admin für gegateten sichtbaren Claim (heute manuell via Person-Merge);
   Signal „besuchte Konzerte" (Tagebuch) als zusätzlicher Trigger (v1 nutzt Band / Instrument+Band).
-- ⏳ **Wiederkehr-Schleife (Benachrichtigungen)** [Block 4.2] — **v1 ausdiskutiert (2026-07-04),
-  Umsetzung offen.** Freundschafts-Mails existieren (`IBenachrichtigungsMail`), aber der Flywheel fehlt.
-  Beschlossener v1: **ein Wochen-Digest** über **zwei Kanäle (E-Mail + PWA-Push)**, gespeist aus
-  Band-Bezug (Mitgliedschaft ∪ **Folgen** ∪ impliziten Signalen). Details siehe 4.2. Voraussetzung:
-  neue **„Band folgen"-Beziehung** (privat), damit die Schlaufe auch für Zuhörer:innen greift.
+- 🟡 **Wiederkehr-Schleife (Benachrichtigungen)** [Block 4.2] — **Kern UMGESETZT (2026-07-04).**
+  „Band folgen" (`BandInteresse`), Präferenzen (2 unabhängige Kanäle + Abmelde-Token), Digest-
+  Zusammenstellung (`DigestService`, Bausteine A/B/C aus Mitgliedschaft ∪ Folgen), Versand über
+  **E-Mail** (Wochenüberblick + One-Click-Abmeldung) **und PWA-Push** (VAPID/Service-Worker), gesteuert
+  vom wöchentlichen `WochenBenachrichtigungHostedService`; Dedup via `BenachrichtigungGesendet`.
+  Präferenzseite `/account/benachrichtigungen` mit Live-Vorschau + Geräte-Push-Anmeldung. Startseiten-
+  **Feed** „Für dich" (A/B/C aus Mitglied- ∪ gefolgten Bands, ohne Dedup, `DigestService(nurUngesehene:false)`)
+  umgesetzt. **Offen:** Trigger **F** („in deiner Nähe") braucht noch das private Standort-/Heimat-PLZ-Feld
+  an `Person`; ereignisgesteuerte Sofort-Mails optional später.
 
 **Phase 2 — Verbreitung starten (wenn Readiness-Checkliste 9.4 erfüllt):**
 - **Band-Admin**-Rolle (`BandAdministrator` + Audit-Log) + **Crawler-Einladung** an offizielle

@@ -72,6 +72,7 @@ builder.Services.AddHttpClient<HarmoniQ.Web.Services.Wmc.WmcImportService>(c => 
 builder.Services.AddSingleton<CrawlLaufQueue>();
 builder.Services.AddScoped<CrawlRunner>();
 builder.Services.AddHostedService<CrawlHostedService>();
+builder.Services.AddHostedService<WochenBenachrichtigungHostedService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();
@@ -221,6 +222,31 @@ app.MapRazorComponents<App>()
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 
+// ── Web-Push: Anmeldung eines Geräts speichern/entfernen (PWA-Push, UX-Spec 4.2) ──
+app.MapPost("/api/push/subscribe", async (PushAboDto dto,
+    System.Security.Claims.ClaimsPrincipal user, ApplicationDbContext db) =>
+{
+    var uid = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (string.IsNullOrEmpty(uid) || string.IsNullOrWhiteSpace(dto.Endpoint)) return Results.BadRequest();
+
+    var vorhanden = await db.PushSubscriptions.FirstOrDefaultAsync(s => s.Endpoint == dto.Endpoint);
+    if (vorhanden is null)
+        db.PushSubscriptions.Add(new HarmoniQ.Web.Data.Models.PushSubscription
+        {
+            BenutzerId = uid, Endpoint = dto.Endpoint, P256dh = dto.P256dh, Auth = dto.Auth
+        });
+    else { vorhanden.BenutzerId = uid; vorhanden.P256dh = dto.P256dh; vorhanden.Auth = dto.Auth; }
+    await db.SaveChangesAsync();
+    return Results.Ok();
+}).RequireAuthorization().DisableAntiforgery();
+
+app.MapPost("/api/push/unsubscribe", async (PushAboDto dto, ApplicationDbContext db) =>
+{
+    var s = await db.PushSubscriptions.FirstOrDefaultAsync(x => x.Endpoint == dto.Endpoint);
+    if (s != null) { db.PushSubscriptions.Remove(s); await db.SaveChangesAsync(); }
+    return Results.Ok();
+}).RequireAuthorization().DisableAntiforgery();
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -269,3 +295,6 @@ static string NpgsqlAusUrl(string databaseUrl)
     };
     return builder.ConnectionString;
 }
+
+// DTO für die Web-Push-Anmeldung (Client → /api/push/subscribe).
+public record PushAboDto(string Endpoint, string P256dh, string Auth);

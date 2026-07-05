@@ -4,6 +4,7 @@
 @using QRCoder
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IMemoryCache Cache
 @inject NavigationManager Nav
@@ -100,6 +101,26 @@
             <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
                        StartIcon="@Icons.Material.Filled.MenuBook" Href="/account/tagebuch">Mein Tagebuch</MudButton>
         </MudStack>
+    </MudPaper>
+}
+
+@* „Für dich" – personalisierter Feed aus deinen UND gefolgten Bands (Wiederkehr-Schleife, UX-Spec 4.2). *@
+@if (_feed is { Leer: false })
+{
+    <MudPaper Class="pa-4 mb-8" Elevation="4"
+              Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color:#1ABC9C;" />
+            <MudText Typo="Typo.h5" Style="color:#1ABC9C;">Für dich</MudText>
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#9B59B6;"
+                       Href="/account/benachrichtigungen" EndIcon="@Icons.Material.Filled.Notifications">
+                Wochenüberblick
+            </MudButton>
+        </MudStack>
+        @FeedBlock("Kommende Konzerte deiner Bands", Icons.Material.Filled.Event, _feed.Kommende)
+        @FeedBlock("Warst du dabei? – ins Tagebuch eintragen", Icons.Material.Filled.MenuBook, _feed.Nachfragen)
+        @FeedBlock("Neue Videos deiner Bands", Icons.Material.Filled.PlayCircle, _feed.Videos)
     </MudPaper>
 }
 
@@ -344,7 +365,23 @@
     private readonly int _heuer = DateTime.Today.Year;
     private List<BandRef> _deineBands = [];
     private List<VideoZeile> _deineBandVideos = [];
+    private DigestService.Digest? _feed;
     private MarkupString _qrSvg = QrErzeugen();
+
+    private RenderFragment FeedBlock(string titel, string icon, List<DigestService.Posten> posten) => __builder =>
+    {
+        if (posten.Count == 0) return;
+        <MudText Typo="Typo.subtitle2" Class="mt-3" Style="color:#9B59B6;">@titel</MudText>
+        <MudList T="string" Dense="true">
+            @foreach (var p in posten.Take(5))
+            {
+                <MudListItem T="string" Icon="@icon" Href="@p.Href" Style="color:#F0E6FF;">
+                    @p.Titel
+                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@p.Detail</MudText>
+                </MudListItem>
+            }
+        </MudList>
+    };
 
     private static MarkupString QrErzeugen()
     {
@@ -382,13 +419,15 @@
         var userStatusTask = UserStatusLadenAsync();
         var teaserTask = TagebuchTeaserLadenAsync();
         var deineBandsTask = DeineBandsLadenAsync();
-        await Task.WhenAll(neueVideosTask, kalenderTask, userStatusTask, teaserTask, deineBandsTask);
+        var feedTask = FeedLadenAsync();
+        await Task.WhenAll(neueVideosTask, kalenderTask, userStatusTask, teaserTask, deineBandsTask, feedTask);
 
         _neueVideos = neueVideosTask.Result;
         _kalender = kalenderTask.Result;
         (_onboardingNoetig, _offeneAnfragen) = userStatusTask.Result;
         _teaser = teaserTask.Result;
         (_deineBands, _deineBandVideos) = deineBandsTask.Result;
+        _feed = feedTask.Result;
         _geladen = true;
     }
 
@@ -522,6 +561,16 @@
             .Take(4)
             .ToListAsync();
         return (bands, videos);
+    }
+
+    // „Für dich"-Feed: Live-Zusammenstellung (ohne Dedup) aus Mitglied- ∪ gefolgten Bands.
+    private async Task<DigestService.Digest> FeedLadenAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return new([], [], []);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await DigestService.ErstelleAsync(db, userId, nurUngesehene: false);
     }
 
     // User-spezifischer Onboarding-/Anfragen-Status – pro Request (nicht cachebar).

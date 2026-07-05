@@ -1,0 +1,54 @@
+@page "/benachrichtigungen/abmelden"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Abmelden – HarmoniQ</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">E-Mail-Benachrichtigungen</MudText>
+
+    @if (!_fertig)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (_ok)
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-3">
+            Du erhältst keine E-Mail-Benachrichtigungen mehr@(string.IsNullOrWhiteSpace(_email) ? "" : $" an {_email}").
+        </MudAlert>
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+            Du kannst den E-Mail-Digest jederzeit wieder aktivieren – unter
+            <MudLink Href="/account/benachrichtigungen">Benachrichtigungen</MudLink> in deinem Konto.
+            Push-Benachrichtigungen sind davon nicht betroffen.
+        </MudText>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Warning">
+            Dieser Abmelde-Link ist ungültig oder abgelaufen. Deine Einstellungen kannst du im Konto unter
+            <MudLink Href="/account/benachrichtigungen">Benachrichtigungen</MudLink> anpassen.
+        </MudAlert>
+    }
+</MudContainer>
+
+@code {
+    [Microsoft.AspNetCore.Components.SupplyParameterFromQuery]
+    public string? Token { get; set; }
+
+    private bool _fertig;
+    private bool _ok;
+    private string? _email;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Guid.TryParse(Token, out var token))
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            (_ok, _email) = await BenachrichtigungService.AbmeldenPerTokenAsync(db, token);
+        }
+        _fertig = true;
+    }
+}

@@ -3,6 +3,7 @@ using System;
 using HarmoniQ.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HarmoniQ.Web.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260704135703_BenachrichtigungPraeferenzen")]
+    partial class BenachrichtigungPraeferenzen
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1369,49 +1372,6 @@ namespace HarmoniQ.Web.Migrations
                     b.ToTable("PersonRollen");
                 });
 
-            modelBuilder.Entity("HarmoniQ.Web.Data.Models.PushSubscription", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Auth")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("BenutzerId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Endpoint")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("P256dh")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("createtime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("createuser")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("modifytime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("modifyuser")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BenutzerId");
-
-                    b.HasIndex("Endpoint")
-                        .IsUnique();
-
-                    b.ToTable("PushSubscriptions");
-                });
-
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Richtigstellung", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2371,17 +2331,6 @@ namespace HarmoniQ.Web.Migrations
                         .IsRequired();
 
                     b.Navigation("Person");
-                });
-
-            modelBuilder.Entity("HarmoniQ.Web.Data.Models.PushSubscription", b =>
-                {
-                    b.HasOne("HarmoniQ.Web.Data.ApplicationUser", "Benutzer")
-                        .WithMany()
-                        .HasForeignKey("BenutzerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Benutzer");
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Richtigstellung", b =>

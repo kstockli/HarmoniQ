@@ -34,6 +34,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PersonAnspruch> PersonAnsprueche => Set<PersonAnspruch>();
     public DbSet<BandbeitrittAntrag> BandbeitrittAntraege => Set<BandbeitrittAntrag>();
     public DbSet<BandInteresse> BandInteressen => Set<BandInteresse>();
+    public DbSet<BenachrichtigungPraeferenz> BenachrichtigungPraeferenzen => Set<BenachrichtigungPraeferenz>();
+    public DbSet<BenachrichtigungGesendet> BenachrichtigungenGesendet => Set<BenachrichtigungGesendet>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     // Phase 8 – Vernetzung & Konzerte
     public DbSet<Konzert> Konzerte => Set<Konzert>();
@@ -226,6 +229,35 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(i => i.BandId).OnDelete(DeleteBehavior.Cascade);
             // Eine Person folgt einer Band höchstens einmal.
             e.HasIndex(i => new { i.PersonId, i.BandId }).IsUnique();
+        });
+
+        // Benachrichtigungs-Präferenzen (Wiederkehr-Schleife, UX-Spec 4.2)
+        builder.Entity<BenachrichtigungPraeferenz>(e =>
+        {
+            e.Property(p => p.Id).ValueGeneratedNever();
+            e.HasIndex(p => p.BenutzerId).IsUnique();     // genau eine Zeile je Konto
+            e.HasIndex(p => p.AbmeldeToken).IsUnique();   // Abmelde-Link-Lookup
+            e.HasOne(p => p.Benutzer).WithMany()
+                .HasForeignKey(p => p.BenutzerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Dedup-Log gesendeter Digest-Bausteine
+        builder.Entity<BenachrichtigungGesendet>(e =>
+        {
+            e.Property(g => g.Id).ValueGeneratedNever();
+            e.HasIndex(g => new { g.BenutzerId, g.Typ, g.EntitaetId });
+            e.HasOne(g => g.Benutzer).WithMany()
+                .HasForeignKey(g => g.BenutzerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Web-Push-Anmeldungen (PWA-Push, UX-Spec 4.2)
+        builder.Entity<PushSubscription>(e =>
+        {
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.HasIndex(s => s.Endpoint).IsUnique();
+            e.HasIndex(s => s.BenutzerId);
+            e.HasOne(s => s.Benutzer).WithMany()
+                .HasForeignKey(s => s.BenutzerId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<PersonAnspruch>(e =>

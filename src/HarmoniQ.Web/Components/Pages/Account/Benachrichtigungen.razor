@@ -1,0 +1,188 @@
+@page "/account/benachrichtigungen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+@inject IBenachrichtigungsMail Mail
+@inject IConfiguration Config
+@inject IJSRuntime JS
+
+<PageTitle>Benachrichtigungen – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Benachrichtigungen</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0; max-width:720px;">
+        Einmal pro Woche fassen wir zusammen, was bei <b>deinen und den von dir gefolgten Bands</b>
+        läuft: kommende Konzerte, Nachfragen zum Eintragen ins Tagebuch und neue Videos. Du wählst die
+        Kanäle unabhängig.
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:720px;">
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F0E6FF;">Kanäle</MudText>
+        <MudStack Spacing="1">
+            <MudSwitch T="bool" @bind-Value="_email" Color="Color.Primary"
+                       Label="E-Mail-Digest (wöchentlich)" />
+            <MudSwitch T="bool" @bind-Value="_push" Color="Color.Primary"
+                       Label="Push aufs Smartphone (PWA, wöchentlich)" />
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                Beide Kanäle lassen sich jederzeit einzeln abstellen.
+            </MudText>
+        </MudStack>
+
+        @* Geräte-Push: Browser-Anmeldung auf DIESEM Gerät (getrennt von der Kanal-Präferenz). *@
+        <MudDivider Class="my-3" />
+        <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color:#1ABC9C;">Push auf diesem Gerät</MudText>
+        @if (_pushStatus == "unsupported")
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">Dieser Browser unterstützt keine Push-Benachrichtigungen (iOS: „Zum Home-Bildschirm hinzufügen").</MudText>
+        }
+        else if (_pushStatus == "denied")
+        {
+            <MudText Typo="Typo.body2" Style="color:#e57373;">Benachrichtigungen sind im Browser blockiert. Erlaube sie in den Website-Einstellungen.</MudText>
+        }
+        else if (_pushStatus == "subscribed")
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle" Style="background:#103d36;color:#1ABC9C;">Dieses Gerät ist angemeldet</MudChip>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#A78FC0;" OnClick="PushDeaktivieren">Gerät abmelden</MudButton>
+            </MudStack>
+        }
+        else
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                       StartIcon="@Icons.Material.Filled.NotificationsActive" OnClick="PushAktivieren" Disabled="!_push">
+                Dieses Gerät für Push anmelden
+            </MudButton>
+            @if (!_push)
+            {
+                <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color:#A78FC0;">Aktiviere zuerst den Push-Kanal oben und speichere.</MudText>
+            }
+        }
+        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;" Class="mt-3"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="Speichern">Speichern</MudButton>
+        @if (_istAdmin)
+        {
+            <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C; border-color:#1ABC9C;" Class="mt-3 ml-2"
+                       StartIcon="@Icons.Material.Filled.Send" OnClick="TestSenden">
+                Wochenüberblick jetzt an mich senden (Test)
+            </MudButton>
+        }
+    </MudPaper>
+
+    @* Live-Vorschau: was der nächste Digest enthalten würde. *@
+    <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C; max-width:720px;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">
+            Vorschau deines nächsten Wochenüberblicks (@_digest.Total)
+        </MudText>
+        @if (_digest.Leer)
+        {
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                Zurzeit nichts Neues. Sobald du <MudLink Href="/account/freunde">Bands folgst</MudLink>
+                oder bei deinen Bands etwas ansteht, erscheint es hier.
+            </MudText>
+        }
+        else
+        {
+            @Block("Kommende Konzerte", Icons.Material.Filled.Event, _digest.Kommende)
+            @Block("Warst du dabei? – ins Tagebuch eintragen", Icons.Material.Filled.MenuBook, _digest.Nachfragen)
+            @Block("Neue Videos", Icons.Material.Filled.PlayCircle, _digest.Videos)
+        }
+    </MudPaper>
+}
+
+@code {
+    private bool _geladen;
+    private bool _email = true;
+    private bool _push = true;
+    private bool _istAdmin;
+    private string? _userId;
+    private string _pushStatus = "";
+    private DigestService.Digest _digest = new([], [], []);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _istAdmin = authState.User.IsInRole("Admin");
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var pref = await BenachrichtigungService.HolenOderErstellenAsync(db, _userId!);
+        _email = pref.EmailAktiv;
+        _push = pref.PushAktiv;
+        _digest = await DigestService.ErstelleAsync(db, _userId);
+        _geladen = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _pushStatus = await JS.InvokeAsync<string>("harmoniqPush.status");
+            StateHasChanged();
+        }
+        catch { /* JS evtl. noch nicht bereit – Status bleibt leer (Button „anmelden") */ }
+    }
+
+    private async Task PushAktivieren()
+    {
+        var pub = Config["Push:PublicKey"];
+        try { _pushStatus = await JS.InvokeAsync<string>("harmoniqPush.aktivieren", pub); }
+        catch { _pushStatus = "unsupported"; }
+        Snackbar.Add(_pushStatus == "subscribed" ? "Dieses Gerät ist jetzt angemeldet."
+            : _pushStatus == "denied" ? "Im Browser blockiert." : "Push nicht verfügbar.",
+            _pushStatus == "subscribed" ? Severity.Success : Severity.Warning);
+    }
+
+    private async Task PushDeaktivieren()
+    {
+        try { _pushStatus = await JS.InvokeAsync<string>("harmoniqPush.deaktivieren"); }
+        catch { }
+        Snackbar.Add("Gerät abgemeldet.", Severity.Info);
+    }
+
+    private async Task Speichern()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var pref = await BenachrichtigungService.HolenOderErstellenAsync(db, _userId!);
+        pref.EmailAktiv = _email;
+        pref.PushAktiv = _push;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Einstellungen gespeichert.", Severity.Success);
+    }
+
+    private async Task TestSenden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var basis = Config["Seo:BasisUrl"] ?? "https://harmoniq.q-no.ch";
+        var r = await WochenBenachrichtigung.VersendeAnKontoAsync(db, Mail, Config, basis, _userId!);
+        Snackbar.Add(r.Meldung, r.Gesendet ? Severity.Success : Severity.Info);
+        _digest = await DigestService.ErstelleAsync(db, _userId);   // Vorschau aktualisieren (Log gefüllt)
+    }
+
+    private RenderFragment Block(string titel, string icon, List<DigestService.Posten> posten) => __builder =>
+    {
+        if (posten.Count == 0) return;
+        <MudText Typo="Typo.subtitle2" Class="mt-3" Style="color:#9B59B6;">@titel (@posten.Count)</MudText>
+        <MudList T="string" Dense="true">
+            @foreach (var p in posten)
+            {
+                <MudListItem T="string" Icon="@icon" Href="@p.Href" Style="color:#F0E6FF;">
+                    @p.Titel
+                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@p.Detail</MudText>
+                </MudListItem>
+            }
+        </MudList>
+    };
+}

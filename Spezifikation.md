@@ -429,12 +429,21 @@ BandInteresse                       (Person „folgt" Band – privat, KEIN Rost
 > (≥2 besuchte Konzerte / hoch bewertetes Stück der Band). Mitgliedschaft impliziert Folgen (Union),
 > es braucht dafür keinen zusätzlichen `BandInteresse`-Eintrag.
 
-> **Wiederkehr-Schleife – weitere geplante Entitäten (Details UX-Spec 4.2, noch NICHT umgesetzt):**
-> `BenachrichtigungPraeferenz` (pro Konto, Kanäle **unabhängig**: `EmailAktiv`/`PushAktiv`, Default an),
-> `BenachrichtigungGesendet` (Dedup-Log: Konto, Typ, EntitätsId, Zeit), `PushSubscription` (Endpoint +
-> Keys für Web-Push/VAPID), sowie an `Person` ein privater, **vergröberter** letzter Standort + optionale
-> **Heimat-PLZ** (opt-in, für den serverseitigen „in deiner Nähe"-Digest, da der Job keinen
-> localStorage-Standort hat).
+> **Wiederkehr-Schleife – Benachrichtigungs-Entitäten (Details UX-Spec 4.2):**
+> - `BenachrichtigungPraeferenz` (pro Konto, Kanäle **unabhängig**: `EmailAktiv`/`PushAktiv`, Default an,
+>   + `AbmeldeToken` für tokenbasierte One-Click-Abmeldung) — **UMGESETZT.**
+> - `BenachrichtigungGesendet` (Dedup-Log: Konto, `Typ` [`BenachrichtigungTyp`: KommendesKonzert/
+>   TagebuchNachfrage/NeuesVideo], `EntitaetId`, `GesendetAm`) — **UMGESETZT.** Digest-Zusammenstellung
+>   (`DigestService`, kanal-neutral, Bausteine A/B/C aus Mitgliedschaft ∪ Folgen) umgesetzt.
+> - **Versand — UMGESETZT:** wöchentlicher Hintergrund-Job (`WochenBenachrichtigungHostedService`,
+>   Standard So 18 Uhr) → `WochenBenachrichtigung` verschickt über die aktiven Kanäle **E-Mail**
+>   (HTML-„Wochenüberblick" + tokenbasierter Abmelde-Link) **und PWA-Push** und schreibt das Dedup-Log.
+> - `PushSubscription` (Endpoint + p256dh/auth je Gerät) — **UMGESETZT** (Web-Push via VAPID,
+>   `PushService`; Service-Worker + Client-Anmeldung; Config `Push:PublicKey`/`Push:PrivateKey`[Secret]/
+>   `Push:Subject`). **Prod:** privaten Schlüssel als Env-Var `Push__PrivateKey` setzen.
+> - **Noch NICHT umgesetzt (Trigger F):** an `Person` ein privater, **vergröberter** letzter Standort +
+>   optionale **Heimat-PLZ** (opt-in, für den serverseitigen „in deiner Nähe"-Digest, da der Job keinen
+>   localStorage-Standort hat).
 
 BandbeitrittAntrag                  (Vorschlag „Band beitreten" – UMGESETZT)
 ├── Id (Guid)
