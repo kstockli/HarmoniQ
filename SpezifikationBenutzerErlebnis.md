@@ -103,8 +103,9 @@ protokolliere die Reibungspunkte. So diskutieren wir an konkreten Befunden statt
   vom wöchentlichen `WochenBenachrichtigungHostedService`; Dedup via `BenachrichtigungGesendet`.
   Präferenzseite `/account/benachrichtigungen` mit Live-Vorschau + Geräte-Push-Anmeldung. Startseiten-
   **Feed** „Für dich" (A/B/C aus Mitglied- ∪ gefolgten Bands, ohne Dedup, `DigestService(nurUngesehene:false)`)
-  umgesetzt. **Offen:** Trigger **F** („in deiner Nähe") braucht noch das private Standort-/Heimat-PLZ-Feld
-  an `Person`; ereignisgesteuerte Sofort-Mails optional später.
+  umgesetzt. Trigger **F** („in deiner Nähe") umgesetzt: privater, ~1 km vergröberter Standort/Heimat-PLZ
+  an `Person` (opt-in, auf `/account/benachrichtigungen`), Nähe-Konzerte fremder Bands im 30-km-Umkreis.
+  **Damit ist der v1-Umfang von 4.2 vollständig.** Optional später: ereignisgesteuerte Sofort-Mails.
 
 **Phase 2 — Verbreitung starten (wenn Readiness-Checkliste 9.4 erfüllt):**
 - **Band-Admin**-Rolle (`BandAdministrator` + Audit-Log) + **Crawler-Einladung** an offizielle

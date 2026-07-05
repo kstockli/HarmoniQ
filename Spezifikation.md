@@ -441,9 +441,11 @@ BandInteresse                       (Person „folgt" Band – privat, KEIN Rost
 > - `PushSubscription` (Endpoint + p256dh/auth je Gerät) — **UMGESETZT** (Web-Push via VAPID,
 >   `PushService`; Service-Worker + Client-Anmeldung; Config `Push:PublicKey`/`Push:PrivateKey`[Secret]/
 >   `Push:Subject`). **Prod:** privaten Schlüssel als Env-Var `Push__PrivateKey` setzen.
-> - **Noch NICHT umgesetzt (Trigger F):** an `Person` ein privater, **vergröberter** letzter Standort +
->   optionale **Heimat-PLZ** (opt-in, für den serverseitigen „in deiner Nähe"-Digest, da der Job keinen
->   localStorage-Standort hat).
+> - **Trigger F („in deiner Nähe") — UMGESETZT:** `Person` hat `StandortLat`/`StandortLng` (privat,
+>   opt-in, **auf ~1 km vergröbert**) + optionale `HeimatPlz`. Erfassung auf `/account/benachrichtigungen`
+>   (aktueller Standort per Geolocation ODER PLZ via `GeocodingService.GeocodePlzAsync`). `DigestService`
+>   liefert daraus kommende Konzerte **fremder** Bands im Umkreis (Haversine, 30 km), Konzerte eigener/
+>   gefolgter Bands sind bereits in Baustein A und werden nicht doppelt gezeigt.
 
 BandbeitrittAntrag                  (Vorschlag „Band beitreten" – UMGESETZT)
 ├── Id (Guid)

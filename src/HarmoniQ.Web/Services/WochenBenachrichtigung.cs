@@ -90,6 +90,7 @@ public static class WochenBenachrichtigung
         if (d.Kommende.Count > 0) teile.Add($"{d.Kommende.Count} kommende Konzerte");
         if (d.Nachfragen.Count > 0) teile.Add($"{d.Nachfragen.Count} zum Eintragen");
         if (d.Videos.Count > 0) teile.Add($"{d.Videos.Count} neue Videos");
+        if (d.Nahe.Count > 0) teile.Add($"{d.Nahe.Count} in deiner Nähe");
         return teile.Count > 0 ? string.Join(", ", teile) : "Neuigkeiten deiner Bands";
     }
 
@@ -103,6 +104,7 @@ public static class WochenBenachrichtigung
         Abschnitt(sb, basis, "Kommende Konzerte", d.Kommende);
         Abschnitt(sb, basis, "Warst du dabei? – ins Tagebuch eintragen", d.Nachfragen);
         Abschnitt(sb, basis, "Neue Videos", d.Videos);
+        Abschnitt(sb, basis, "Konzerte in deiner Nähe", d.Nahe);
 
         sb.Append("<hr style=\"border:none;border-top:1px solid #eee;margin:24px 0 12px;\" />");
         sb.Append("<p style=\"font-size:12px;color:#999;\">Du erhältst diese wöchentliche E-Mail, weil du "

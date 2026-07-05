@@ -14,4 +14,7 @@ public enum BenachrichtigungTyp
 
     /// <summary>C: Neues Video einer Mitglied-/gefolgten Band.</summary>
     NeuesVideo = 2,
+
+    /// <summary>F: Kommendes Konzert (fremder Bands) in der Nähe des Heim-Standorts.</summary>
+    NahesKonzert = 3,
 }

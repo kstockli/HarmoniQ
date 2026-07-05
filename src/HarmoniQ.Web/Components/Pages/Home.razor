@@ -104,8 +104,8 @@
     </MudPaper>
 }
 
-@* „Für dich" – personalisierter Feed aus deinen UND gefolgten Bands (Wiederkehr-Schleife, UX-Spec 4.2). *@
-@if (_feed is { Leer: false })
+@* „Für dich" – personalisierter Feed aus deinen UND gefolgten Bands + Freunde-News (UX-Spec 4.2). *@
+@if (_feed is not null && (!_feed.Leer || _hatFreundeNews))
 {
     <MudPaper Class="pa-4 mb-8" Elevation="4"
               Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
@@ -121,6 +121,21 @@
         @FeedBlock("Kommende Konzerte deiner Bands", Icons.Material.Filled.Event, _feed.Kommende)
         @FeedBlock("Warst du dabei? – ins Tagebuch eintragen", Icons.Material.Filled.MenuBook, _feed.Nachfragen)
         @FeedBlock("Neue Videos deiner Bands", Icons.Material.Filled.PlayCircle, _feed.Videos)
+        @FeedBlock("Konzerte in deiner Nähe", Icons.Material.Filled.Place, _feed.Nahe)
+        @if (_freundeNews.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-3" Style="color:#9B59B6;">Von deinen Freund:innen</MudText>
+            <MudList T="string" Dense="true">
+                @foreach (var f in _freundeNews)
+                {
+                    <MudListItem T="string" Icon="@f.Icon" Href="@f.Href" Style="color:#F0E6FF;">
+                        <b>@f.Name</b> @f.Aktion
+                        <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@f.RelativLabel</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+            <MudLink Href="/account/freunde" Style="color:#9B59B6;font-size:.85rem;">Alle Neuigkeiten →</MudLink>
+        }
     </MudPaper>
 }
 
@@ -146,51 +161,6 @@
         </MudGrid>
     </MudPaper>
 }
-
-@* Deine Bands (Neuigkeiten) – neue Aufnahmen der Bands, in denen du bist (UX-Spec 6.1). *@
-@if (_deineBands.Count > 0)
-{
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
-        <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#9B59B6;" />
-        <MudText Typo="Typo.h5" Style="color:#D4AF37;">Deine Bands</MudText>
-        @foreach (var b in _deineBands)
-        {
-            <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="@($"/bands/{b.Id}")"
-                       Style="color:#F0E6FF;border-color:#3a1060;">@b.Name</MudButton>
-        }
-    </MudStack>
-    @if (_deineBandVideos.Count > 0)
-    {
-        <MudGrid Class="mb-8">
-            @foreach (var v in _deineBandVideos)
-            {
-                <MudItem xs="12" sm="6" md="3">
-                    <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-                        <MudLink Href="@($"/videos/{v.Id}")">
-                            <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)" style="width:100%;display:block;" alt="@v.StueckTitel" />
-                        </MudLink>
-                        <MudCardContent Class="pa-3">
-                            <MudLink Href="@($"/videos/{v.Id}")" Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@v.StueckTitel</MudLink>
-                            @if (v.BandName != null)
-                            {
-                                <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">@v.BandName</MudText>
-                            }
-                        </MudCardContent>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
-    }
-    else
-    {
-        <MudText Typo="Typo.body2" Class="mb-8" Style="color:#A78FC0;">Von deinen Bands gibt es noch keine Aufnahmen.</MudText>
-    }
-}
-
-@* Feed der Freund:innen/Bandkolleg:innen – nur wenn nicht leer; ohne Schreibbox (die ist im Freunde-Fenster) *@
-<div class="mb-8">
-    <AktivitaetsFeed Titel="Neuigkeiten" Max="5" ZeigePostBox="false" MehrHref="/account/freunde" />
-</div>
 
 @if (_neueVideos.Count > 0)
 {
@@ -363,9 +333,9 @@
     private bool _geladen;   // true sobald die Statistik geladen ist – steuert Skeleton statt „0"
     private TagebuchTeaser? _teaser;
     private readonly int _heuer = DateTime.Today.Year;
-    private List<BandRef> _deineBands = [];
-    private List<VideoZeile> _deineBandVideos = [];
     private DigestService.Digest? _feed;
+    private bool _hatFreundeNews;
+    private List<FreundZeile> _freundeNews = [];
     private MarkupString _qrSvg = QrErzeugen();
 
     private RenderFragment FeedBlock(string titel, string icon, List<DigestService.Posten> posten) => __builder =>
@@ -418,15 +388,13 @@
         var kalenderTask = KalenderLadenAsync();
         var userStatusTask = UserStatusLadenAsync();
         var teaserTask = TagebuchTeaserLadenAsync();
-        var deineBandsTask = DeineBandsLadenAsync();
         var feedTask = FeedLadenAsync();
-        await Task.WhenAll(neueVideosTask, kalenderTask, userStatusTask, teaserTask, deineBandsTask, feedTask);
+        await Task.WhenAll(neueVideosTask, kalenderTask, userStatusTask, teaserTask, feedTask);
 
         _neueVideos = neueVideosTask.Result;
         _kalender = kalenderTask.Result;
         (_onboardingNoetig, _offeneAnfragen) = userStatusTask.Result;
         _teaser = teaserTask.Result;
-        (_deineBands, _deineBandVideos) = deineBandsTask.Result;
         _feed = feedTask.Result;
         _geladen = true;
     }
@@ -529,48 +497,95 @@
             letzter.KonzertId, letzter.Name ?? letzter.Datum.ToString("dd.MM.yyyy"));
     }
 
-    // „Deine Bands" – Bands, in denen die verknüpfte Person Mitglied ist, + deren neueste Videos.
-    private async Task<(List<BandRef>, List<VideoZeile>)> DeineBandsLadenAsync()
-    {
-        var authState = await AuthProvider.GetAuthenticationStateAsync();
-        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userId)) return ([], []);
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
-        if (meineId == Guid.Empty) return ([], []);
-
-        // Roh laden, dann client-seitig entdoppeln/sortieren (EF kann Distinct über die
-        // Record-Projektion mit Join nicht übersetzen).
-        var roh = await db.BandMitgliedschaften
-            .Where(m => m.PersonId == meineId)
-            .Select(m => new { m.BandId, Name = m.Band.Name })
-            .ToListAsync();
-        var bands = roh
-            .GroupBy(x => x.BandId)
-            .Select(g => new BandRef(g.Key, g.First().Name))
-            .OrderBy(b => b.Name)
-            .ToList();
-        if (bands.Count == 0) return ([], []);
-
-        var bandIds = bands.Select(b => b.Id).ToList();
-        var videos = await db.Videos
-            .Where(v => v.Status == VideoStatus.Genehmigt && v.BandId != null && bandIds.Contains(v.BandId!.Value))
-            .OrderByDescending(v => v.ErstelltAm)
-            .Select(v => new VideoZeile(v.Id, v.Plattform, v.ExternId, v.Stueck.Titel, v.Band!.Name))
-            .Take(4)
-            .ToListAsync();
-        return (bands, videos);
-    }
-
     // „Für dich"-Feed: Live-Zusammenstellung (ohne Dedup) aus Mitglied- ∪ gefolgten Bands.
+    // Ermittelt nebenbei, ob es Freunde-News gibt (steuert die Freunde-Sektion im „Für dich").
     private async Task<DigestService.Digest> FeedLadenAsync()
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userId)) return new([], [], []);
+        if (string.IsNullOrEmpty(userId)) return new([], [], [], []);
         await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Freunde-News (sichtbare Aktivitäten von Freund:innen/Bandkolleg:innen), kompakt & gekappt,
+        // aber mit Inhalt (welches Konzert/Video, was geschrieben).
+        var sichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+        var roh = await db.Aktivitaeten
+            .Where(a => sichtbar.Contains(a.AkteurPersonId))
+            .OrderByDescending(a => a.Zeitpunkt)
+            .Select(a => new { a.AkteurPersonId, Name = a.AkteurPerson.Name, a.Typ, a.Text,
+                a.ZielTyp, a.ZielId, a.Zeitpunkt,
+                NebenName = a.NebenPerson != null ? a.NebenPerson.Name : null, a.NebenPersonId })
+            .Take(4)
+            .ToListAsync();
+
+        // Ziel-Beschriftungen gebündelt auflösen (Videos + Konzerte).
+        var vIds = roh.Where(r => r.ZielTyp == AktivitaetZielTyp.Video && r.ZielId != null).Select(r => r.ZielId!.Value).Distinct().ToList();
+        var vTitel = await db.Videos.Where(v => vIds.Contains(v.Id)).Select(v => new { v.Id, T = v.Stueck.Titel })
+            .ToDictionaryAsync(x => x.Id, x => x.T);
+        var kIds = roh.Where(r => r.ZielTyp == AktivitaetZielTyp.Konzert && r.ZielId != null).Select(r => r.ZielId!.Value).Distinct().ToList();
+        var kTitel = await db.Konzerte.Where(k => kIds.Contains(k.Id)).Select(k => new { k.Id, T = k.Name ?? k.Datum.ToString("dd.MM.yyyy") })
+            .ToDictionaryAsync(x => x.Id, x => x.T);
+
+        var jetzt = DateTime.UtcNow;
+        _freundeNews = roh.Select(a =>
+        {
+            var (aktion, href) = AktivitaetText(a.Typ, a.Text, a.ZielTyp, a.ZielId, vTitel, kTitel, a.NebenPersonId, a.NebenName, a.AkteurPersonId);
+            return new FreundZeile(a.Name, aktion, AktivitaetIcon(a.Typ), AktivitaetLabel(a.Zeitpunkt, jetzt), href);
+        }).ToList();
+        _hatFreundeNews = _freundeNews.Count > 0;
+
         return await DigestService.ErstelleAsync(db, userId, nurUngesehene: false);
+    }
+
+    private static string Kurz(string? s, int max = 90)
+        => string.IsNullOrWhiteSpace(s) ? "" : (s.Length > max ? s[..max] + "…" : s);
+
+    // Liefert (Aktionstext, Ziel-Href). Der ganze Listeneintrag verlinkt auf das Ziel (Konzert/Video),
+    // sonst auf die handelnde Person.
+    private static (string, string) AktivitaetText(AktivitaetTyp t, string? text, AktivitaetZielTyp? zt, Guid? zid,
+        Dictionary<Guid, string> vTitel, Dictionary<Guid, string> kTitel, Guid? nebenId, string? nebenName, Guid akteurId)
+    {
+        string person = $"/personen/{akteurId}";
+        switch (t)
+        {
+            case AktivitaetTyp.Beitrag:
+                return ($"hat geschrieben: „{Kurz(text)}“", person);
+            case AktivitaetTyp.BewertungAbgegeben when zid is Guid v && vTitel.TryGetValue(v, out var vt):
+                return ($"hat „{vt}“ bewertet", $"/videos/{v}");
+            case AktivitaetTyp.VideoHinzugefuegt when zid is Guid v && vTitel.TryGetValue(v, out var vt):
+                return ($"hat „{vt}“ hinzugefügt", $"/videos/{v}");
+            case AktivitaetTyp.MitwirkungHinzugefuegt when zid is Guid v && vTitel.TryGetValue(v, out var vt):
+                return ($"wirkt mit in „{vt}“", $"/videos/{v}");
+            case AktivitaetTyp.KonzertBesucht when zid is Guid k && kTitel.TryGetValue(k, out var kt):
+                return ($"war am Konzert „{kt}“", $"/konzerte/{k}");
+            case AktivitaetTyp.FreundschaftBestaetigt when nebenId is Guid nid:
+                return ($"ist jetzt mit {nebenName} befreundet", $"/personen/{nid}");
+            case AktivitaetTyp.BewertungAbgegeben: return ("hat ein Video bewertet", person);
+            case AktivitaetTyp.VideoHinzugefuegt: return ("hat ein Video hinzugefügt", person);
+            case AktivitaetTyp.MitwirkungHinzugefuegt: return ("wirkt in einem Video mit", person);
+            case AktivitaetTyp.KonzertBesucht: return ("war an einem Konzert", person);
+            default: return ("hat etwas Neues", person);
+        }
+    }
+
+    private static string AktivitaetIcon(AktivitaetTyp t) => t switch
+    {
+        AktivitaetTyp.Beitrag => Icons.Material.Filled.ChatBubble,
+        AktivitaetTyp.BewertungAbgegeben => Icons.Material.Filled.Star,
+        AktivitaetTyp.VideoHinzugefuegt => Icons.Material.Filled.VideoLibrary,
+        AktivitaetTyp.FreundschaftBestaetigt => Icons.Material.Filled.People,
+        AktivitaetTyp.MitwirkungHinzugefuegt => Icons.Material.Filled.Groups,
+        AktivitaetTyp.KonzertBesucht => Icons.Material.Filled.Event,
+        _ => Icons.Material.Filled.Notifications
+    };
+
+    private static string AktivitaetLabel(DateTime zeitpunkt, DateTime jetzt)
+    {
+        var d = jetzt - zeitpunkt;
+        if (d.TotalMinutes < 60) return $"vor {Math.Max(1, (int)d.TotalMinutes)} Min.";
+        if (d.TotalHours < 24) return $"vor {(int)d.TotalHours} Std.";
+        if (d.TotalDays < 30) return $"vor {(int)d.TotalDays} Tg.";
+        return zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy");
     }
 
     // User-spezifischer Onboarding-/Anfragen-Status – pro Request (nicht cachebar).
@@ -641,7 +656,7 @@
         List<Zeile> Komponisten, List<BandZeile> Bands);
 
     private record TagebuchTeaser(int Heuer, int Gesamt, Guid? LetzterKonzertId, string? LetzterTitel);
-    private record BandRef(Guid Id, string Name);
+    private record FreundZeile(string Name, string Aktion, string Icon, string RelativLabel, string Href);
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
     private record BandZeile(Guid Id, string Name, string? Land, int MitgliederCount, int VideosCount);

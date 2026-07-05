@@ -11,6 +11,7 @@
 @inject IBenachrichtigungsMail Mail
 @inject IConfiguration Config
 @inject IJSRuntime JS
+@inject GeocodingService Geo
 
 <PageTitle>Benachrichtigungen – HarmoniQ</PageTitle>
 
@@ -80,6 +81,34 @@ else
         }
     </MudPaper>
 
+    @* Standort für „Konzerte in deiner Nähe" (Trigger F). Privat, opt-in, vergröbert (~1 km). *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:720px;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#F0E6FF;">Konzerte in deiner Nähe</MudText>
+        <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
+            Optional: Damit wir dir im Wochenüberblick auch Konzerte <b>anderer</b> Bands in deiner Region
+            vorschlagen können. Der Standort wird <b>privat</b> und bewusst <b>ungenau</b> (~1 km) gespeichert.
+        </MudText>
+        @if (_hatStandort)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2" Wrap="Wrap.Wrap">
+                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Place" Style="background:#103d36;color:#1ABC9C;">
+                    Standort gespeichert@(string.IsNullOrWhiteSpace(_plz) ? "" : $" (PLZ {_plz})")
+                </MudChip>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#A78FC0;" OnClick="StandortEntfernen">Entfernen</MudButton>
+            </MudStack>
+        }
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudTextField @bind-Value="_plz" Label="Heimat-PLZ" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Style="max-width:160px;" />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                       OnClick="PlzSpeichern" Disabled="@(string.IsNullOrWhiteSpace(_plz) || _geoLaeuft)">PLZ speichern</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#1ABC9C;"
+                       StartIcon="@Icons.Material.Filled.MyLocation" OnClick="StandortAusGps" Disabled="_geoLaeuft">
+                Aktuellen Standort verwenden
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
     @* Live-Vorschau: was der nächste Digest enthalten würde. *@
     <MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C; max-width:720px;">
         <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">
@@ -97,6 +126,7 @@ else
             @Block("Kommende Konzerte", Icons.Material.Filled.Event, _digest.Kommende)
             @Block("Warst du dabei? – ins Tagebuch eintragen", Icons.Material.Filled.MenuBook, _digest.Nachfragen)
             @Block("Neue Videos", Icons.Material.Filled.PlayCircle, _digest.Videos)
+            @Block("Konzerte in deiner Nähe", Icons.Material.Filled.Place, _digest.Nahe)
         }
     </MudPaper>
 }
@@ -108,7 +138,10 @@ else
     private bool _istAdmin;
     private string? _userId;
     private string _pushStatus = "";
-    private DigestService.Digest _digest = new([], [], []);
+    private string? _plz;
+    private bool _hatStandort;
+    private bool _geoLaeuft;
+    private DigestService.Digest _digest = new([], [], [], []);
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,6 +153,10 @@ else
         var pref = await BenachrichtigungService.HolenOderErstellenAsync(db, _userId!);
         _email = pref.EmailAktiv;
         _push = pref.PushAktiv;
+        var person = await db.Personen.Where(p => p.BenutzerId == _userId)
+            .Select(p => new { p.StandortLat, p.HeimatPlz }).FirstOrDefaultAsync();
+        _hatStandort = person?.StandortLat != null;
+        _plz = person?.HeimatPlz;
         _digest = await DigestService.ErstelleAsync(db, _userId);
         _geladen = true;
     }
@@ -150,6 +187,51 @@ else
         try { _pushStatus = await JS.InvokeAsync<string>("harmoniqPush.deaktivieren"); }
         catch { }
         Snackbar.Add("Gerät abgemeldet.", Severity.Info);
+    }
+
+    private async Task StandortAusGps()
+    {
+        _geoLaeuft = true;
+        double[]? pos = null;
+        try { pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.standort"); } catch { }
+        _geoLaeuft = false;
+        if (pos is { Length: 2 })
+        {
+            await StandortSpeichern(pos[0], pos[1], null);
+            Snackbar.Add("Standort gespeichert.", Severity.Success);
+        }
+        else Snackbar.Add("Kein Standort erhalten (Berechtigung erteilt?).", Severity.Warning);
+    }
+
+    private async Task PlzSpeichern()
+    {
+        _geoLaeuft = true;
+        var t = await Geo.GeocodePlzAsync(_plz);
+        _geoLaeuft = false;
+        if (t is { } c) { await StandortSpeichern(c.Lat, c.Lng, _plz?.Trim()); Snackbar.Add("PLZ gespeichert.", Severity.Success); }
+        else Snackbar.Add("PLZ nicht gefunden.", Severity.Warning);
+    }
+
+    private async Task StandortSpeichern(double lat, double lng, string? plz)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var p = await db.Personen.FirstOrDefaultAsync(x => x.BenutzerId == _userId);
+        if (p == null) { Snackbar.Add("Lege zuerst deine Person an (Meine Person).", Severity.Warning); return; }
+        p.StandortLat = Math.Round(lat, 2);   // ~1 km Vergröberung
+        p.StandortLng = Math.Round(lng, 2);
+        if (plz != null) p.HeimatPlz = plz;
+        await db.SaveChangesAsync();
+        _hatStandort = true; _plz = p.HeimatPlz;
+        _digest = await DigestService.ErstelleAsync(db, _userId);
+    }
+
+    private async Task StandortEntfernen()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var p = await db.Personen.FirstOrDefaultAsync(x => x.BenutzerId == _userId);
+        if (p != null) { p.StandortLat = null; p.StandortLng = null; p.HeimatPlz = null; await db.SaveChangesAsync(); }
+        _hatStandort = false; _plz = null;
+        _digest = await DigestService.ErstelleAsync(db, _userId);
     }
 
     private async Task Speichern()

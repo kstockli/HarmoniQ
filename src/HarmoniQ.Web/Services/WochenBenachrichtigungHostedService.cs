@@ -16,6 +16,8 @@ public class WochenBenachrichtigungHostedService(
     private readonly DayOfWeek _tag = Enum.TryParse<DayOfWeek>(config["Benachrichtigung:Wochentag"], out var t)
         ? t : DayOfWeek.Sunday;
     private readonly int _stunde = int.TryParse(config["Benachrichtigung:Stunde"], out var h) ? h : 18;
+    // Vor diesem Zeitpunkt wird NIE gesendet (Steuerung des ersten Versands). Leer = keine Sperre.
+    private readonly DateTime? _startAb = DateTime.TryParse(config["Benachrichtigung:StartAb"], out var s) ? s : null;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -25,6 +27,7 @@ public class WochenBenachrichtigungHostedService(
             do
             {
                 var jetzt = DateTime.Now;
+                if (_startAb is { } start && jetzt < start) continue;   // Erststart-Sperre
                 if (jetzt.DayOfWeek == _tag && jetzt.Hour == _stunde)
                     await LaufAsync(stoppingToken);
             }

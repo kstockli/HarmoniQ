@@ -17,17 +17,19 @@ public static class DigestService
     private const int KommendeTage = 30;   // A: Konzerte in den nächsten … Tagen
     private const int RueckblickTage = 14; // B: vergangene Konzerte der letzten … Tage
     private const int VideoTage = 14;      // C: Videos der letzten … Tage
+    private const double NaeheKm = 30.0;   // F: Umkreis für „in deiner Nähe"
+    private const int NaheMax = 5;         // F: höchstens so viele Nähe-Konzerte
 
     public record Posten(BenachrichtigungTyp Typ, Guid EntitaetId, string Titel, string Detail, string Href);
 
-    public record Digest(List<Posten> Kommende, List<Posten> Nachfragen, List<Posten> Videos)
+    public record Digest(List<Posten> Kommende, List<Posten> Nachfragen, List<Posten> Videos, List<Posten> Nahe)
     {
-        public int Total => Kommende.Count + Nachfragen.Count + Videos.Count;
+        public int Total => Kommende.Count + Nachfragen.Count + Videos.Count + Nahe.Count;
         public bool Leer => Total == 0;
-        public IEnumerable<Posten> Alle => Kommende.Concat(Nachfragen).Concat(Videos);
+        public IEnumerable<Posten> Alle => Kommende.Concat(Nachfragen).Concat(Videos).Concat(Nahe);
     }
 
-    private static readonly Digest Leer = new([], [], []);
+    private static readonly Digest Leer = new([], [], [], []);
 
     /// <summary>Band-Ids, die das Konto interessieren: Mitgliedschaft ∪ Folgen (der verknüpften Person).</summary>
     public static async Task<HashSet<Guid>> InteressierteBandIdsAsync(ApplicationDbContext db, string? userId)
@@ -121,6 +123,52 @@ public static class DigestService
                 v.Stueck, $"{v.Band} · {v.Titel}", $"/videos/{v.Id}"))
             .ToList();
 
-        return new Digest(kommende, nachfragen, videos);
+        // ── F: kommende Konzerte in der Nähe (fremde Bands; nur mit Heim-Standort) ─────────
+        var nahe = new List<Posten>();
+        var standort = await db.Personen.Where(p => p.BenutzerId == userId)
+            .Select(p => new { p.StandortLat, p.StandortLng }).FirstOrDefaultAsync();
+        if (standort is { StandortLat: double hLat, StandortLng: double hLng })
+        {
+            var meineKonzerte = kommendeRoh.Select(x => x.KonzertId).ToHashSet();
+            var kandidaten = await db.Konzerte
+                .Where(k => k.Datum >= heute && k.Datum <= bisA
+                    && k.Lokal != null && k.Lokal.Lat != null && k.Lokal.Lng != null)
+                .Select(k => new
+                {
+                    k.Id, k.Datum, k.Name,
+                    Ort = k.Lokal!.Name, Lat = k.Lokal.Lat!.Value, Lng = k.Lokal.Lng!.Value,
+                    Bands = k.Bands.Select(b => b.Band.Name).ToList()
+                })
+                .ToListAsync();
+
+            nahe = kandidaten
+                .Where(k => !meineKonzerte.Contains(k.Id) && Neu(BenachrichtigungTyp.NahesKonzert, k.Id))
+                .Select(k => new { k, Km = DistanzKm(hLat, hLng, k.Lat, k.Lng) })
+                .Where(x => x.Km <= NaeheKm)
+                .OrderBy(x => x.k.Datum).ThenBy(x => x.Km)
+                .Take(NaheMax)
+                .Select(x =>
+                {
+                    var bands = string.Join(", ", x.k.Bands.Distinct());
+                    var detail = x.k.Datum.ToString("dd.MM.yyyy") + $" · {x.k.Ort} · ~{Math.Round(x.Km)} km"
+                        + (string.IsNullOrWhiteSpace(bands) ? "" : $" · {bands}");
+                    return new Posten(BenachrichtigungTyp.NahesKonzert, x.k.Id,
+                        x.k.Name ?? x.k.Datum.ToString("dd.MM.yyyy"), detail, $"/konzerte/{x.k.Id}");
+                })
+                .ToList();
+        }
+
+        return new Digest(kommende, nachfragen, videos, nahe);
+    }
+
+    private static double DistanzKm(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371.0;
+        double Rad(double g) => g * Math.PI / 180.0;
+        var dLat = Rad(lat2 - lat1);
+        var dLng = Rad(lng2 - lng1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+              + Math.Cos(Rad(lat1)) * Math.Cos(Rad(lat2)) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 }

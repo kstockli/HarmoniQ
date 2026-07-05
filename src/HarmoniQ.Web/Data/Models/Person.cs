@@ -22,6 +22,16 @@ public class Person : AuditierteEntitaet
     public string? BenutzerId { get; set; }
     public ApplicationUser? Benutzer { get; set; }
 
+    // ─── Privater Standort-Bezug für den „in deiner Nähe"-Digest (UX-Spec 4.2, Trigger F) ───
+    // Opt-in, nur für die eigene Person sichtbar/nutzbar. Koordinaten bewusst VERGRÖBERT (~1 km)
+    // gespeichert (Datensparsamkeit); dienen nur der serverseitigen Distanzberechnung im Wochen-Job.
+    /// <summary>Vergröberte Heim-Breite (opt-in); null = kein Nähe-Bezug.</summary>
+    public double? StandortLat { get; set; }
+    /// <summary>Vergröberte Heim-Länge (opt-in).</summary>
+    public double? StandortLng { get; set; }
+    /// <summary>Optionale Heimat-PLZ (Anzeige/Neu-Geocoding), z. B. wenn kein GPS genutzt wird.</summary>
+    public string? HeimatPlz { get; set; }
+
     public ICollection<PersonRolle> Rollen { get; set; } = [];
     public ICollection<PersonLink> Links { get; set; } = [];
     public ICollection<PersonInstrument> Instrumente { get; set; } = [];
