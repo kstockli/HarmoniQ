@@ -18,6 +18,11 @@ public class Band : AuditierteEntitaet
     /// <summary>Geschichte/Beschreibung der Band (analog Person.Biografie).</summary>
     public string? Geschichte { get; set; }
 
+    /// <summary>Heimatort/Probelokal der Band als <see cref="Lokal"/>-Referenz (Ortschaft genügt) –
+    /// liefert Koordinaten für „Bands in der Nähe" (UX-Spec §4.4). Optional.</summary>
+    public Guid? HeimatLokalId { get; set; }
+    public Lokal? HeimatLokal { get; set; }
+
     public ICollection<Video> Videos { get; set; } = [];
     public ICollection<BandMitgliedschaft> Mitgliedschaften { get; set; } = [];
     /// <summary>Personen, die dieser Band „folgen" (privat) – UX-Spec 4.2.</summary>

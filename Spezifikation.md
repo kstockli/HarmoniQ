@@ -312,10 +312,17 @@ Band
 ├── Staerkeklasse (enum?: Höchstklasse / Elite / 1.–4. Klasse / Ober-/Mittel-/Unterstufe)  — NEU
 ├── Gruendungsjahr (int?)           — NEU
 ├── Geschichte (string?)            — NEU (analog Person.Biografie)
+├── HeimatLokalId (FK? → Lokal)     — NEU: Heimatort/Probelokal der Band (für „Bands in der Nähe“)
 ├── Aliase [1:n] → BandAlias        — NEU: alternative Namen
 ├── Links [1:n] → BandLink          — NEU: Instagram/X/YouTube/EMail (Homepage bleibt in Webseite)
 ├── Videos [1:n]
 └── Mitgliedschaften [1:n] → BandMitgliedschaft
+> **HeimatLokal (NEU):** optionale FK auf `Lokal` (Heimatort bzw. Probelokal). Das Lokal darf ein
+> echtes Probelokal ODER nur die **Ortschaft** sein (Ortszentrums-Koordinaten reichen für die
+> Distanz). Zweck: **„Bands in der Nähe"** vorschlagen (Distanz `Person.StandortLat/Lng` ↔
+> `Lokal.Lat/Lng`, Haversine) beim Feed-Cold-Start / Folge-Onboarding (UX-Spec §4.4). Reuse der
+> `Lokal`-Infra (Koordinaten/Kanton/Alias/Geocoding); **kein** eigenes Koordinaten-Feld auf `Band`.
+> `OnDelete(SetNull)`. Herkunft: Band-Admin, Crawler (EMF/Webseite) oder häufigstes Konzert-Lokal.
 
 BandAlias                           (NEU – alternativer Name einer Band)
 ├── Id (Guid) · BandId (FK) · Name (string)

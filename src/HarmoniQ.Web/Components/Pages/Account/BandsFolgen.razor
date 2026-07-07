@@ -1,0 +1,225 @@
+@page "/account/bands-folgen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Bands folgen – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Welchen Bands möchtest du folgen?</MudText>
+<MudText Typo="Typo.body1" Class="mb-4" Style="color:#F0E6FF;max-width:640px;">
+    Folge deinen Lieblings-Bands (am besten drei oder mehr) – so zeigt dir „Für dich" ihre kommenden
+    Konzerte und neuen Videos. Du kannst das später jederzeit ändern.
+</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @if (_mitgliedBands.Count > 0)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            Deinen eigenen Bands (@string.Join(", ", _mitgliedBands)) folgst du automatisch.
+        </MudAlert>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudTextField @bind-Value="_suche" Placeholder="Band suchen…" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true" DebounceInterval="300" OnDebounceIntervalElapsed="SucheAusfuehren"
+                      Style="max-width:340px;" />
+        <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C; border-color:#1ABC9C;"
+                   StartIcon="@Icons.Material.Filled.MyLocation" OnClick="StandortNutzen" Disabled="_standortLaeuft">
+            Bands in der Nähe
+        </MudButton>
+    </MudStack>
+
+    @if (Liste.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+            @(_suchTreffer != null ? "Keine Band gefunden." : "Keine Vorschläge verfügbar – nutze die Suche.")
+        </MudText>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var b in Liste)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Class="pa-3 d-flex align-center" Elevation="2"
+                              Style="background:#1a0030; border:1px solid #3a1060;gap:12px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#9B59B6;" />
+                        <div style="flex:1;min-width:0;">
+                            <MudLink Href="@($"/bands/{b.Id}")" Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@b.Name</MudLink>
+                            <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
+                                @(b.Dist is double d ? $"{d:0.#} km" : (b.Ort ?? b.Land ?? ""))
+                            </MudText>
+                        </div>
+                        <MudButton Variant="@(_gefolgt.Contains(b.Id) ? Variant.Filled : Variant.Outlined)"
+                                   Size="Size.Small"
+                                   Style="@(_gefolgt.Contains(b.Id) ? "background:#1ABC9C;color:#0e0018;" : "color:#1ABC9C;border-color:#1ABC9C;")"
+                                   StartIcon="@(_gefolgt.Contains(b.Id) ? Icons.Material.Filled.Check : Icons.Material.Filled.Add)"
+                                   OnClick="@(() => FolgenUmschalten(b.Id))">
+                            @(_gefolgt.Contains(b.Id) ? "Folge ich" : "Folgen")
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-6" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <MudButton Variant="Variant.Filled" Size="Size.Large" Style="background:#D4AF37; color:#0e0018;"
+                   EndIcon="@Icons.Material.Filled.ArrowForward" OnClick="Weiter">
+            Weiter zu HarmoniQ
+        </MudButton>
+        @if (_gefolgt.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                Tipp: Folge mindestens einer Band – oder überspringe fürs Erste.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Style="color:#1ABC9C;">
+                Du folgst @_gefolgt.Count Band@(_gefolgt.Count == 1 ? "" : "s").
+            </MudText>
+        }
+    </MudStack>
+}
+
+@code {
+    private bool _geladen;
+    private Guid? _personId;
+    private double? _standortLat, _standortLng;
+    private bool _standortLaeuft;
+    private string _suche = "";
+    private List<string> _mitgliedBands = [];
+    private HashSet<Guid> _gefolgt = [];
+    private HashSet<Guid> _ausschluss = [];   // Mitglieds-Bands (folgen implizit) – nicht vorschlagen
+    private List<Kandidat> _alleKandidaten = [];   // alle vorschlagbaren Bands (im Speicher, für Re-Sortierung)
+    private List<Kandidat> _vorschlaege = [];
+    private List<Kandidat>? _suchTreffer;
+
+    // Angezeigte Liste: Suchtreffer haben Vorrang, sonst die Vorschläge.
+    private List<Kandidat> Liste => _suchTreffer ?? _vorschlaege;
+
+    private record Kandidat(Guid Id, string Name, string? Land, string? Ort, int Fans, double? Lat, double? Lng)
+    {
+        public double? Dist { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _personId = await BandFolgenService.PersonIdAsync(db, userId);
+        if (_personId is not Guid pid) { Nav.NavigateTo("/account/person"); return; }
+
+        var person = await db.Personen.Where(p => p.Id == pid)
+            .Select(p => new { p.StandortLat, p.StandortLng }).FirstAsync();
+        _standortLat = person.StandortLat;
+        _standortLng = person.StandortLng;
+
+        var memberIds = await db.BandMitgliedschaften.Where(m => m.PersonId == pid)
+            .Select(m => m.BandId).Distinct().ToListAsync();
+        _mitgliedBands = await db.Bands.Where(b => memberIds.Contains(b.Id))
+            .OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
+        _gefolgt = (await db.BandInteressen.Where(i => i.PersonId == pid)
+            .Select(i => i.BandId).ToListAsync()).ToHashSet();
+        _ausschluss = memberIds.ToHashSet();
+
+        // Alle vorschlagbaren Bands (ohne Mitglieds-Bands) mit „Fans"-Zahl + HeimatLokal-Koordinaten.
+        _alleKandidaten = await db.Bands
+            .Where(b => !_ausschluss.Contains(b.Id))
+            .Select(b => new Kandidat(b.Id, b.Name, b.Land,
+                b.HeimatLokal != null ? b.HeimatLokal.Name : null,
+                b.Interessenten.Count + b.Mitgliedschaften.Count,
+                b.HeimatLokal != null ? b.HeimatLokal.Lat : null,
+                b.HeimatLokal != null ? b.HeimatLokal.Lng : null))
+            .ToListAsync();
+
+        VorschlaegeBerechnen();
+        _geladen = true;
+    }
+
+    // Vorschläge: falls Standort bekannt, Bands mit Koordinaten nach Distanz zuerst; danach nach
+    // „Fans" (Interessent:innen + Mitglieder). Max. 9.
+    private void VorschlaegeBerechnen()
+    {
+        foreach (var k in _alleKandidaten)
+            k.Dist = (_standortLat is double la && _standortLng is double lo && k.Lat is double bl && k.Lng is double bn)
+                ? Distanz(la, lo, bl, bn) : null;
+
+        _vorschlaege = _alleKandidaten
+            .OrderBy(k => k.Dist ?? double.MaxValue)
+            .ThenByDescending(k => k.Fans)
+            .ThenBy(k => k.Name)
+            .Take(9)
+            .ToList();
+    }
+
+    private async Task StandortNutzen()
+    {
+        _standortLaeuft = true;
+        try
+        {
+            var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
+                      ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
+            if (pos is { Length: 2 })
+            {
+                _standortLat = pos[0];
+                _standortLng = pos[1];
+                VorschlaegeBerechnen();
+            }
+        }
+        catch { /* Standort abgelehnt/nicht verfügbar – dann bleibt die Beliebtheits-Sortierung. */ }
+        _standortLaeuft = false;
+    }
+
+    private async Task SucheAusfuehren()
+    {
+        var q = _suche.Trim();
+        if (q.Length < 2) { _suchTreffer = null; return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _suchTreffer = await db.Bands
+            .Where(b => !_ausschluss.Contains(b.Id) && EF.Functions.ILike(b.Name, $"%{q}%"))
+            .OrderBy(b => b.Name)
+            .Select(b => new Kandidat(b.Id, b.Name, b.Land,
+                b.HeimatLokal != null ? b.HeimatLokal.Name : null,
+                b.Interessenten.Count + b.Mitgliedschaften.Count, null, null))
+            .Take(20)
+            .ToListAsync();
+    }
+
+    private async Task FolgenUmschalten(Guid bandId)
+    {
+        if (_personId is not Guid pid) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var folgtJetzt = await BandFolgenService.UmschaltenAsync(db, pid, bandId);
+        if (folgtJetzt) _gefolgt.Add(bandId); else _gefolgt.Remove(bandId);
+    }
+
+    private void Weiter() => Nav.NavigateTo("/");
+
+    private static double Distanz(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371.0;
+        double Rad(double g) => g * Math.PI / 180.0;
+        var dLat = Rad(lat2 - lat1);
+        var dLng = Rad(lng2 - lng1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+              + Math.Cos(Rad(lat1)) * Math.Cos(Rad(lat2)) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+}

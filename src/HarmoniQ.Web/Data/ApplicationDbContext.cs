@@ -313,6 +313,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(k => k.Lokal).WithMany()
             .HasForeignKey(k => k.LokalId).OnDelete(DeleteBehavior.SetNull);
 
+        // Band → HeimatLokal (Heimatort/Probelokal, optional); Lokal-Löschung setzt die Referenz auf null.
+        builder.Entity<Band>()
+            .HasOne(b => b.HeimatLokal).WithMany()
+            .HasForeignKey(b => b.HeimatLokalId).OnDelete(DeleteBehavior.SetNull);
+
         builder.Entity<Lokal>(e =>
         {
             e.HasIndex(l => l.Name);

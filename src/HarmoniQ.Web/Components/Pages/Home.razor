@@ -139,6 +139,25 @@
     </MudPaper>
 }
 
+@* Feed-Cold-Start (UX-Spec §4.4): kein gefolgte/Mitglieds-Band → aktiv zum Bands-Folgen einladen. *@
+@if (_folgeAufruf)
+{
+    <MudPaper Class="pa-4 mb-8" Elevation="4"
+              Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#1ABC9C;font-size:2.5rem;" />
+            <div style="flex:1;min-width:240px;">
+                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Folge Bands für deinen persönlichen Feed</MudText>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                    „Für dich" zeigt kommende Konzerte und neue Videos – sobald du ein paar Bands folgst.
+                </MudText>
+            </div>
+            <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.GroupAdd" Href="/account/bands-folgen">Bands folgen</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
 @if (_kalender.Count > 0)
 {
     <MudPaper Class="pa-4 mb-8" Elevation="4" Style="background:#1a0030; border:1px solid #D4AF37;">
@@ -330,6 +349,7 @@
     private List<KalenderZeile> _kalender = [];
     private bool _onboardingNoetig;
     private int _offeneAnfragen;
+    private bool _folgeAufruf;   // eingeloggt + Person, aber keine (gefolgten/Mitglieds-)Bands → §4.4
     private bool _geladen;   // true sobald die Statistik geladen ist – steuert Skeleton statt „0"
     private TagebuchTeaser? _teaser;
     private readonly int _heuer = DateTime.Today.Year;
@@ -393,7 +413,7 @@
 
         _neueVideos = neueVideosTask.Result;
         _kalender = kalenderTask.Result;
-        (_onboardingNoetig, _offeneAnfragen) = userStatusTask.Result;
+        (_onboardingNoetig, _offeneAnfragen, _folgeAufruf) = userStatusTask.Result;
         _teaser = teaserTask.Result;
         _feed = feedTask.Result;
         _geladen = true;
@@ -589,13 +609,13 @@
     }
 
     // User-spezifischer Onboarding-/Anfragen-Status – pro Request (nicht cachebar).
-    private async Task<(bool OnboardingNoetig, int OffeneAnfragen)> UserStatusLadenAsync()
+    private async Task<(bool OnboardingNoetig, int OffeneAnfragen, bool FolgeAufruf)> UserStatusLadenAsync()
     {
         // Onboarding-Hinweis: eingeloggt, aber (noch) keine verknüpfte Person und kein offener Antrag.
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId))
-            return (false, 0);
+            return (false, 0, false);
 
         await using var db = await DbFactory.CreateDbContextAsync();
         var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
@@ -605,11 +625,20 @@
 
         // Offene (noch nicht entschiedene) Freundschaftsanfragen an mich.
         var offeneAnfragen = 0;
+        var folgeAufruf = false;
         if (hatPerson)
+        {
             offeneAnfragen = await db.Freundschaften.CountAsync(f =>
                 f.EmpfaengerPersonId == meineId && f.Status == FreundschaftStatus.Offen);
 
-        return (onboardingNoetig, offeneAnfragen);
+            // Feed-Cold-Start (UX-Spec §4.4): Person vorhanden, aber (noch) keine Mitglieds- ODER
+            // gefolgten Bands → „Für dich" bleibt leer → aktiv zum Bands-Folgen einladen.
+            var hatBands = await db.BandMitgliedschaften.AnyAsync(m => m.PersonId == meineId)
+                           || await db.BandInteressen.AnyAsync(i => i.PersonId == meineId);
+            folgeAufruf = !hatBands;
+        }
+
+        return (onboardingNoetig, offeneAnfragen, folgeAufruf);
     }
 
     // Dekoratives km-Label: Bezugspunkt aus localStorage lesen, Distanz berechnen (keine Umsortierung).

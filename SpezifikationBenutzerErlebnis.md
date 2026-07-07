@@ -220,6 +220,10 @@ Vertrauens-Frage und schränkt Onboarding (Block 3) und Person-Erfassung direkt 
 
 *Der erste Eindruck. Ziel: in <60 Sekunden von „nie gehört" zu „das bin ja ich / mein Verein".*
 
+> **Onboarding-Schritt „Folge Bands" (2026-07-05):** Nach dem Person-Claim folgt ein Schritt, in dem
+> man (mind. 1, überspringbar) Bands zu folgen wählt — das füttert den „Für dich"-Feed. Details +
+> Datenmodell (`Band.HeimatLokalId`, Bands in der Nähe) in **§4.4**.
+
 **Offene Fragen (aus der Sitzungseröffnung + Ergänzungen):**
 - **Login-Reihenfolge:** Sollten **Google-/Microsoft-Buttons zuerst** stehen (vor lokalem
   E-Mail/Passwort)? *(Hypothese: ja — Social-Login senkt die Hürde; lokaler Login als „oder".)*
@@ -493,6 +497,37 @@ eine Referenz auf `Lokal`.
   löscht die Quelle. Button im Admin (Lokale-Verwaltung).
 - **Reichweite:** Karte/Geocoding sind optional und nachrüstbar; die Entität + `LokalAlias` +
   Kanton-Zuordnung zuerst (deckt Region-Filter + Dedup ab), Koordinaten/Karte/Merge-Komfort danach.
+
+### 4.4 Feed-Cold-Start: „Bands folgen" + Bands in der Nähe (Idee/Entscheid 2026-07-05)
+
+> **Stand (umgesetzt 2026-07-05):** Folge-Seite `/account/bands-folgen` (eigene Bands auto-inkludiert,
+> Vorschläge nah/beliebt, Suche, Standort-Button, Folgen-Toggle) + **Leerer-Feed-Aufruf** auf der
+> Startseite (wenn Person aber keine Bands) + **`Band.HeimatLokalId → Lokal`** (Migration
+> `BandHeimatLokal`). **Offen:** Band-Standorte befüllen (Backfill/Crawler), damit „Bands in der
+> Nähe" echte Distanzen zeigt; direkte Weiterleitung nach Person-Anlage auf die Folge-Seite (aktuell
+> greift der Startseiten-Aufruf beim nächsten Home-Besuch).
+*Der „Für dich"-Feed (4.2) ist erst wertvoll, wenn man Bands folgt. Darum den Feed aktiv „anfüttern".*
+
+**Ist-Stand (verifiziert im Code):** „Folgen" existiert bereits (`BandInteresse`); der Feed nutzt
+„Mitglied ∪ gefolgte Bands". `Person.StandortLat/Lng` (Heimat-Standort) existiert; `Lokal` hat
+Lat/Lng/Kanton; „Konzerte in deiner Nähe" (`_feed.Nahe`) funktioniert. **Lücke:** `Band` hat
+**keinen Ort** → „Bands in der Nähe" (noch) nicht möglich.
+
+**Entscheide/Empfehlungen:**
+- **Onboarding-Schritt „Folge Bands"** direkt nach dem Person-Claim (Block 3): eigene Mitglieds-
+  Bands **vorausgewählt/auto-gefolgt**; dazu **~3 Vorschläge** (nah / beliebt / Suche). **Politik
+  (Entscheid User 2026-07-05): 3 vorschlagen, weiches Minimum 1, überspringbar** (niederschwellig,
+  kein harter Zwang).
+- **Leerer-Feed-Zustand:** hat man keine gefolgten/Mitglieds-Bands, **statt leerer Sektion** ein
+  Aufruf „Folge Bands, um Neuigkeiten zu sehen → Bands in deiner Nähe / entdecken".
+- **Standort opt-in:** `geo.js` + `Person.StandortLat/Lng` sind da → „Bands in der Nähe" per
+  Distanz, sobald Bands einen Ort haben. Opt-in, kein Zwang.
+- **Datenmodell (einzige nötige Ergänzung): `Band.HeimatLokalId → Lokal`** (optional). Das Lokal
+  darf ein echtes **Probelokal ODER nur die Ortschaft** sein (Ortszentrums-Koordinaten reichen für
+  die Distanz — User-Punkt bestätigt). **Kein** neues Koordinaten-Feld auf `Band` — `Lokal` liefert
+  Lat/Lng/Kanton/Alias/Geocoding; Distanz via bestehender Haversine (Home.razor). Kanton hilft
+  zusätzlich dem „Demnächst"-Region-Filter (4.3). Herkunft: Band-Admin, Crawler (EMF/Webseite hat
+  Ort) oder Ableitung aus dem häufigsten Konzert-Lokal der Band. (→ `Spezifikation.md` bei Umsetzung.)
 
 ---
 
