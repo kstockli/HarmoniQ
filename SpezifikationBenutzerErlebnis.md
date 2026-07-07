@@ -501,7 +501,11 @@ eine Referenz auf `Lokal`.
 ### 4.4 Feed-Cold-Start: „Bands folgen" + Bands in der Nähe (Idee/Entscheid 2026-07-05)
 
 > **Stand (umgesetzt 2026-07-05):** Folge-Seite `/account/bands-folgen` (eigene Bands auto-inkludiert,
-> Vorschläge nah/beliebt, Suche, Standort-Button, Folgen-Toggle) + **Leerer-Feed-Aufruf** auf der
+> Vorschläge beliebt/**in der Nähe**, Suche, Folgen-Toggle). **„Bands in der Nähe" (2026-07-05):**
+> Bezugspunkt via **Standort ODER PLZ**, **Umkreis-Filter (≤10/25/50/100 km)** wie bei Konzerten;
+> bei gesetztem Bezugspunkt werden Bands **nach Distanz aufsteigend** (mit km + Ort) gezeigt.
+> Nutzt `Band.HeimatLokal`-Koordinaten + `Person.StandortLat/Lng`/geo.js + `GeocodePlzAsync`.
+> Verifiziert (PLZ 6003 → Abinchova 4.6 km < Neuenkirch 10.2 < Sarnen 17.5). + **Leerer-Feed-Aufruf** auf der
 > Startseite (wenn Person aber keine Bands) + **`Band.HeimatLokalId → Lokal`** (Migration
 > `BandHeimatLokal`). **Band-Admin: Feld „Heimatort/Probelokal"** (Lokal-Autocomplete, Find-or-create
 > + Geocoding beim Speichern) umgesetzt. **Offen:** Band-Standorte im Bestand **befüllen** (Backfill,

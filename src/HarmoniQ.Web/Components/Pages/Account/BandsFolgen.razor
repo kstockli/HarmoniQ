@@ -9,6 +9,8 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject GeocodingService Geo
+@inject ISnackbar Snackbar
 
 <PageTitle>Bands folgen – HarmoniQ</PageTitle>
 
@@ -31,27 +33,54 @@ else
         </MudAlert>
     }
 
-    <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
-        <MudTextField @bind-Value="_suche" Placeholder="Band suchen…" Variant="Variant.Outlined"
-                      Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                      Immediate="true" DebounceInterval="300" OnDebounceIntervalElapsed="SucheAusfuehren"
-                      Style="max-width:340px;" />
-        <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C; border-color:#1ABC9C;"
-                   StartIcon="@Icons.Material.Filled.MyLocation" OnClick="StandortNutzen" Disabled="_standortLaeuft">
-            Bands in der Nähe
+    <MudTextField @bind-Value="_suche" Placeholder="Band suchen…" Variant="Variant.Outlined"
+                  Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Immediate="true" DebounceInterval="300" OnDebounceIntervalElapsed="SucheAusfuehren"
+                  Clearable="true" Class="mb-2" Style="max-width:340px;" />
+
+    @* Bands in der Nähe: Bezugspunkt via Standort ODER PLZ, dann Umkreis (wie Konzerte). *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.NearMe" Style="color:#1ABC9C;" />
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                   StartIcon="@Icons.Material.Filled.MyLocation" OnClick="MeinStandort" Disabled="_standortLaeuft">
+            @(_standortLaeuft ? "…" : "Mein Standort")
         </MudButton>
+        <MudTextField @bind-Value="_plz" Label="oder PLZ" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Style="max-width:120px;" Immediate="true" />
+        <MudButton Size="Size.Small" OnClick="PlzAnwenden" Disabled="@(string.IsNullOrWhiteSpace(_plz))">Anwenden</MudButton>
+        <MudSelect T="int?" @bind-Value="_radiusKm" @bind-Value:after="AnzeigeAktualisieren" Label="Umkreis"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Style="max-width:130px;">
+            <MudSelectItem T="int?" Value="10">≤ 10 km</MudSelectItem>
+            <MudSelectItem T="int?" Value="25">≤ 25 km</MudSelectItem>
+            <MudSelectItem T="int?" Value="50">≤ 50 km</MudSelectItem>
+            <MudSelectItem T="int?" Value="100">≤ 100 km</MudSelectItem>
+        </MudSelect>
+        @if (_refLat is not null)
+        {
+            <MudChip T="string" Size="Size.Small" Style="color:#1ABC9C;" OnClose="StandortZuruecksetzen">Bezugspunkt gesetzt</MudChip>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Style="color:#6f5a86;">für „in der Nähe": Standort freigeben oder PLZ eingeben</MudText>
+        }
     </MudStack>
 
-    @if (Liste.Count == 0)
+    @if (_anzeige.Count == 0)
     {
         <MudText Typo="Typo.body2" Style="color:#A78FC0;">
-            @(_suchTreffer != null ? "Keine Band gefunden." : "Keine Vorschläge verfügbar – nutze die Suche.")
+            @(_suchTreffer != null ? "Keine Band gefunden."
+              : _refLat != null ? "Keine Bands mit Standort im Umkreis. Erhöhe den Umkreis oder nutze die Suche."
+              : "Keine Vorschläge verfügbar – nutze die Suche.")
         </MudText>
     }
     else
     {
+        @if (_refLat != null && _suchTreffer == null)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color:#1ABC9C;">Bands in der Nähe (nach Distanz)</MudText>
+        }
         <MudGrid>
-            @foreach (var b in Liste)
+            @foreach (var b in _anzeige)
             {
                 <MudItem xs="12" sm="6" md="4">
                     <MudPaper Class="pa-3 d-flex align-center" Elevation="2"
@@ -60,7 +89,7 @@ else
                         <div style="flex:1;min-width:0;">
                             <MudLink Href="@($"/bands/{b.Id}")" Style="color:#F0E6FF;font-weight:500;" Underline="Underline.Hover">@b.Name</MudLink>
                             <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
-                                @(b.Dist is double d ? $"{d:0.#} km" : (b.Ort ?? b.Land ?? ""))
+                                @(b.Dist is double d ? $"{d:0.#} km – {b.Ort}" : (b.Ort ?? b.Land ?? ""))
                             </MudText>
                         </div>
                         <MudButton Variant="@(_gefolgt.Contains(b.Id) ? Variant.Filled : Variant.Outlined)"
@@ -83,15 +112,11 @@ else
         </MudButton>
         @if (_gefolgt.Count == 0)
         {
-            <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                Tipp: Folge mindestens einer Band – oder überspringe fürs Erste.
-            </MudText>
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Tipp: Folge mindestens einer Band – oder überspringe fürs Erste.</MudText>
         }
         else
         {
-            <MudText Typo="Typo.caption" Style="color:#1ABC9C;">
-                Du folgst @_gefolgt.Count Band@(_gefolgt.Count == 1 ? "" : "s").
-            </MudText>
+            <MudText Typo="Typo.caption" Style="color:#1ABC9C;">Du folgst @_gefolgt.Count Band@(_gefolgt.Count == 1 ? "" : "s").</MudText>
         }
     </MudStack>
 }
@@ -99,22 +124,28 @@ else
 @code {
     private bool _geladen;
     private Guid? _personId;
-    private double? _standortLat, _standortLng;
-    private bool _standortLaeuft;
     private string _suche = "";
+    private string _plz = "";
+    private double? _refLat, _refLng;   // Bezugspunkt (Standort/PLZ/Profil)
+    private int? _radiusKm;
+    private bool _standortLaeuft;
     private List<string> _mitgliedBands = [];
     private HashSet<Guid> _gefolgt = [];
-    private HashSet<Guid> _ausschluss = [];   // Mitglieds-Bands (folgen implizit) – nicht vorschlagen
-    private List<Kandidat> _alleKandidaten = [];   // alle vorschlagbaren Bands (im Speicher, für Re-Sortierung)
-    private List<Kandidat> _vorschlaege = [];
+    private HashSet<Guid> _ausschluss = [];
+    private List<Kandidat> _alleKandidaten = [];
+    private List<Kandidat> _anzeige = [];
     private List<Kandidat>? _suchTreffer;
 
-    // Angezeigte Liste: Suchtreffer haben Vorrang, sonst die Vorschläge.
-    private List<Kandidat> Liste => _suchTreffer ?? _vorschlaege;
-
-    private record Kandidat(Guid Id, string Name, string? Land, string? Ort, int Fans, double? Lat, double? Lng)
+    private class Kandidat
     {
-        public double? Dist { get; set; }
+        public Guid Id;
+        public string Name = "";
+        public string? Land;
+        public string? Ort;
+        public int Fans;
+        public double? Lat;
+        public double? Lng;
+        public double? Dist;
     }
 
     protected override async Task OnInitializedAsync()
@@ -128,8 +159,6 @@ else
 
         var person = await db.Personen.Where(p => p.Id == pid)
             .Select(p => new { p.StandortLat, p.StandortLng }).FirstAsync();
-        _standortLat = person.StandortLat;
-        _standortLng = person.StandortLng;
 
         var memberIds = await db.BandMitgliedschaften.Where(m => m.PersonId == pid)
             .Select(m => m.BandId).Distinct().ToListAsync();
@@ -139,67 +168,113 @@ else
             .Select(i => i.BandId).ToListAsync()).ToHashSet();
         _ausschluss = memberIds.ToHashSet();
 
-        // Alle vorschlagbaren Bands (ohne Mitglieds-Bands) mit „Fans"-Zahl + HeimatLokal-Koordinaten.
         _alleKandidaten = await db.Bands
             .Where(b => !_ausschluss.Contains(b.Id))
-            .Select(b => new Kandidat(b.Id, b.Name, b.Land,
-                b.HeimatLokal != null ? b.HeimatLokal.Name : null,
-                b.Interessenten.Count + b.Mitgliedschaften.Count,
-                b.HeimatLokal != null ? b.HeimatLokal.Lat : null,
-                b.HeimatLokal != null ? b.HeimatLokal.Lng : null))
-            .ToListAsync();
+            .Select(b => new Kandidat
+            {
+                Id = b.Id, Name = b.Name, Land = b.Land,
+                Ort = b.HeimatLokal != null ? b.HeimatLokal.Name : null,
+                Fans = b.Interessenten.Count + b.Mitgliedschaften.Count,
+                Lat = b.HeimatLokal != null ? b.HeimatLokal.Lat : null,
+                Lng = b.HeimatLokal != null ? b.HeimatLokal.Lng : null
+            }).ToListAsync();
 
-        VorschlaegeBerechnen();
+        // Profil-Heimatstandort als initialer Bezugspunkt (falls gesetzt).
+        if (person.StandortLat is double la && person.StandortLng is double lo)
+        {
+            _refLat = la; _refLng = lo; _radiusKm ??= 50;
+        }
+        Neuberechnen();
+        AnzeigeAktualisieren();
         _geladen = true;
     }
 
-    // Vorschläge: falls Standort bekannt, Bands mit Koordinaten nach Distanz zuerst; danach nach
-    // „Fans" (Interessent:innen + Mitglieder). Max. 9.
-    private void VorschlaegeBerechnen()
+    // Beim ersten Render den (aktuelleren) Geo-Standort aus dem Browser holen, falls schon freigegeben.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        foreach (var k in _alleKandidaten)
-            k.Dist = (_standortLat is double la && _standortLng is double lo && k.Lat is double bl && k.Lng is double bn)
-                ? Distanz(la, lo, bl, bn) : null;
-
-        _vorschlaege = _alleKandidaten
-            .OrderBy(k => k.Dist ?? double.MaxValue)
-            .ThenByDescending(k => k.Fans)
-            .ThenBy(k => k.Name)
-            .Take(9)
-            .ToList();
-    }
-
-    private async Task StandortNutzen()
-    {
-        _standortLaeuft = true;
+        if (!firstRender || _personId is null || _refLat is not null) return;
         try
         {
             var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
                       ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
-            if (pos is { Length: 2 })
-            {
-                _standortLat = pos[0];
-                _standortLng = pos[1];
-                VorschlaegeBerechnen();
-            }
+            if (pos is { Length: 2 }) { await RefSetzen(pos[0], pos[1], speichern: false); StateHasChanged(); }
         }
-        catch { /* Standort abgelehnt/nicht verfügbar – dann bleibt die Beliebtheits-Sortierung. */ }
+        catch { /* Geo nicht verfügbar */ }
+    }
+
+    private void Neuberechnen()
+    {
+        foreach (var k in _alleKandidaten)
+            k.Dist = (_refLat is double rlat && _refLng is double rlng && k.Lat is double bl && k.Lng is double bn)
+                ? Distanz(rlat, rlng, bl, bn) : null;
+    }
+
+    // Anzeige = Suchtreffer > Bands in der Nähe (nach Distanz, im Umkreis) > beliebte Vorschläge.
+    private void AnzeigeAktualisieren()
+    {
+        if (_suchTreffer != null) { _anzeige = _suchTreffer; return; }
+        if (_refLat != null)
+        {
+            var q = _alleKandidaten.Where(k => k.Dist is double);
+            if (_radiusKm is int r) q = q.Where(k => k.Dist <= r);
+            _anzeige = q.OrderBy(k => k.Dist).Take(30).ToList();
+        }
+        else
+        {
+            _anzeige = _alleKandidaten.OrderByDescending(k => k.Fans).ThenBy(k => k.Name).Take(9).ToList();
+        }
+    }
+
+    private async Task MeinStandort()
+    {
+        _standortLaeuft = true;
+        var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.standort");
         _standortLaeuft = false;
+        if (pos is { Length: 2 }) { await RefSetzen(pos[0], pos[1]); Snackbar.Add("Standort übernommen.", Severity.Success); }
+        else Snackbar.Add("Kein Standort verfügbar (abgelehnt?). Nutze die PLZ-Eingabe.", Severity.Info);
+    }
+
+    private async Task PlzAnwenden()
+    {
+        var res = await Geo.GeocodePlzAsync(_plz);
+        if (res is (double la, double lo)) { await RefSetzen(la, lo); Snackbar.Add($"PLZ {_plz.Trim()} übernommen.", Severity.Success); }
+        else Snackbar.Add("PLZ nicht gefunden.", Severity.Warning);
+    }
+
+    private async Task RefSetzen(double lat, double lng, bool speichern = true)
+    {
+        _refLat = lat; _refLng = lng;
+        _radiusKm ??= 50;
+        if (speichern) await JS.InvokeVoidAsync("harmoniqGeo.save", lat, lng);
+        Neuberechnen();
+        AnzeigeAktualisieren();
+    }
+
+    private async Task StandortZuruecksetzen()
+    {
+        _refLat = _refLng = null;
+        _radiusKm = null;
+        await JS.InvokeVoidAsync("harmoniqGeo.clear");
+        Neuberechnen();
+        AnzeigeAktualisieren();
     }
 
     private async Task SucheAusfuehren()
     {
         var q = _suche.Trim();
-        if (q.Length < 2) { _suchTreffer = null; return; }
+        if (q.Length < 2) { _suchTreffer = null; AnzeigeAktualisieren(); return; }
         await using var db = await DbFactory.CreateDbContextAsync();
         _suchTreffer = await db.Bands
             .Where(b => !_ausschluss.Contains(b.Id) && EF.Functions.ILike(b.Name, $"%{q}%"))
             .OrderBy(b => b.Name)
-            .Select(b => new Kandidat(b.Id, b.Name, b.Land,
-                b.HeimatLokal != null ? b.HeimatLokal.Name : null,
-                b.Interessenten.Count + b.Mitgliedschaften.Count, null, null))
-            .Take(20)
-            .ToListAsync();
+            .Select(b => new Kandidat
+            {
+                Id = b.Id, Name = b.Name, Land = b.Land,
+                Ort = b.HeimatLokal != null ? b.HeimatLokal.Name : null,
+                Fans = b.Interessenten.Count + b.Mitgliedschaften.Count
+            })
+            .Take(20).ToListAsync();
+        AnzeigeAktualisieren();
     }
 
     private async Task FolgenUmschalten(Guid bandId)
