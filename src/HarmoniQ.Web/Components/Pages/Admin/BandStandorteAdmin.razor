@@ -1,0 +1,182 @@
+@page "/admin/band-standorte"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject GeocodingService Geo
+@inject ISnackbar Snackbar
+
+<PageTitle>Band-Heimatorte ergänzen – HarmoniQ Admin</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Band-Heimatorte ergänzen</MudText>
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;max-width:760px;">
+    Ordne jeder Band ein Heimat-<b>Lokal</b> zu (für „Bands in der Nähe") – <b>pro Band einzeln</b>.
+    Pro Band drei Wege: (A) <b>Konzert-Lokal</b> anklicken = <b>direkt zuweisen</b> (1 Klick);
+    (B) den <b>Ortschaft-Vorschlag aus dem Bandnamen</b> im Feld prüfen/korrigieren und „Übernehmen";
+    (C) selbst etwas ins Feld tippen und „Übernehmen". Beim Übernehmen wird das Lokal verknüpft und
+    fehlende Koordinaten werden ermittelt. Ortschaft genügt.
+</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_zeilen.Count == 0)
+{
+    <MudAlert Severity="Severity.Success">Alle Bands haben einen Heimatort. 🎉</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.body2" Class="mb-2" Style="color:#A78FC0;">Noch ohne Heimatort: <b>@_zeilen.Count</b> Bands</MudText>
+    <MudTextField @bind-Value="_filter" @bind-Value:after="StateHasChanged" Placeholder="Bands filtern…"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-3"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="max-width:340px;" />
+
+    <MudSimpleTable Dense="true" Hover="true" Style="background:#1a0030; border:1px solid #3a1060;">
+        <thead>
+            <tr>
+                <th style="color:#9B59B6;">Band</th>
+                <th style="color:#9B59B6;">(A) Konzert-Lokal – 1 Klick zuweisen</th>
+                <th style="color:#9B59B6;min-width:220px;">(B/C) Ortschaft prüfen / eintippen</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in Gefiltert)
+            {
+                <tr>
+                    <td><MudLink Href="@($"/admin/bands/{r.Id}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@r.Name</MudLink></td>
+                    <td>
+                        @if (r.KonzertLokal is not null)
+                        {
+                            <MudButton Variant="Variant.Filled" Size="Size.Small" Style="background:#1ABC9C;color:#0e0018;text-transform:none;"
+                                       StartIcon="@Icons.Material.Filled.Event" Disabled="_arbeitet"
+                                       OnClick="@(() => Uebernehmen(r, r.KonzertLokal))">
+                                @r.KonzertLokal (@r.KonzertAnzahl×)
+                            </MudButton>
+                        }
+                        else { <span style="color:#6f5a86;">–</span> }
+                    </td>
+                    <td>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudTextField @bind-Value="r.Ort" Margin="Margin.Dense" Variant="Variant.Outlined"
+                                          Placeholder="Ortschaft" Style="min-width:150px;" />
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Style="color:#D4AF37;border-color:#D4AF37;"
+                                       StartIcon="@Icons.Material.Filled.Check" Disabled="@(_arbeitet || string.IsNullOrWhiteSpace(r.Ort))"
+                                       OnClick="@(() => Uebernehmen(r, r.Ort))">Übernehmen</MudButton>
+                        </MudStack>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    private bool _geladen;
+    private bool _arbeitet;
+    private string _filter = "";
+    private List<Zeile> _zeilen = [];
+
+    private IEnumerable<Zeile> Gefiltert => string.IsNullOrWhiteSpace(_filter)
+        ? _zeilen
+        : _zeilen.Where(z => z.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    private class Zeile
+    {
+        public Guid Id;
+        public string Name = "";
+        public string? KonzertLokal;   // häufigstes Konzert-Lokal (null wenn keins)
+        public int KonzertAnzahl;
+        public string NameVorschlag = "";
+        public string Ort = "";        // editierbares Feld (vorbelegt)
+    }
+
+    protected override async Task OnInitializedAsync() => await Laden();
+
+    private async Task Laden()
+    {
+        _geladen = false;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var ohne = await db.Bands.Where(b => b.HeimatLokalId == null)
+            .Select(b => new { b.Id, b.Name }).ToListAsync();
+        var ids = ohne.Select(b => b.Id).ToList();
+
+        // Häufigstes Konzert-Lokal je Band (mit Häufigkeit; nur Konzerte mit Lokal).
+        var kb = await db.KonzertBands
+            .Where(x => ids.Contains(x.BandId) && x.Konzert.LokalId != null)
+            .Select(x => new { x.BandId, LokalName = x.Konzert.Lokal!.Name })
+            .ToListAsync();
+        var modal = kb.GroupBy(x => x.BandId).ToDictionary(
+            g => g.Key,
+            g => g.GroupBy(y => y.LokalName).Select(z => new { Name = z.Key, Anzahl = z.Count() })
+                  .OrderByDescending(z => z.Anzahl).First());
+
+        _zeilen = ohne.Select(b =>
+        {
+            modal.TryGetValue(b.Id, out var m);
+            var nameVorschlag = OrtAusName(b.Name);
+            return new Zeile
+            {
+                Id = b.Id, Name = b.Name,
+                KonzertLokal = m?.Name, KonzertAnzahl = m?.Anzahl ?? 0,
+                // Feld (B/C) mit Namens-Vorschlag vorbelegt; das Konzert-Lokal (A) ist der 1-Klick-Button.
+                NameVorschlag = nameVorschlag, Ort = nameVorschlag
+            };
+        }).OrderBy(z => z.Name).ToList();
+        _geladen = true;
+    }
+
+    private async Task Uebernehmen(Zeile r, string? ort)
+    {
+        ort = ort?.Trim();
+        if (string.IsNullOrWhiteSpace(ort)) return;
+        _arbeitet = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var lokalId = await LokalService.FindeOderErstelleAsync(db, ort);
+        // Getrackt setzen + EIN SaveChanges: speichert ein evtl. NEUES Lokal und die Band-FK
+        // gemeinsam (korrekte Reihenfolge). ExecuteUpdate würde die FK vor dem Lokal-Insert schreiben
+        // → FK-Verletzung bei neuen Lokalen.
+        var band = await db.Bands.FirstOrDefaultAsync(b => b.Id == r.Id);
+        if (band != null) band.HeimatLokalId = lokalId;
+        await db.SaveChangesAsync();
+        // Koordinaten des (evtl. neuen) Lokals gleich ermitteln, falls noch keine.
+        if (lokalId is Guid lid)
+        {
+            var lokal = await db.Lokale.FirstOrDefaultAsync(l => l.Id == lid);
+            if (lokal is { Lat: null } && await Geo.GeocodeDetailAsync($"{lokal.Name}, Schweiz") is { } t)
+            {
+                lokal.Lat = t.Lat; lokal.Lng = t.Lng;
+                await db.SaveChangesAsync();
+            }
+        }
+        _arbeitet = false;
+        _zeilen.Remove(r);
+        Snackbar.Add($"{r.Name} → {ort}", Severity.Success);
+    }
+
+    // Ortschaft aus dem Bandnamen raten: bekannte Organisations-Wörter entfernen, Rest = Ort.
+    private static readonly string[] OrgWoerter =
+    [
+        "musikgesellschaft", "musikverein", "feldmusikgesellschaft", "feldmusik", "blasorchester",
+        "stadtmusik", "stadtharmonie", "harmoniemusik", "harmonie", "brassband", "brass", "band",
+        "jugendblasorchester", "jugendmusik", "bürgermusik", "buergermusik", "musik",
+        "symphonisches", "sinfonisches", "symphonische", "sinfonische", "regionales", "regionale",
+        "vereinigte", "junge", "fanfare", "guggenmusik", "mg", "og", "ortsmusik", "dorfmusik",
+        "verein", "ensemble", "orchester", "kadettenmusik",
+        // französisch (Romandie)
+        "société", "societe", "musique", "de", "du", "des", "la", "le", "les"
+    ];
+
+    public static string OrtAusName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        // Klammer-Zusätze („(NJBO)") entfernen; NICHT an „-" trennen (Bindestrich-Orte bleiben ganz).
+        var bereinigt = System.Text.RegularExpressions.Regex.Replace(name, @"\([^)]*\)", " ");
+        var tokens = bereinigt.Split([' ', '/'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var rest = tokens.Where(t => !OrgWoerter.Contains(t.ToLowerInvariant())).ToList();
+        return string.Join(" ", rest);
+    }
+}

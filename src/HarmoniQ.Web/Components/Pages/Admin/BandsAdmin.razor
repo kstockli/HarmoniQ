@@ -21,6 +21,8 @@
                StartIcon="@Icons.Material.Filled.History" OnClick="@(() => _zeigeAudit = !_zeigeAudit)">
         @(_zeigeAudit ? "Audit-Infos ausblenden" : "Audit-Infos")
     </MudButton>
+    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#1ABC9C;"
+               StartIcon="@Icons.Material.Filled.MyLocation" Href="/admin/band-standorte">Heimatorte ergänzen</MudButton>
     <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                StartIcon="@Icons.Material.Filled.Add" OnClick="Neu">Neu</MudButton>
 </MudStack>

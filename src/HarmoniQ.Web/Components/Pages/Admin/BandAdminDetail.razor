@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @inject IDialogService DialogService
+@inject GeocodingService Geo
 @using HarmoniQ.Web.Services
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 
@@ -67,6 +68,12 @@ else
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_bildUrl" Label="Bild-URL (Logo/Foto)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudAutocomplete T="string" @bind-Value="_heimatLokal" Label="Heimatort / Probelokal" Variant="Variant.Outlined"
+                                 Placeholder="z. B. Willisau" SearchFunc="@((s, c) => SucheLokal(s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true"
+                                 HelperText="Ortschaft genügt – dient „Bands in der Nähe“ (Koordinaten werden ermittelt)." />
             </MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_youtube" Label="YouTube-Kanal" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
@@ -327,16 +334,32 @@ else
     private string? _instrumentName, _funktion;
     private int? _vonJahr, _bisJahr;
 
+    private string _heimatLokal = "";
+    private List<string> _lokalNamen = [];
+
+    // Lokal-Autocomplete (Namen + Aliase); Find-or-create beim Speichern über LokalService.
+    private Task<IEnumerable<string>> SucheLokal(string? wert)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? _lokalNamen
+            : _lokalNamen.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(15));
+    }
+
     protected override async Task OnParametersSetAsync() => await Laden();
 
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _band = await db.Bands.Include(b => b.Links).FirstOrDefaultAsync(b => b.Id == BandId);
+        _band = await db.Bands.Include(b => b.Links).Include(b => b.HeimatLokal).FirstOrDefaultAsync(b => b.Id == BandId);
         if (_band == null) { Nav.NavigateTo("/admin/bands"); return; }
 
         _name = _band.Name; _land = _band.Land ?? ""; _webseite = _band.Webseite ?? ""; _bildUrl = _band.BildUrl ?? "";
         _geschichte = _band.Geschichte ?? "";
+        _heimatLokal = _band.HeimatLokal?.Name ?? "";
+        _lokalNamen = (await db.Lokale.Select(l => l.Name).ToListAsync())
+            .Concat(await db.LokalAliase.Select(a => a.Name).ToListAsync())
+            .Distinct().OrderBy(n => n).ToList();
         _kategorie = _band.Kategorie; _klasse = _band.Staerkeklasse; _gruendung = _band.Gruendungsjahr;
         _youtube = _band.YouTube ?? ""; _instagram = _band.Instagram ?? ""; _x = _band.X ?? ""; _email = _band.EMail ?? "";
         _facebook = _band.Facebook ?? ""; _wikipedia = _band.Wikipedia ?? ""; _mobile = _band.Mobile ?? "";
@@ -401,7 +424,21 @@ else
         band.Facebook = _facebook;
         band.Wikipedia = _wikipedia;
         band.Mobile = _mobile;
+        // Heimatort/Probelokal: Find-or-create über LokalService (Ortschaft genügt).
+        band.HeimatLokalId = await LokalService.FindeOderErstelleAsync(db, _heimatLokal);
         await db.SaveChangesAsync();
+
+        // Koordinaten des (evtl. neuen) Lokals ermitteln, falls noch keine – für „Bands in der Nähe".
+        if (band.HeimatLokalId is Guid lid)
+        {
+            var lokal = await db.Lokale.FirstOrDefaultAsync(l => l.Id == lid);
+            if (lokal is { Lat: null } && await Geo.GeocodeDetailAsync($"{lokal.Name}, Schweiz") is { } t)
+            {
+                lokal.Lat = t.Lat;
+                lokal.Lng = t.Lng;
+                await db.SaveChangesAsync();
+            }
+        }
         Snackbar.Add("Stammdaten gespeichert.", Severity.Success);
         await Laden();
     }

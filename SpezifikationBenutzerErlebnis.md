@@ -503,9 +503,26 @@ eine Referenz auf `Lokal`.
 > **Stand (umgesetzt 2026-07-05):** Folge-Seite `/account/bands-folgen` (eigene Bands auto-inkludiert,
 > Vorschläge nah/beliebt, Suche, Standort-Button, Folgen-Toggle) + **Leerer-Feed-Aufruf** auf der
 > Startseite (wenn Person aber keine Bands) + **`Band.HeimatLokalId → Lokal`** (Migration
-> `BandHeimatLokal`). **Offen:** Band-Standorte befüllen (Backfill/Crawler), damit „Bands in der
-> Nähe" echte Distanzen zeigt; direkte Weiterleitung nach Person-Anlage auf die Folge-Seite (aktuell
-> greift der Startseiten-Aufruf beim nächsten Home-Besuch).
+> `BandHeimatLokal`). **Band-Admin: Feld „Heimatort/Probelokal"** (Lokal-Autocomplete, Find-or-create
+> + Geocoding beim Speichern) umgesetzt. **Offen:** Band-Standorte im Bestand **befüllen** (Backfill,
+> s. u.), damit „Bands in der Nähe" echte Distanzen zeigt; direkte Weiterleitung nach Person-Anlage
+> auf die Folge-Seite (aktuell greift der Startseiten-Aufruf beim nächsten Home-Besuch).
+>
+> **Backfill Band-Standorte — UMGESETZT (2026-07-05):** Admin-Seite `/admin/band-standorte`
+> (Link aus `/admin/bands`), **pro Band einzeln** entscheidbar: je Zeile (A) Button „häufigstes
+> Konzert-Lokal (N×)", (B) Button „aus Bandnamen geratene Ortschaft", (C) freies Textfeld — dann
+> „Übernehmen" (Find-or-create Lokal + Geocoding + Verknüpfung). Vorbelegung: wiederkehrendes
+> Konzert-Lokal (≥2×) sonst Namens-Vorschlag (verhindert falsches Kerkrade bei Einmal-Wettbewerben).
+> Verifiziert (Sarnen inkl. Koordinaten). Kanton füllt bei Bedarf der bestehende Lokal-Koordinaten-Batch.
+>
+> **Backfill-Plan Band-Standorte (2026-07-05):** Sobald eine Band ein Heimat-`Lokal` hat, füllt der
+> bestehende `LokaleAdmin`-Batch „Koordinaten via Nominatim ergänzen" die Koordinaten. Es fehlt also
+> nur das **Zuordnen eines Heimatorts** je Band. Signale (nach Verlässlichkeit): (1) **häufigstes
+> Konzert-Lokal** der Band (stark; hat oft schon Koordinaten); (2) **Ortschaft aus dem Bandnamen**
+> (Präfixe wie „Musikgesellschaft/Feldmusik/Blasorchester/Stadtmusik/Harmonie/Brass Band/Jugendmusik…"
+> strippen → Rest = Ort → Find-or-create Lokal); (3) **Crawler/EMF** (vereine-API/Webseite hat den
+> Ort → HeimatLokal beim Import setzen). Empfehlung: Admin-Batch „Heimatorte ergänzen" = (1) automatisch,
+> (2) als Fallback mit Review; Einzelkorrektur über das neue Band-Admin-Feld. Danach Koordinaten-Batch.
 *Der „Für dich"-Feed (4.2) ist erst wertvoll, wenn man Bands folgt. Darum den Feed aktiv „anfüttern".*
 
 **Ist-Stand (verifiziert im Code):** „Folgen" existiert bereits (`BandInteresse`); der Feed nutzt
