@@ -24,7 +24,8 @@ public static class KonzertErfassungService
         string? Beschreibung,
         string? BildUrl,
         IReadOnlyList<ProgrammEingabe> Programm,
-        IReadOnlyList<MitwirkendeEingabe> Mitwirkende);
+        IReadOnlyList<MitwirkendeEingabe> Mitwirkende,
+        Guid? PflichtBandId = null);   // wird IMMER als teilnehmende Band verknüpft (z. B. eigene Band beim Erfassen)
 
     /// <summary>Speichert ein neues Konzert und gibt dessen Id zurück.</summary>
     public static async Task<Guid> ErfasseAsync(ApplicationDbContext db, Eingabe e)
@@ -36,6 +37,7 @@ public static class KonzertErfassungService
 
         var desiredBands = new HashSet<Guid>();
         await BefuelleAsync(db, konzert, e, desiredBands);
+        if (e.PflichtBandId is Guid pb) desiredBands.Add(pb);   // garantiert: Konzert ist mit dieser Band verknüpft
         foreach (var bid in desiredBands)
             db.KonzertBands.Add(new KonzertBand { Konzert = konzert, BandId = bid });
 

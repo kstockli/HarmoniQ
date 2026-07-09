@@ -1,6 +1,7 @@
 @page "/admin/konzerte/erfassen"
 @page "/admin/konzerte/{Id:guid}/bearbeiten"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
@@ -8,11 +9,12 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>@(IstBearbeiten ? "Konzert bearbeiten" : "Konzert erfassen") – Admin</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/konzerte"
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_zurueck"
                StartIcon="@Icons.Material.Filled.ArrowBack">Konzerte</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">@(IstBearbeiten ? "Konzert bearbeiten" : "Konzert erfassen")</MudText>
 </MudStack>
@@ -75,7 +77,8 @@
             </MudItem>
             <MudItem xs="10" sm="3">
                 <MudAutocomplete T="string" Label="Stück" Variant="Variant.Outlined" Dense="true"
-                                 @bind-Value="z.StueckTitel" SearchFunc="@((s, c) => Suche(_stueckNamen, s))"
+                                 Value="z.StueckTitel" ValueChanged="@(v => StueckGewaehlt(z, v))"
+                                 SearchFunc="@((s, c) => Suche(_stueckNamen, s))"
                                  CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" />
             </MudItem>
             <MudItem xs="12" sm="4">
@@ -138,8 +141,15 @@
     }
 </MudPaper>
 
-<MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-8">
-    <MudButton Variant="Variant.Text" Href="/admin/konzerte">Abbrechen</MudButton>
+<MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mb-8">
+    <MudButton Variant="Variant.Text" Href="@_zurueck"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Abbrechen</MudButton>
+    <MudTooltip Text="@(IstBearbeiten ? "Öffentliche Detailseite in neuem Tab" : "Zuerst speichern")">
+        <MudButton Variant="Variant.Outlined" Style="color:#C9A6E0; border-color:#7a3fa0;"
+                   Href="@(IstBearbeiten ? $"/konzerte/{Id}" : null)" Target="_blank"
+                   Disabled="@(!IstBearbeiten)"
+                   StartIcon="@Icons.Material.Filled.Visibility">Vorschau</MudButton>
+    </MudTooltip>
     <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                OnClick="Speichern" Disabled="@(_datum is null || _speichert)">
         @(_speichert ? "Speichert…" : IstBearbeiten ? "Änderungen speichern" : "Konzert speichern")
@@ -148,7 +158,13 @@
 
 @code {
     [Parameter] public Guid? Id { get; set; }
+    /// <summary>Optional: vorausgewählte Band (Band-Admin erfasst ein Konzert für seine Band).</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "band")] public Guid? Band { get; set; }
     private bool IstBearbeiten => Id is not null;
+
+    private bool _istGlobalAdmin;
+    private List<Guid> _adminBandIds = [];
+    private string _zurueck = "/admin/konzerte";   // global; Band-Admin: eigene Band/Übersicht
 
     private DateTime? _datum;
     private string? _name, _ort, _beschreibung, _bildUrl;
@@ -163,10 +179,43 @@
     private List<string> _personNamen = [];
     private List<string> _komponistNamen = [];
     private Dictionary<string, PersonRolleTyp> _personPrimaerRolle = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> _stueckKomponist = new(StringComparer.OrdinalIgnoreCase);
+    private Guid? _kontextBandId;      // Band, von der aus erfasst wird
+    private string? _kontextBandName;  // deren Name → Vorschlag für jede Programmzeile
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Zugriff: globaler Admin ODER Band-Admin der eigenen Band (UX-Spec Block 5.2).
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _istGlobalAdmin = await BandAdminService.IstGlobalAdminAsync(db, userId);
+        if (!_istGlobalAdmin)
+        {
+            _adminBandIds = await BandAdminService.AdminBandIdsAsync(db, userId);
+            if (_adminBandIds.Count == 0) { Nav.NavigateTo("/"); return; }
+
+            Guid? kontextBand;
+            if (IstBearbeiten)
+            {
+                var teilnehmer = await db.KonzertBands.Where(kb => kb.KonzertId == Id).Select(kb => kb.BandId).ToListAsync();
+                kontextBand = teilnehmer.Where(_adminBandIds.Contains).Cast<Guid?>().FirstOrDefault();
+                if (kontextBand is null) { Nav.NavigateTo("/account/meine-bands"); return; }
+            }
+            else
+            {
+                if (Band is not Guid nb || !_adminBandIds.Contains(nb)) { Nav.NavigateTo("/account/meine-bands"); return; }
+                kontextBand = nb;   // Neu nur für eine EIGENE Band (?band=)
+            }
+            _zurueck = $"/admin/bands/{kontextBand}";   // zurück zur Band statt in die öffentliche Vorschau
+            _kontextBandId = kontextBand;               // „Band, von der ich herkomme" → Programmzeilen-Vorschlag
+        }
+        else
+        {
+            _kontextBandId = Band;   // globaler Admin evtl. via Direktlink ?band=
+        }
+
         _stueckNamen = await db.Stuecke.OrderBy(s => s.Titel).Select(s => s.Titel).ToListAsync();
         _bandNamen = await db.Bands.OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
         // Lokal-Vorschläge = Namen + Aliase (Find-or-create beim Speichern über LokalService).
@@ -186,14 +235,31 @@
             .GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Min(x => x.Rolle), StringComparer.OrdinalIgnoreCase);
 
+        // Bekannte Stücke → Komponist:innen: wird die Stück-Auswahl gesetzt, ist der/die Komponist:in
+        // sofort da (Benutzer muss ihn bei bekannten Stücken nicht erneut erfassen).
+        _stueckKomponist = (await db.StueckBeitraege
+                .Where(sb => sb.Rolle == StueckRolle.Komponist)
+                .Select(sb => new { sb.Stueck.Titel, sb.Person.Name })
+                .ToListAsync())
+            .GroupBy(x => x.Titel, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(x => x.Name).Distinct()),
+                StringComparer.OrdinalIgnoreCase);
+
+        // Name der Kontext-Band (von der aus erfasst wird) – Vorschlag für jede Programmzeile.
+        if (_kontextBandId is Guid kbId)
+            _kontextBandName = await db.Bands.Where(b => b.Id == kbId).Select(b => b.Name).FirstOrDefaultAsync();
+
         if (Id is Guid kid)
             await BestehendesLaden(db, kid);
+        else if (_kontextBandName != null)
+            // Direktlink/Band-Admin: erste Programmzeile mit der Band vorbelegen (Konzert↔Band-Bezug).
+            _programm.Add(new ProgrammRow { Reihenfolge = 1, BandName = _kontextBandName });
     }
 
     private async Task BestehendesLaden(ApplicationDbContext db, Guid kid)
     {
         var k = await db.Konzerte.Include(x => x.Lokal).FirstOrDefaultAsync(x => x.Id == kid);
-        if (k == null) { Nav.NavigateTo("/admin/konzerte"); return; }
+        if (k == null) { Nav.NavigateTo(_zurueck); return; }
 
         _datum = k.Datum.ToDateTime(TimeOnly.MinValue);
         _name = k.Name;
@@ -226,7 +292,16 @@
         return Task.FromResult(r.Take(15));
     }
 
-    private void ProgrammZeileHinzu() => _programm.Add(new ProgrammRow { Reihenfolge = _programm.Count + 1 });
+    private void ProgrammZeileHinzu() =>
+        _programm.Add(new ProgrammRow { Reihenfolge = _programm.Count + 1, BandName = _kontextBandName });
+
+    private void StueckGewaehlt(ProgrammRow z, string? titel)
+    {
+        z.StueckTitel = titel;
+        // Bekanntes Stück → Komponist:in automatisch übernehmen (bei unbekanntem Stück manuelle Eingabe lassen).
+        if (!string.IsNullOrWhiteSpace(titel) && _stueckKomponist.TryGetValue(titel.Trim(), out var komp))
+            z.KomponistName = komp;
+    }
 
     private void ProgrammZeileEntfernen(ProgrammRow z)
     {
@@ -258,23 +333,33 @@
                 _mitwirkende.Where(m => !string.IsNullOrWhiteSpace(m.PersonName))
                     .Select(m => new KonzertErfassungService.MitwirkendeEingabe(m.PersonName!, m.Rolle, m.BandName)).ToList());
 
+            // Beim Erfassen mit vorgegebener Band (Band-Admin/Direktlink): Band IMMER verknüpfen,
+            // damit das Konzert der Band nicht „verloren geht", auch ohne passende Programmzeile.
+            if (!IstBearbeiten && Band is Guid vb) eingabe = eingabe with { PflichtBandId = vb };
+
             await using var db = await DbFactory.CreateDbContextAsync();
-            Guid id;
             if (Id is Guid kid)
             {
                 await KonzertErfassungService.EditAsync(db, kid, eingabe);
-                id = kid;
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                // Bleibt im Bearbeiten-Modus stehen – „Abbrechen" führt zur Band, „Vorschau" öffnet die Detailseite.
             }
             else
             {
-                id = await KonzertErfassungService.ErfasseAsync(db, eingabe);
+                var id = await KonzertErfassungService.ErfasseAsync(db, eingabe);
+                Snackbar.Add("Konzert gespeichert.", Severity.Success);
+                // Im Konzert-Admin bleiben: in den Bearbeiten-Modus desselben Konzerts wechseln.
+                // Gleiche Komponente → Formular und _zurueck bleiben erhalten; erneutes Speichern
+                // aktualisiert das Konzert (kein Duplikat).
+                Nav.NavigateTo($"/admin/konzerte/{id}/bearbeiten");
             }
-            Snackbar.Add("Konzert gespeichert.", Severity.Success);
-            Nav.NavigateTo($"/konzerte/{id}");
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Fehler beim Speichern: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
             _speichert = false;
         }
     }

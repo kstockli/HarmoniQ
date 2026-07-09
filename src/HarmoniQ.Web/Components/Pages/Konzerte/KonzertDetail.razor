@@ -49,6 +49,12 @@ else
     }
 
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        @if (_darfBearbeiten)
+        {
+            <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                       Href="@($"/admin/konzerte/{_konzert.Id}/bearbeiten")"
+                       StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        }
         @* „Mitgewirkt" nur für Bühnen-Beteiligte (Dirigent/Musikant/Komponist); Publikum nutzt das Tagebuch unten. *@
         @if (_eigenePersonId is not null && _kannMitwirken)
         {
@@ -282,6 +288,7 @@ else
 
     private Guid? _eigenePersonId;
     private bool _kannMitwirken;   // Person hat eine Bühnenrolle (nicht nur Zuhörer:in)
+    private bool _darfBearbeiten;  // globaler Admin ODER Band-Admin einer beteiligten Band
     private PersonRolleTyp _vorschlagRolle = PersonRolleTyp.Musikant;
     private List<PersonRolleTyp> _eigeneTeilnahmeRollen = [];
     private List<EindruckZeile> _eindruecke = [];
@@ -352,6 +359,14 @@ else
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+
+        // Darf dieses Konto das Konzert bearbeiten? Globaler Admin oder Band-Admin einer beteiligten Band.
+        _darfBearbeiten = await BandAdminService.IstGlobalAdminAsync(db, userId);
+        if (!_darfBearbeiten && !string.IsNullOrEmpty(userId))
+        {
+            var adminBandIds = await BandAdminService.AdminBandIdsAsync(db, userId);
+            _darfBearbeiten = bandRows.Any(b => adminBandIds.Contains(b.Id));
+        }
 
         _mitwirkende = mitwirkende
             .Select(kp =>

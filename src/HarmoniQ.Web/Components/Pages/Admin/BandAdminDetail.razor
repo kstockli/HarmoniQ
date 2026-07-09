@@ -261,10 +261,10 @@ else
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
             <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Konzerte (@_konzerte.Count)</MudText>
             <MudSpacer />
-            @if (_istGlobalAdmin)
+            @if (_darfBearbeiten)
             {
                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
-                           StartIcon="@Icons.Material.Filled.Add" Href="/admin/konzerte/erfassen">Konzert erfassen</MudButton>
+                           StartIcon="@Icons.Material.Filled.Add" Href="@($"/admin/konzerte/erfassen?band={BandId}")">Konzert erfassen</MudButton>
             }
         </MudStack>
         @if (_konzerte.Count == 0)
@@ -284,7 +284,7 @@ else
                                     @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
                                 </MudText>
                             </div>
-                            @if (_istGlobalAdmin)
+                            @if (_darfBearbeiten)
                             {
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                                title="Bearbeiten (Wizard)" Href="@($"/admin/konzerte/{k.Id}/bearbeiten")" />
@@ -576,6 +576,15 @@ else
 
     private async Task KonzertEntfernen(Guid konzertId)
     {
+        var titel = _konzerte.FirstOrDefault(k => k.Id == konzertId)?.Titel ?? "dieses Konzert";
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"Band aus \"{titel}\" entfernen? Die Verknüpfung zwischen dieser Band und dem Konzert wird gelöscht (das Konzert selbst bleibt bestehen)." }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Entfernen bestätigen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
         await using var db = await DbFactory.CreateDbContextAsync();
         var kb = await db.KonzertBands.FirstOrDefaultAsync(x => x.KonzertId == konzertId && x.BandId == BandId);
         if (kb != null) { db.KonzertBands.Remove(kb); await db.SaveChangesAsync(); }

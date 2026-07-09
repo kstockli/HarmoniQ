@@ -572,8 +572,15 @@ Claim-Verifizierung sichtbarer Rollen (Block 3).
 > (privat), Konzert-/Video-Wizard-Links. Einstieg **`/account/meine-bands`** + Nav-Link „Meine Bands".
 > Verifiziert (Band-Admin sieht Seite ohne Admin-Aktionen; Nicht-Berechtigte → Redirect auf öffentliche
 > Ansicht). **Wichtig gelernt:** globaler Admin **DB-basiert** prüfen (`AspNetUserRoles`), nicht
-> `IsInRole` (im interaktiven Circuit unzuverlässig). **Offen (Stufe 2+):** Claim-Bestätigung durch
-> Band-Admin, Konzerte-Editieren für Band-Admins, Audit-Log, Crawler-Einladung (§5.3.1).
+> `IsInRole` (im interaktiven Circuit unzuverlässig).
+>
+> **Konzerte für Band-Admins (umgesetzt 2026-07-09):** Konzert-Wizard (`/admin/konzerte/erfassen?band=`
+> + `/{id}/bearbeiten`) für Band-Admins geöffnet — **erfassen nur für eine EIGENE Band** (vorbelegt),
+> **bearbeiten nur wenn eine verwaltete Band teilnimmt**, sonst Redirect. „Konzert erfassen/bearbeiten/
+> Band entfernen" auf der Band-Seite für Band-Admins sichtbar. Verifiziert (eigene Band öffnet, fremde
+> → Redirect). **Offen (Stufe 2+):** Löschen/Merge von Solo-Band-Konzerten (aktuell nur „Band aus
+> Konzert entfernen"), Claim-Bestätigung durch Band-Admin, Audit-Log, Crawler-Einladung (§5.3.1, mit
+> Admin-Review vor Versand).
 
 ### 5.1 Rollen-Modell (Ziel)
 | Stufe | Geltung | Darf |
@@ -623,6 +630,11 @@ Damit lässt sich der erste Band-Admin **aktiv finden statt abwarten**:
 - **Drei-in-eins:** Das schließt zugleich (1) **Block 3** Verifizierungs-Gate, (2) **Block 5**
   Bootstrapping und (3) **Block 9** Verbreitung (personalisierte Ansprache genau der richtigen
   Person) → siehe Querverweis in Block 9.
+- **Admin-Review VOR Versand (Entscheid User 2026-07-09):** Bevor eine Crawler-Einladung rausgeht,
+  muss der (globale) Admin die **Band kurz reviewen/freigeben** (Name/Zuordnung korrekt, Adresse
+  offiziell) — damit nichts Peinliches passiert (falscher Verein, Fantasie-Name, falsche Adresse).
+  Also **kein Auto-Versand**; Ablauf = Crawler schlägt Kandidaten (Band + offizielle Adresse) vor →
+  Admin prüft/hakt ab → dann geht die (bestehende) `BandAdminEinladung` raus.
 - **Datenschutz/Recht (WICHTIG, → Block 2):** Unaufgeforderte E-Mail an **private** Personen-
   Adressen ist heikel (CH-DSG + UWG Art. 3 lit. o, Spam). Daher: **nur offizielle Vereins-/Amts-
   Adressen** anschreiben, klarer Absender/Zweck, einfacher Opt-out/Lösch-Link, keine Massen-
