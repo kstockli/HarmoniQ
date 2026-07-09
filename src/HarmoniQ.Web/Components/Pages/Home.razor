@@ -91,7 +91,16 @@
     <MudPaper Class="pa-4 mb-8" Elevation="4"
               Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#1ABC9C;font-size:2.5rem;" />
+            @if (_adminBands.Count == 1 && !string.IsNullOrWhiteSpace(_adminBands[0].BildUrl))
+            {
+                <MudAvatar Style="width:48px;height:48px;">
+                    <img src="@_adminBands[0].BildUrl" style="width:100%;height:100%;object-fit:cover;" alt="@_adminBands[0].Name" />
+                </MudAvatar>
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#1ABC9C;font-size:2.5rem;" />
+            }
             <div style="flex:1;min-width:240px;">
                 <MudText Typo="Typo.h6" Style="color:#F0E6FF;">
                     @(_adminBands.Count == 1 ? $"Du verwaltest „{_adminBands[0].Name}“" : $"Du verwaltest {_adminBands.Count} Bands")
@@ -375,7 +384,7 @@
     private int _offeneAnfragen;
     private bool _folgeAufruf;   // eingeloggt + Person, aber keine (gefolgten/Mitglieds-)Bands → §4.4
     private List<BandRef> _adminBands = [];   // Bands, die das Konto verwaltet (Band-Admin, Block 5)
-    private record BandRef(Guid Id, string Name);
+    private record BandRef(Guid Id, string Name, string? BildUrl);
     private bool _geladen;   // true sobald die Statistik geladen ist – steuert Skeleton statt „0"
     private TagebuchTeaser? _teaser;
     private readonly int _heuer = DateTime.Today.Year;
@@ -650,7 +659,7 @@
         var adminBands = adminIds.Count == 0
             ? []
             : await db.Bands.Where(b => adminIds.Contains(b.Id)).OrderBy(b => b.Name)
-                .Select(b => new BandRef(b.Id, b.Name)).ToListAsync();
+                .Select(b => new BandRef(b.Id, b.Name, b.BildUrl)).ToListAsync();
         var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
         var hatPerson = meineId != Guid.Empty;
         var hatAntrag = await db.PersonAnsprueche.AnyAsync(a => a.BenutzerId == userId && a.Status == PersonAnspruchStatus.Offen);

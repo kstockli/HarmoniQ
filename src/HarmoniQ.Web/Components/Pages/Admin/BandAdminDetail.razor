@@ -11,6 +11,7 @@
 @inject IDialogService DialogService
 @inject GeocodingService Geo
 @inject AuthenticationStateProvider AuthProvider
+@inject IBenachrichtigungsMail Mail
 @using HarmoniQ.Web.Services
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 
@@ -121,14 +122,14 @@ else
         </MudStack>
     </MudPaper>
 
-    @* ── Band-Admins verwalten (nur globaler Admin, UX-Spec Block 5) ── *@
-    @if (_istGlobalAdmin)
+    @* ── Band-Admins verwalten (globaler Admin ODER Band-Admin dieser Band, UX-Spec Block 5) ── *@
+    @if (_darfBearbeiten)
     {
         <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C;">
             <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">Band-Admins (Verein-Verwalter:innen)</MudText>
             <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
                 Diese Konten dürfen <b>diese Band selbst pflegen</b> (Stammdaten inkl. Heimatort, Mitglieder).
-                Nur der globale Admin ernennt/entzieht.
+                Neue per E-Mail hinzufügen (bestehendes Konto) oder <b>einladen</b> (noch kein Konto).
             </MudText>
             <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-2">
                 @foreach (var a in _bandAdmins)
@@ -136,13 +137,23 @@ else
                     <MudChip T="string" Size="Size.Small" OnClose="@(() => AdminEntziehen(a.Id))"
                              Style="background:#2d1657; color:#F0E6FF;">@a.Email</MudChip>
                 }
-                @if (_bandAdmins.Count == 0) { <MudText Typo="Typo.body2" Style="color:#6f5a86;">Keine.</MudText> }
+                @foreach (var e in _offeneEinladungen)
+                {
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.MailOutline"
+                             OnClose="@(() => EinladungStornieren(e.Id))"
+                             Style="background:#3a2a08; color:#D4AF37;">@e.Email (eingeladen)</MudChip>
+                }
+                @if (_bandAdmins.Count == 0 && _offeneEinladungen.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Style="color:#6f5a86;">Keine.</MudText>
+                }
             </MudStack>
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudTextField @bind-Value="_neuerAdminEmail" Label="E-Mail des Kontos" Variant="Variant.Outlined"
-                              Margin="Margin.Dense" Style="max-width:320px;" />
+                <MudTextField @bind-Value="_neuerAdminEmail" Label="E-Mail (Konto oder Einladung)" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Style="max-width:340px;" />
                 <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
-                           OnClick="AdminHinzufuegen" Disabled="@string.IsNullOrWhiteSpace(_neuerAdminEmail)">Ernennen</MudButton>
+                           StartIcon="@Icons.Material.Filled.PersonAddAlt" OnClick="AdminHinzufuegen"
+                           Disabled="@(_adminArbeitet || string.IsNullOrWhiteSpace(_neuerAdminEmail))">Hinzufügen / Einladen</MudButton>
             </MudStack>
         </MudPaper>
     }
@@ -380,23 +391,26 @@ else
     private string _heimatLokal = "";
     private List<string> _lokalNamen = [];
 
+    private string? _userId;
     private bool _istGlobalAdmin;      // globale Admin-Rolle (darf alles)
     private bool _darfBearbeiten;      // global ODER Band-Admin dieser Band
+    private bool _adminArbeitet;
     private string _neuerAdminEmail = "";
     private List<AdminZeile> _bandAdmins = [];
+    private List<BandAdminEinladung> _offeneEinladungen = [];
     private record AdminZeile(Guid Id, string Email);
 
+    // Bestehendes Konto → direkt ernennen; sonst → einladen (Mail mit Einmal-Link). UX-Spec §5.3.2.
     private async Task AdminHinzufuegen()
     {
         var email = _neuerAdminEmail.Trim();
         if (string.IsNullOrWhiteSpace(email)) return;
+        _adminArbeitet = true;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var norm = email.ToUpperInvariant();
-        var user = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == norm || u.Email == email);
-        if (user == null) { Snackbar.Add("Kein Konto mit dieser E-Mail gefunden.", Severity.Warning); return; }
-        await BandAdminService.ErnennenAsync(db, user.Id, BandId);
+        var meldung = await BandAdminService.ErnennenOderEinladenAsync(db, Mail, Nav.BaseUri, BandId, email, _userId);
+        _adminArbeitet = false;
         _neuerAdminEmail = "";
-        Snackbar.Add("Als Band-Admin ernannt.", Severity.Success);
+        Snackbar.Add(meldung, Severity.Success);
         await Laden();
     }
 
@@ -405,6 +419,14 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         await BandAdminService.EntziehenAsync(db, id);
         Snackbar.Add("Band-Admin entfernt.", Severity.Info);
+        await Laden();
+    }
+
+    private async Task EinladungStornieren(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await BandAdminService.StornierenAsync(db, id);
+        Snackbar.Add("Einladung storniert.", Severity.Info);
         await Laden();
     }
 
@@ -424,19 +446,22 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         // Zugriff: globaler Admin ODER Band-Admin dieser Band (UX-Spec Block 5).
         var authState = await AuthProvider.GetAuthenticationStateAsync();
-        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        _istGlobalAdmin = await BandAdminService.IstGlobalAdminAsync(db, userId);
-        _darfBearbeiten = _istGlobalAdmin || await BandAdminService.IstBandAdminAsync(db, userId, BandId);
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _istGlobalAdmin = await BandAdminService.IstGlobalAdminAsync(db, _userId);
+        _darfBearbeiten = _istGlobalAdmin || await BandAdminService.IstBandAdminAsync(db, _userId, BandId);
         if (!_darfBearbeiten) { Nav.NavigateTo($"/bands/{BandId}"); return; }
 
         _band = await db.Bands.Include(b => b.Links).Include(b => b.HeimatLokal).FirstOrDefaultAsync(b => b.Id == BandId);
         if (_band == null) { Nav.NavigateTo(_istGlobalAdmin ? "/admin/bands" : "/account/meine-bands"); return; }
 
-        if (_istGlobalAdmin)
+        if (_darfBearbeiten)
+        {
             _bandAdmins = await (from ba in db.BandAdministratoren
                                  join u in db.Users on ba.BenutzerId equals u.Id
                                  where ba.BandId == BandId
                                  select new AdminZeile(ba.Id, u.Email ?? u.UserName ?? ba.BenutzerId)).ToListAsync();
+            _offeneEinladungen = await BandAdminService.OffeneEinladungenAsync(db, BandId);
+        }
 
         _name = _band.Name; _land = _band.Land ?? ""; _webseite = _band.Webseite ?? ""; _bildUrl = _band.BildUrl ?? "";
         _geschichte = _band.Geschichte ?? "";

@@ -1,0 +1,79 @@
+@page "/einladung/{Token}"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<PageTitle>Einladung – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Verein-Verwaltung</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_einladung is null || !_einladung.IstOffenUndGueltig)
+{
+    <MudAlert Severity="Severity.Warning">
+        Diese Einladung ist nicht (mehr) gültig – sie wurde bereits angenommen, storniert oder ist abgelaufen.
+        Bitte die einladende Person um eine neue Einladung.
+    </MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-6" Elevation="4" Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C; max-width:640px;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#1ABC9C;font-size:2.5rem;" />
+            <div>
+                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Du wurdest eingeladen, <b>@_einladung.Band.Name</b> zu verwalten</MudText>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                    Als Verein-Verwalter:in pflegst du Mitglieder, Konzerte und den Heimatort deiner Band.
+                </MudText>
+            </div>
+        </MudStack>
+
+        <MudText Typo="Typo.caption" Class="mb-4 d-block" Style="color:#6f5a86;">Einladung für @_einladung.Email</MudText>
+
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+            <MudButton Variant="Variant.Filled" Size="Size.Large" Style="background:#1ABC9C; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.PersonAddAlt" Href="@RegisterUrl">Konto erstellen &amp; annehmen</MudButton>
+            <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
+                       StartIcon="@Icons.Material.Filled.Login" Href="@LoginUrl">Ich habe schon ein Konto</MudButton>
+        </MudStack>
+        <MudText Typo="Typo.caption" Class="mt-3 d-block" Style="color:#6f5a86;">
+            Nach der Registrierung (Passwort oder Google/Microsoft) bist du direkt bei deiner Band.
+        </MudText>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+
+    private bool _geladen;
+    private BandAdminEinladung? _einladung;
+
+    private string Ziel => $"/einladung/{Token}";
+    private string RegisterUrl => $"Account/Register?ReturnUrl={Uri.EscapeDataString(Ziel)}";
+    private string LoginUrl => $"Account/Login?ReturnUrl={Uri.EscapeDataString(Ziel)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _einladung = await BandAdminService.EinladungPerTokenAsync(db, Token);
+
+        // Bereits eingeloggt → Einladung sofort annehmen und direkt zur Band („Einstieg tief").
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userId) && _einladung is { IstOffenUndGueltig: true })
+        {
+            var bandId = await BandAdminService.AnnehmenAsync(db, Token, userId);
+            if (bandId is Guid bid) { Nav.NavigateTo($"/admin/bands/{bid}", forceLoad: true); return; }
+        }
+        _geladen = true;
+    }
+}

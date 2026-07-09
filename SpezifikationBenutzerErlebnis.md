@@ -661,7 +661,16 @@ Konto voraussetzt) und ist zugleich der Mechanismus hinter §5.3.1.*
 offizielle Vereinsadresse aus dem Crawler wird eingeladen; Annehmen = Registrierung + Verifizierung
 + Band-Admin in einem Schritt. **Antwort auf „muss er ein Passwort setzen?":** Beim ersten Mal ja
 (Passwort **oder** Google/Microsoft) — der Einmal-Link führt in die Registrierung, danach ist er
-User **und** Band-Admin und steht direkt bei seiner Band. **Status: spezifiziert, noch nicht gebaut.**
+User **und** Band-Admin und steht direkt bei seiner Band.
+
+> **Stand (umgesetzt 2026-07-09):** Entität `BandAdminEinladung` + Migration. Band-Admin-Seite: **ein
+> Feld „E-Mail → Hinzufügen/Einladen"** (bestehendes Konto → sofort ernannt; sonst Einladung + Mail
+> mit Einmal-Link, offene Einladungen als Chips/stornierbar). Annahme-Seite **`/einladung/{token}`**
+> (eingeloggt → auto-annehmen + direkt zur Band; sonst Registrieren/Login mit ReturnUrl). **Band-Admins
+> dürfen jetzt selbst Band-Admins ernennen/einladen/entziehen** (Sektion für Band-Admins geöffnet,
+> oberhalb „Mitglieder"). **Band-Admin folgt der Band automatisch** (`BandInteresse`, verifiziert).
+> Startseiten-Banner nutzt das **Band-Logo**, falls vorhanden. Offen: E-Mail-Vorbefüllung im
+> Registrierungsformular; Claim-Bestätigung durch Band-Admin.
 
 ### 5.4 Moderation, Audit & Konflikt
 - **Änderungs-Historie/Audit-Log** je Entität (wer hat wann was geändert) — Voraussetzung für
