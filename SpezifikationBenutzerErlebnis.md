@@ -505,7 +505,11 @@ eine Referenz auf `Lokal`.
 > Bezugspunkt via **Standort ODER PLZ**, **Umkreis-Filter (≤10/25/50/100 km)** wie bei Konzerten;
 > bei gesetztem Bezugspunkt werden Bands **nach Distanz aufsteigend** (mit km + Ort) gezeigt.
 > Nutzt `Band.HeimatLokal`-Koordinaten + `Person.StandortLat/Lng`/geo.js + `GeocodePlzAsync`.
-> Verifiziert (PLZ 6003 → Abinchova 4.6 km < Neuenkirch 10.2 < Sarnen 17.5). + **Leerer-Feed-Aufruf** auf der
+> Verifiziert (PLZ 6003 → Abinchova 4.6 km < Neuenkirch 10.2 < Sarnen 17.5). **Auch die öffentliche
+> `/bands`-Liste** hat jetzt denselben Standort/PLZ/Umkreis-Filter + Distanz-Sortierung (+ Ort-Spalte);
+> Bands ohne Ort bleiben sichtbar (wie Konzerte). **Crawler setzt HeimatLokal NICHT** (Quellen haben
+> keinen sauberen Ort — EMF nur im `identifier`/Namen) → Befüllung via Backfill-Tool/Band-Feld.
+> + **Leerer-Feed-Aufruf** auf der
 > Startseite (wenn Person aber keine Bands) + **`Band.HeimatLokalId → Lokal`** (Migration
 > `BandHeimatLokal`). **Band-Admin: Feld „Heimatort/Probelokal"** (Lokal-Autocomplete, Find-or-create
 > + Geocoding beim Speichern) umgesetzt. **Offen:** Band-Standorte im Bestand **befüllen** (Backfill,
@@ -558,8 +562,18 @@ Lat/Lng/Kanton; „Konzerte in deiner Nähe" (`_feed.Nahe`) funktioniert. **Lüc
 
 **Grundsatz-Entscheid (2026-06-29):** Ja, es braucht die Zwischenstufe **Band-Admin** (UI:
 „Verein verwalten"). Der globale Admin ist sonst der Flaschenhals für Datenpflege **und** für die
-Claim-Verifizierung sichtbarer Rollen (Block 3). Die Stufe wird **jetzt spezifiziert**, **umgesetzt**
-wird sie, sobald die ersten echten Vereine an Bord kommen.
+Claim-Verifizierung sichtbarer Rollen (Block 3).
+
+> **Stand (Stufe 1 umgesetzt 2026-07-08):** Entität `BandAdministrator` (+ Migration) + `BandAdminService`
+> (`IstBandAdmin`/`IstGlobalAdmin` DB-basiert/`AdminBandIds`/`Ernennen`/`Entziehen`). Globaler Admin
+> ernennt/entzieht Band-Admins per E-Mail auf der Band-Admin-Seite. Die Band-Verwaltungsseite
+> (`/admin/bands/{id}`) ist für Band-Admins **ihrer** Band geöffnet — Stammdaten (inkl. Heimatort),
+> Aliase, Mitglieder; **global-only ausgeblendet:** Merge, Band-Admins-Verwaltung, Interessent:innen
+> (privat), Konzert-/Video-Wizard-Links. Einstieg **`/account/meine-bands`** + Nav-Link „Meine Bands".
+> Verifiziert (Band-Admin sieht Seite ohne Admin-Aktionen; Nicht-Berechtigte → Redirect auf öffentliche
+> Ansicht). **Wichtig gelernt:** globaler Admin **DB-basiert** prüfen (`AspNetUserRoles`), nicht
+> `IsInRole` (im interaktiven Circuit unzuverlässig). **Offen (Stufe 2+):** Claim-Bestätigung durch
+> Band-Admin, Konzerte-Editieren für Band-Admins, Audit-Log, Crawler-Einladung (§5.3.1).
 
 ### 5.1 Rollen-Modell (Ziel)
 | Stufe | Geltung | Darf |
@@ -614,6 +628,40 @@ Damit lässt sich der erste Band-Admin **aktiv finden statt abwarten**:
   Adressen** anschreiben, klarer Absender/Zweck, einfacher Opt-out/Lösch-Link, keine Massen-
   Aussendung an geharvestete Privatadressen. Vom Crawler ist die Adress-Herkunft bekannt → vor
   Versand nach „offiziell vs. privat" filtern.
+
+#### 5.3.2 Band-Admin-Einladung für Noch-nicht-User (Vorschlag 2026-07-09)
+*Ziel: jemanden für Band-X als Band-Admin gewinnen, der **noch kein Konto** hat — und ihn dabei
+zum Registrieren motivieren. Verallgemeinert das heutige „Ernennen per E-Mail" (das ein bestehendes
+Konto voraussetzt) und ist zugleich der Mechanismus hinter §5.3.1.*
+
+**Ablauf (token-basierte Einladung):**
+1. **Einladen:** Auf der Band-Admin-Seite neben „Ernennen" ein Feld „**Einladen** (E-Mail)". Der
+   (globale oder Band-)Admin gibt die E-Mail ein → „Einladung senden".
+2. **Einladung anlegen (noch KEIN `BandAdministrator`):** Entität `BandAdminEinladung`
+   {`Token` (zufällig, einmalig), `Email`, `BandId`, `EingeladenVon`, `ErstelltAm`, `AblaufAm`
+   (z. B. +14 Tage), `Status` [Offen/Angenommen/Abgelaufen/Storniert]}.
+3. **E-Mail an die eingeladene Person:** „**Du wurdest eingeladen, den Verein <Band-X> auf HarmoniQ
+   zu verwalten**" — führt mit dem **Nutzen** (Mitglieder, Konzerte, Heimatort pflegen) und hat einen
+   Button **„Einladung annehmen"** → Einmal-Link `/einladung/{token}`.
+4. **Klick auf den Link:**
+   - **Noch kein Konto:** Registrierungsseite mit **vorausgefüllter E-Mail**; die Person setzt
+     **beim ersten Mal ein Passwort** ODER nutzt **Google/Microsoft** (Block 3: Social zuerst,
+     niederschwellig). Nach erfolgreicher Registrierung wird die Einladung **automatisch angenommen**.
+   - **Konto vorhanden:** einloggen → Einladung annehmen.
+5. **Annahme:** `BandAdministrator`(Konto, Band-X) wird angelegt, Einladung → Angenommen; die Person
+   landet **direkt auf `/admin/bands/{Band-X}`** („Einstieg tief"). Optional: falls die Person im
+   Roster der Band steht, gleich den **Person-Claim** (Block 3) anbieten/verknüpfen.
+6. **Sicherheit/Verifizierung:** Der Token beweist Zugriff auf die eingeladene Adresse (E-Mail-Round-
+   Trip = weiche Verifizierung); der einladende Admin trägt die Verantwortung für die Adresswahl.
+   Token **einmalig + ablaufend**; Einladung **stornierbar** (offene Einladungen listbar).
+7. **Datenschutz (Block 2/9):** Transaktionale Einladung, die der Admin auslöst — nur an **bekannte/
+   offizielle Adressen**, klarer Absender/Zweck, kein Massenversand an geharvestete Privatadressen.
+
+**Zusammenspiel:** Das ist genau der Mechanismus hinter der **Crawler-Einladung (§5.3.1)** — die
+offizielle Vereinsadresse aus dem Crawler wird eingeladen; Annehmen = Registrierung + Verifizierung
++ Band-Admin in einem Schritt. **Antwort auf „muss er ein Passwort setzen?":** Beim ersten Mal ja
+(Passwort **oder** Google/Microsoft) — der Einmal-Link führt in die Registrierung, danach ist er
+User **und** Band-Admin und steht direkt bei seiner Band. **Status: spezifiziert, noch nicht gebaut.**
 
 ### 5.4 Moderation, Audit & Konflikt
 - **Änderungs-Historie/Audit-Log** je Entität (wer hat wann was geändert) — Voraussetzung für

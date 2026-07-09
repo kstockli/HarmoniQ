@@ -1,6 +1,7 @@
 @page "/admin/bands/{BandId:guid}"
 @page "/admin/bands/{BandId:guid}/mitglieder"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
@@ -9,20 +10,24 @@
 @inject NavigationManager Nav
 @inject IDialogService DialogService
 @inject GeocodingService Geo
+@inject AuthenticationStateProvider AuthProvider
 @using HarmoniQ.Web.Services
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 
 <PageTitle>@(_band?.Name ?? "Band") – HarmoniQ Admin</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin/bands"
-               StartIcon="@Icons.Material.Filled.ArrowBack">Bands</MudButton>
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@(_istGlobalAdmin ? "/admin/bands" : "/account/meine-bands")"
+               StartIcon="@Icons.Material.Filled.ArrowBack">@(_istGlobalAdmin ? "Bands" : "Meine Bands")</MudButton>
     <MudText Typo="Typo.h4" Style="color:#D4AF37;">@(_band?.Name ?? "Band")</MudText>
     <MudSpacer />
     @if (_band != null)
     {
-        <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#9B59B6;"
-                   StartIcon="@Icons.Material.Filled.Merge" OnClick="Zusammenfuehren">Zusammenführen</MudButton>
+        @if (_istGlobalAdmin)
+        {
+            <MudButton Variant="Variant.Outlined" Style="color:#9B59B6;border-color:#9B59B6;"
+                       StartIcon="@Icons.Material.Filled.Merge" OnClick="Zusammenfuehren">Zusammenführen</MudButton>
+        }
         <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@($"/bands/{BandId}")"
                    StartIcon="@Icons.Material.Filled.OpenInNew" Target="_blank">Öffentliche Ansicht</MudButton>
     }
@@ -115,6 +120,32 @@ else
                        OnClick="AliasHinzufuegen" Disabled="@string.IsNullOrWhiteSpace(_neuerAlias)">Hinzufügen</MudButton>
         </MudStack>
     </MudPaper>
+
+    @* ── Band-Admins verwalten (nur globaler Admin, UX-Spec Block 5) ── *@
+    @if (_istGlobalAdmin)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C;">
+            <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">Band-Admins (Verein-Verwalter:innen)</MudText>
+            <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
+                Diese Konten dürfen <b>diese Band selbst pflegen</b> (Stammdaten inkl. Heimatort, Mitglieder).
+                Nur der globale Admin ernennt/entzieht.
+            </MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-2">
+                @foreach (var a in _bandAdmins)
+                {
+                    <MudChip T="string" Size="Size.Small" OnClose="@(() => AdminEntziehen(a.Id))"
+                             Style="background:#2d1657; color:#F0E6FF;">@a.Email</MudChip>
+                }
+                @if (_bandAdmins.Count == 0) { <MudText Typo="Typo.body2" Style="color:#6f5a86;">Keine.</MudText> }
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudTextField @bind-Value="_neuerAdminEmail" Label="E-Mail des Kontos" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Style="max-width:320px;" />
+                <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                           OnClick="AdminHinzufuegen" Disabled="@string.IsNullOrWhiteSpace(_neuerAdminEmail)">Ernennen</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
 
     @* ── Mitglieder (inline editierbar) ───────────────────────────── *@
     <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
@@ -219,8 +250,11 @@ else
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
             <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Konzerte (@_konzerte.Count)</MudText>
             <MudSpacer />
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
-                       StartIcon="@Icons.Material.Filled.Add" Href="/admin/konzerte/erfassen">Konzert erfassen</MudButton>
+            @if (_istGlobalAdmin)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                           StartIcon="@Icons.Material.Filled.Add" Href="/admin/konzerte/erfassen">Konzert erfassen</MudButton>
+            }
         </MudStack>
         @if (_konzerte.Count == 0)
         {
@@ -239,10 +273,13 @@ else
                                     @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
                                 </MudText>
                             </div>
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
-                                           title="Bearbeiten (Wizard)" Href="@($"/admin/konzerte/{k.Id}/bearbeiten")" />
-                            <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Error"
-                                           title="Band aus Konzert entfernen" OnClick="@(() => KonzertEntfernen(k.Id))" />
+                            @if (_istGlobalAdmin)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
+                                               title="Bearbeiten (Wizard)" Href="@($"/admin/konzerte/{k.Id}/bearbeiten")" />
+                                <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Error"
+                                               title="Band aus Konzert entfernen" OnClick="@(() => KonzertEntfernen(k.Id))" />
+                            }
                         </MudStack>
                     </MudListItem>
                 }
@@ -255,8 +292,11 @@ else
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
             <MudText Typo="Typo.h6" Style="color:#F0E6FF;">Videos (@_videos.Count)</MudText>
             <MudSpacer />
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
-                       StartIcon="@Icons.Material.Filled.VideoLibrary" Href="/admin/videos">Videos verwalten</MudButton>
+            @if (_istGlobalAdmin)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#D4AF37;border-color:#D4AF37;"
+                           StartIcon="@Icons.Material.Filled.VideoLibrary" Href="/admin/videos">Videos verwalten</MudButton>
+            }
         </MudStack>
         @if (_videos.Count == 0)
         {
@@ -277,7 +317,9 @@ else
         }
     </MudPaper>
 
-    @* ── Interessent:innen (Folgen, UX-Spec 4.2) ──────────────────── *@
+    @* ── Interessent:innen (Folgen, UX-Spec 4.2) – PRIVAT: nur globaler Admin ── *@
+    @if (_istGlobalAdmin)
+    {
     <MudPaper Class="pa-4 mt-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
         <MudText Typo="Typo.h6" Class="mb-1" Style="color:#1ABC9C;">Interessent:innen – folgen (@_interessenten.Count)</MudText>
         <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="color:#A78FC0;">
@@ -299,6 +341,7 @@ else
             </MudStack>
         }
     </MudPaper>
+    }
 
     <AuditInfo CreateTime="@_band.CreateTime" CreateUser="@_band.CreateUser"
                ModifyTime="@_band.ModifyTime" ModifyUser="@_band.ModifyUser" />
@@ -337,6 +380,34 @@ else
     private string _heimatLokal = "";
     private List<string> _lokalNamen = [];
 
+    private bool _istGlobalAdmin;      // globale Admin-Rolle (darf alles)
+    private bool _darfBearbeiten;      // global ODER Band-Admin dieser Band
+    private string _neuerAdminEmail = "";
+    private List<AdminZeile> _bandAdmins = [];
+    private record AdminZeile(Guid Id, string Email);
+
+    private async Task AdminHinzufuegen()
+    {
+        var email = _neuerAdminEmail.Trim();
+        if (string.IsNullOrWhiteSpace(email)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var norm = email.ToUpperInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == norm || u.Email == email);
+        if (user == null) { Snackbar.Add("Kein Konto mit dieser E-Mail gefunden.", Severity.Warning); return; }
+        await BandAdminService.ErnennenAsync(db, user.Id, BandId);
+        _neuerAdminEmail = "";
+        Snackbar.Add("Als Band-Admin ernannt.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task AdminEntziehen(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await BandAdminService.EntziehenAsync(db, id);
+        Snackbar.Add("Band-Admin entfernt.", Severity.Info);
+        await Laden();
+    }
+
     // Lokal-Autocomplete (Namen + Aliase); Find-or-create beim Speichern über LokalService.
     private Task<IEnumerable<string>> SucheLokal(string? wert)
     {
@@ -351,8 +422,21 @@ else
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        // Zugriff: globaler Admin ODER Band-Admin dieser Band (UX-Spec Block 5).
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _istGlobalAdmin = await BandAdminService.IstGlobalAdminAsync(db, userId);
+        _darfBearbeiten = _istGlobalAdmin || await BandAdminService.IstBandAdminAsync(db, userId, BandId);
+        if (!_darfBearbeiten) { Nav.NavigateTo($"/bands/{BandId}"); return; }
+
         _band = await db.Bands.Include(b => b.Links).Include(b => b.HeimatLokal).FirstOrDefaultAsync(b => b.Id == BandId);
-        if (_band == null) { Nav.NavigateTo("/admin/bands"); return; }
+        if (_band == null) { Nav.NavigateTo(_istGlobalAdmin ? "/admin/bands" : "/account/meine-bands"); return; }
+
+        if (_istGlobalAdmin)
+            _bandAdmins = await (from ba in db.BandAdministratoren
+                                 join u in db.Users on ba.BenutzerId equals u.Id
+                                 where ba.BandId == BandId
+                                 select new AdminZeile(ba.Id, u.Email ?? u.UserName ?? ba.BenutzerId)).ToListAsync();
 
         _name = _band.Name; _land = _band.Land ?? ""; _webseite = _band.Webseite ?? ""; _bildUrl = _band.BildUrl ?? "";
         _geschichte = _band.Geschichte ?? "";

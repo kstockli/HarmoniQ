@@ -436,6 +436,22 @@ BandInteresse                       (Person „folgt" Band – privat, KEIN Rost
 > (≥2 besuchte Konzerte / hoch bewertetes Stück der Band). Mitgliedschaft impliziert Folgen (Union),
 > es braucht dafür keinen zusätzlichen `BandInteresse`-Eintrag.
 
+BandAdministrator                   (Konto „verwaltet" eine Band – band-skopierte Admin-Rolle) — NEU
+├── Id (Guid)
+├── BenutzerId (string → AspNetUsers) ← wer die Band verwalten darf
+├── BandId (FK → Band)
+└── (Audit: CreateTime/CreateUser = ernannt-am/-von via AuditierteEntitaet)
+   • Eindeutig pro (BenutzerId, BandId).
+
+> **Zweck & Abgrenzung (UX-Spec Block 5):** Zwischenstufe zwischen User und globalem Admin.
+> Ein Band-Admin darf **seine** Band pflegen (Stammdaten inkl. Heimatort, Mitglieder/Vorstand,
+> Konzerte) und Claims sichtbarer Rollen bestätigen – **nicht** andere Bands, globale Daten,
+> Importe/Crawler oder private Nutzerdaten. **Bewusst getrennt** von `BandMitgliedschaft.Funktion`
+> (Präsident:in zu *sein* ≠ die App *verwalten* dürfen). Bootstrapping: erste:r Band-Admin vom
+> globalen Admin ernannt; weitere durch bestehende Band-Admins; später Crawler-Einladung
+> (UX-Spec §5.3.1). Solo-Band-Konzerte darf ein Band-Admin löschen/mergen, sobald eine fremde Band
+> beteiligt ist nur der globale Admin. Löschen/Merge der Band selbst = globaler Admin.
+
 > **Wiederkehr-Schleife – Benachrichtigungs-Entitäten (Details UX-Spec 4.2):**
 > - `BenachrichtigungPraeferenz` (pro Konto, Kanäle **unabhängig**: `EmailAktiv`/`PushAktiv`, Default an,
 >   + `AbmeldeToken` für tokenbasierte One-Click-Abmeldung) — **UMGESETZT.**

@@ -1,0 +1,63 @@
+@page "/account/meine-bands"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Meine Bands verwalten – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Meine Bands verwalten</MudText>
+
+@if (!_geladen)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_bands.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-2">
+        Du verwaltest noch keine Band. Um Verein-Verwalter:in zu werden, wende dich an eine
+        Admin-Person – sie kann dich für deine Band als Band-Admin ernennen.
+    </MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.body2" Class="mb-3" Style="color:#A78FC0;">
+        Du kannst diese Bands selbst pflegen (Stammdaten inkl. Heimatort, Mitglieder).
+    </MudText>
+    <MudGrid>
+        @foreach (var b in _bands)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="pa-3 d-flex align-center" Elevation="2"
+                          Style="background:#1a0030; border:1px solid #3a1060;gap:12px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#9B59B6;" />
+                    <div style="flex:1;min-width:0;">
+                        <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@b.Name</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Size="Size.Small" Style="background:#D4AF37;color:#0e0018;"
+                               StartIcon="@Icons.Material.Filled.Edit" Href="@($"/admin/bands/{b.Id}")">Verwalten</MudButton>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool _geladen;
+    private List<(Guid Id, string Name)> _bands = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var ids = await BandAdminService.AdminBandIdsAsync(db, userId);
+        _bands = await db.Bands.Where(b => ids.Contains(b.Id)).OrderBy(b => b.Name)
+            .Select(b => new ValueTuple<Guid, string>(b.Id, b.Name)).ToListAsync();
+        _geladen = true;
+    }
+}

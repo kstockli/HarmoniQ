@@ -85,6 +85,30 @@
     </Authorized>
 </AuthorizeView>
 
+@* Band-Admin-Einstieg (UX-Spec Block 5): „Einstieg tief" – eine Band → direkt dahin, mehrere → Übersicht. *@
+@if (_adminBands.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-8" Elevation="4"
+              Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#1ABC9C;font-size:2.5rem;" />
+            <div style="flex:1;min-width:240px;">
+                <MudText Typo="Typo.h6" Style="color:#F0E6FF;">
+                    @(_adminBands.Count == 1 ? $"Du verwaltest „{_adminBands[0].Name}“" : $"Du verwaltest {_adminBands.Count} Bands")
+                </MudText>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                    Pflege Stammdaten, Heimatort und Mitglieder – direkt hier.
+                </MudText>
+            </div>
+            <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.Edit"
+                       Href="@(_adminBands.Count == 1 ? $"/admin/bands/{_adminBands[0].Id}" : "/account/meine-bands")">
+                @(_adminBands.Count == 1 ? "Band verwalten" : "Bands verwalten")
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
 @* „Mein Konzert-Jahr" – persönlicher Tagebuch-Anker weit oben (UX-Spec 6.1). *@
 @if (_teaser is { Gesamt: > 0 } t)
 {
@@ -350,6 +374,8 @@
     private bool _onboardingNoetig;
     private int _offeneAnfragen;
     private bool _folgeAufruf;   // eingeloggt + Person, aber keine (gefolgten/Mitglieds-)Bands → §4.4
+    private List<BandRef> _adminBands = [];   // Bands, die das Konto verwaltet (Band-Admin, Block 5)
+    private record BandRef(Guid Id, string Name);
     private bool _geladen;   // true sobald die Statistik geladen ist – steuert Skeleton statt „0"
     private TagebuchTeaser? _teaser;
     private readonly int _heuer = DateTime.Today.Year;
@@ -413,7 +439,7 @@
 
         _neueVideos = neueVideosTask.Result;
         _kalender = kalenderTask.Result;
-        (_onboardingNoetig, _offeneAnfragen, _folgeAufruf) = userStatusTask.Result;
+        (_onboardingNoetig, _offeneAnfragen, _folgeAufruf, _adminBands) = userStatusTask.Result;
         _teaser = teaserTask.Result;
         _feed = feedTask.Result;
         _geladen = true;
@@ -609,15 +635,22 @@
     }
 
     // User-spezifischer Onboarding-/Anfragen-Status – pro Request (nicht cachebar).
-    private async Task<(bool OnboardingNoetig, int OffeneAnfragen, bool FolgeAufruf)> UserStatusLadenAsync()
+    private async Task<(bool OnboardingNoetig, int OffeneAnfragen, bool FolgeAufruf, List<BandRef> AdminBands)> UserStatusLadenAsync()
     {
         // Onboarding-Hinweis: eingeloggt, aber (noch) keine verknüpfte Person und kein offener Antrag.
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId))
-            return (false, 0, false);
+            return (false, 0, false, []);
 
         await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Band-Admin-Einstieg (UX-Spec Block 5): Bands, die dieses Konto verwaltet.
+        var adminIds = await BandAdminService.AdminBandIdsAsync(db, userId);
+        var adminBands = adminIds.Count == 0
+            ? []
+            : await db.Bands.Where(b => adminIds.Contains(b.Id)).OrderBy(b => b.Name)
+                .Select(b => new BandRef(b.Id, b.Name)).ToListAsync();
         var meineId = await db.Personen.Where(p => p.BenutzerId == userId).Select(p => p.Id).FirstOrDefaultAsync();
         var hatPerson = meineId != Guid.Empty;
         var hatAntrag = await db.PersonAnsprueche.AnyAsync(a => a.BenutzerId == userId && a.Status == PersonAnspruchStatus.Offen);
@@ -638,7 +671,7 @@
             folgeAufruf = !hatBands;
         }
 
-        return (onboardingNoetig, offeneAnfragen, folgeAufruf);
+        return (onboardingNoetig, offeneAnfragen, folgeAufruf, adminBands);
     }
 
     // Dekoratives km-Label: Bezugspunkt aus localStorage lesen, Distanz berechnen (keine Umsortierung).

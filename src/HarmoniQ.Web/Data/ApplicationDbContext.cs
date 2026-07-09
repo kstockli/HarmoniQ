@@ -34,6 +34,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PersonAnspruch> PersonAnsprueche => Set<PersonAnspruch>();
     public DbSet<BandbeitrittAntrag> BandbeitrittAntraege => Set<BandbeitrittAntrag>();
     public DbSet<BandInteresse> BandInteressen => Set<BandInteresse>();
+    public DbSet<BandAdministrator> BandAdministratoren => Set<BandAdministrator>();
     public DbSet<BenachrichtigungPraeferenz> BenachrichtigungPraeferenzen => Set<BenachrichtigungPraeferenz>();
     public DbSet<BenachrichtigungGesendet> BenachrichtigungenGesendet => Set<BenachrichtigungGesendet>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
@@ -229,6 +230,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(i => i.BandId).OnDelete(DeleteBehavior.Cascade);
             // Eine Person folgt einer Band höchstens einmal.
             e.HasIndex(i => new { i.PersonId, i.BandId }).IsUnique();
+        });
+
+        // BandAdministrator (band-skopierte Admin-Rolle, UX-Spec Block 5)
+        builder.Entity<BandAdministrator>(e =>
+        {
+            e.Property(a => a.Id).ValueGeneratedNever();
+            e.HasOne(a => a.Band).WithMany()
+                .HasForeignKey(a => a.BandId).OnDelete(DeleteBehavior.Cascade);
+            // Ein Konto verwaltet eine Band höchstens einmal.
+            e.HasIndex(a => new { a.BenutzerId, a.BandId }).IsUnique();
         });
 
         // Benachrichtigungs-Präferenzen (Wiederkehr-Schleife, UX-Spec 4.2)

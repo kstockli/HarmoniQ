@@ -2,7 +2,11 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@inject GeocodingService Geo
+@inject ISnackbar Snackbar
 
 <PageTitle>Bands – HarmoniQ</PageTitle>
 
@@ -44,6 +48,34 @@ else
                 </MudSelect>
             </MudItem>
         </MudGrid>
+
+        @* Bands in der Nähe: Bezugspunkt via Standort ODER PLZ, dann Umkreis (wie Konzerte). *@
+        <MudDivider Class="my-2" Style="border-color:#3a1060;" />
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudIcon Icon="@Icons.Material.Filled.NearMe" Style="color:#1ABC9C;" />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                       StartIcon="@Icons.Material.Filled.MyLocation" OnClick="MeinStandort" Disabled="_standortLaeuft">
+                @(_standortLaeuft ? "…" : "Mein Standort")
+            </MudButton>
+            <MudTextField @bind-Value="_plz" Label="oder PLZ" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Style="max-width:120px;" Immediate="true" />
+            <MudButton Size="Size.Small" OnClick="PlzAnwenden" Disabled="@(string.IsNullOrWhiteSpace(_plz))">Anwenden</MudButton>
+            <MudSelect T="int?" @bind-Value="_radiusKm" @bind-Value:after="Filtern" Label="Umkreis"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Style="max-width:130px;">
+                <MudSelectItem T="int?" Value="10">≤ 10 km</MudSelectItem>
+                <MudSelectItem T="int?" Value="25">≤ 25 km</MudSelectItem>
+                <MudSelectItem T="int?" Value="50">≤ 50 km</MudSelectItem>
+                <MudSelectItem T="int?" Value="100">≤ 100 km</MudSelectItem>
+            </MudSelect>
+            @if (_refLat is not null)
+            {
+                <MudChip T="string" Size="Size.Small" Style="color:#1ABC9C;" OnClose="StandortZuruecksetzen">Bezugspunkt gesetzt</MudChip>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Style="color:#6f5a86;">für „in der Nähe": Standort freigeben oder PLZ eingeben</MudText>
+            }
+        </MudStack>
         <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Bands</MudText>
     </MudPaper>
 
@@ -61,6 +93,13 @@ else
             <TemplateColumn Title="Stärkeklasse" SortBy="@(z => z.Klasse.HasValue ? (int)z.Klasse : 99)">
                 <CellTemplate>@(context.Item.Klasse.HasValue ? KlasseLabel(context.Item.Klasse.Value) : "—")</CellTemplate>
             </TemplateColumn>
+            <PropertyColumn Property="z => z.Ort" Title="Ort" />
+            @if (_refLat is not null)
+            {
+                <TemplateColumn Title="Entfernung" SortBy="@(z => z.Distanz ?? double.MaxValue)">
+                    <CellTemplate>@(context.Item.Distanz is double d ? $"{d:0.#} km" : "–")</CellTemplate>
+                </TemplateColumn>
+            }
             <PropertyColumn Property="z => z.Land" Title="Land" />
             <PropertyColumn Property="z => z.Mitglieder" Title="Mitglieder" />
             <PropertyColumn Property="z => z.Videos" Title="Videos" />
@@ -74,6 +113,10 @@ else
     private string _suche = "";
     private BandKategorie? _kategorie;
     private Staerkeklasse? _klasse;
+    private double? _refLat, _refLng;   // Bezugspunkt (Standort/PLZ)
+    private int? _radiusKm;
+    private string _plz = "";
+    private bool _standortLaeuft;
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,20 +124,94 @@ else
         _alle = await db.Bands
             .OrderBy(b => b.Name)
             .Select(b => new Zeile(b.Id, b.Name, b.Kategorie, b.Staerkeklasse, b.Land,
-                b.Mitgliedschaften.Count, b.Videos.Count(v => v.Status == VideoStatus.Genehmigt)))
+                b.Mitgliedschaften.Count, b.Videos.Count(v => v.Status == VideoStatus.Genehmigt),
+                b.HeimatLokal != null ? b.HeimatLokal.Name : null,
+                b.HeimatLokal != null ? b.HeimatLokal.Lat : null,
+                b.HeimatLokal != null ? b.HeimatLokal.Lng : null))
             .ToListAsync();
         Filtern();
+    }
+
+    // Beim ersten Render den (aktuelleren) Geo-Standort holen, falls schon freigegeben.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _refLat is not null) return;
+        try
+        {
+            var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
+                      ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
+            if (pos is { Length: 2 }) { await RefSetzen(pos[0], pos[1], speichern: false); StateHasChanged(); }
+        }
+        catch { /* Geo nicht verfügbar */ }
     }
 
     private void Filtern()
     {
         var s = _suche.Trim();
-        _gefiltert = _alle!
+        IEnumerable<Zeile> q = _alle!
             .Where(z =>
                 (s == "" || z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)) &&
                 (_kategorie == null || z.Kategorie == _kategorie) &&
-                (_klasse == null || z.Klasse == _klasse))
-            .ToList();
+                (_klasse == null || z.Klasse == _klasse));
+
+        if (_refLat is double rlat && _refLng is double rlng)
+        {
+            var list = q.ToList();
+            foreach (var z in list)
+                z.Distanz = (z.Lat is double la && z.Lng is double lo) ? Distanz(rlat, rlng, la, lo) : null;
+            // Nur Bands mit BEKANNTER Distanz ausserhalb des Umkreises ausblenden; Bands ohne
+            // hinterlegten Ort bleiben sichtbar (ohne km), nach Distanz aufsteigend (ohne Ort zuletzt).
+            if (_radiusKm is int r)
+                list = list.Where(z => z.Distanz is not double d || d <= r).ToList();
+            _gefiltert = list.OrderBy(z => z.Distanz ?? double.MaxValue).ThenBy(z => z.Name).ToList();
+        }
+        else
+        {
+            _gefiltert = q.OrderBy(z => z.Name).ToList();
+        }
+    }
+
+    private async Task MeinStandort()
+    {
+        _standortLaeuft = true;
+        var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.standort");
+        _standortLaeuft = false;
+        if (pos is { Length: 2 }) { await RefSetzen(pos[0], pos[1]); Snackbar.Add("Standort übernommen.", Severity.Success); }
+        else Snackbar.Add("Kein Standort verfügbar (abgelehnt?). Nutze die PLZ-Eingabe.", Severity.Info);
+    }
+
+    private async Task PlzAnwenden()
+    {
+        var res = await Geo.GeocodePlzAsync(_plz);
+        if (res is (double la, double lo)) { await RefSetzen(la, lo); Snackbar.Add($"PLZ {_plz.Trim()} übernommen.", Severity.Success); }
+        else Snackbar.Add("PLZ nicht gefunden.", Severity.Warning);
+    }
+
+    private async Task RefSetzen(double lat, double lng, bool speichern = true)
+    {
+        _refLat = lat; _refLng = lng;
+        _radiusKm ??= 50;
+        if (speichern) await JS.InvokeVoidAsync("harmoniqGeo.save", lat, lng);
+        Filtern();
+    }
+
+    private async Task StandortZuruecksetzen()
+    {
+        _refLat = _refLng = null;
+        _radiusKm = null;
+        await JS.InvokeVoidAsync("harmoniqGeo.clear");
+        Filtern();
+    }
+
+    private static double Distanz(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371.0;
+        double Rad(double g) => g * Math.PI / 180.0;
+        var dLat = Rad(lat2 - lat1);
+        var dLng = Rad(lng2 - lng1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+              + Math.Cos(Rad(lat1)) * Math.Cos(Rad(lat2)) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
     private static string KategorieLabel(BandKategorie k) => k switch
@@ -124,5 +241,8 @@ else
     };
 
     private record Zeile(Guid Id, string Name, BandKategorie? Kategorie, Staerkeklasse? Klasse,
-        string? Land, int Mitglieder, int Videos);
+        string? Land, int Mitglieder, int Videos, string? Ort, double? Lat, double? Lng)
+    {
+        public double? Distanz { get; set; }   // je Bezugspunkt berechnet
+    }
 }
