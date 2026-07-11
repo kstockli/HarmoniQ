@@ -11,6 +11,8 @@
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject IJSRuntime JS
+@inject PersistentComponentState PersistentState
+@implements IDisposable
 
 <PageTitle>HarmoniQ – Startseite</PageTitle>
 
@@ -421,6 +423,15 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // (0) Interaktiver Lauf: die im Prerender geladenen Daten übernehmen → KEINE erneuten
+        // DB-Abfragen. Verhindert den Doppellauf-Flacker („Für dich" verschwindet und kommt erst
+        // nach ~3 s wieder) und spart die zweite Abfragerunde gegen die (latente) Prod-DB.
+        if (PersistentState.TryTakeFromJson<HomeSnapshot>(SnapshotKey, out var snap) && snap is not null)
+        {
+            Anwenden(snap);
+            return;
+        }
+
         // (1) Globale, für alle User identische Daten (6 Zähler + Featured-Komponist:innen/Bands):
         // gecacht (5 min), damit ~8 DB-Round-Trips aus dem Hot-Path verschwinden. Sie ändern sich
         // selten; die teuerste Query (Featured-Komponist:innen) läuft so nur alle paar Minuten.
@@ -451,7 +462,42 @@
         _teaser = teaserTask.Result;
         _feed = feedTask.Result;
         _geladen = true;
+
+        // Geladene Daten für den interaktiven Lauf sichern (Prerender→Interaktiv).
+        _persistSub = PersistentState.RegisterOnPersisting(() =>
+        {
+            PersistentState.PersistAsJson(SnapshotKey, Aufnehmen());
+            return Task.CompletedTask;
+        });
     }
+
+    private const string SnapshotKey = "home:snapshot";
+    private PersistingComponentStateSubscription _persistSub;
+
+    public void Dispose() => _persistSub.Dispose();
+
+    private HomeSnapshot Aufnehmen() => new(
+        _komponistenCount, _personenCount, _bandsCount, _stueckeCount, _videosCount, _bewertungenCount,
+        _komponisten, _bands, _neueVideos, _kalender,
+        _onboardingNoetig, _offeneAnfragen, _folgeAufruf, _adminBands,
+        _teaser, _feed, _hatFreundeNews, _freundeNews);
+
+    private void Anwenden(HomeSnapshot s)
+    {
+        _komponistenCount = s.KomponistenCount; _personenCount = s.PersonenCount; _bandsCount = s.BandsCount;
+        _stueckeCount = s.StueckeCount; _videosCount = s.VideosCount; _bewertungenCount = s.BewertungenCount;
+        _komponisten = s.Komponisten; _bands = s.Bands; _neueVideos = s.NeueVideos; _kalender = s.Kalender;
+        _onboardingNoetig = s.OnboardingNoetig; _offeneAnfragen = s.OffeneAnfragen;
+        _folgeAufruf = s.FolgeAufruf; _adminBands = s.AdminBands;
+        _teaser = s.Teaser; _feed = s.Feed; _hatFreundeNews = s.HatFreundeNews; _freundeNews = s.FreundeNews;
+        _geladen = true;
+    }
+
+    private record HomeSnapshot(
+        int KomponistenCount, int PersonenCount, int BandsCount, int StueckeCount, int VideosCount, int BewertungenCount,
+        List<Zeile> Komponisten, List<BandZeile> Bands, List<VideoZeile> NeueVideos, List<KalenderZeile> Kalender,
+        bool OnboardingNoetig, int OffeneAnfragen, bool FolgeAufruf, List<BandRef> AdminBands,
+        TagebuchTeaser? Teaser, DigestService.Digest? Feed, bool HatFreundeNews, List<FreundZeile> FreundeNews);
 
     // Globale, gecachte Daten – einmalig pro Cache-Intervall für alle User berechnet.
     private async Task<GlobaleDaten> GlobaleDatenLadenAsync()

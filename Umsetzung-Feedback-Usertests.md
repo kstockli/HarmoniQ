@@ -23,6 +23,12 @@ ersten Byte. „Nächste Woche vorrechnen" würde das *nicht* lösen (die Query 
 - **Globale Abfragen gecacht:** kommende Konzerte + neue Videos wandern in denselben 5-min-Cache
   wie die Kennzahlen → pro Aufruf laufen nur noch die **nutzerspezifischen** Abfragen (Feed/Status/
   Teaser), parallel. Weniger DB-Last, schnellere TTFB unter Last.
+- **Flacker/„3 s"-Fix via `PersistentComponentState`:** Das Symptom „‚Für dich' erscheint, verschwindet,
+  kommt nach ~3 s zurück" war der **Prerender→Interaktiv-Doppellauf** (`OnInitializedAsync` lief zweimal
+  → Felder geleert + alle Abfragen erneut gegen die latente Prod-DB). Jetzt sichert der Prerender die
+  geladenen Daten; der interaktive Lauf **übernimmt sie ohne erneute Abfragen** → kein Flackern, keine
+  zweite Abfragerunde. Verifiziert (State-Blob im HTML, keine Fehler, Feed sofort da). Wirkt erst **nach
+  dem nächsten Deploy** (Push nötig).
 
 **Offen (Infra, Railway – Kunos Entscheid):** der eigentliche Fix gegen den Kaltstart ist
 **App warm halten** (Railway: Leerlauf-Spin-down vermeiden bzw. externer Uptime-Ping alle paar
