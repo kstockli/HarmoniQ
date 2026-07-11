@@ -51,7 +51,7 @@
             .OrderByDescending(k => k.Datum)
             .Select(k => new
             {
-                k.Id, k.Name, k.Datum, k.Ort,
+                k.Id, k.Name, k.Datum, k.Uhrzeit, k.Ort,
                 Bands = k.Bands.Select(b => b.Band.Name).ToList(),
                 Stuecke = k.Programm.Select(ks => ks.Stueck.Titel).Distinct().ToList()
             })
@@ -61,7 +61,7 @@
         {
             var bands = string.Join(", ", k.Bands.OrderBy(n => n));
             var stuecke = string.Join(", ", k.Stuecke.OrderBy(n => n));
-            var label = $"{k.Datum:dd.MM.yyyy} – {(k.Name ?? "(ohne Name)")}{(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")}";
+            var label = $"{KonzertZeitFormat.Kompakt(k.Datum, k.Uhrzeit)} – {(k.Name ?? "(ohne Name)")}{(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")}";
             // Durchsuchbarer Heuristik-Text über alle Dimensionen (klein geschrieben).
             var such = string.Join(" ", new[]
             {

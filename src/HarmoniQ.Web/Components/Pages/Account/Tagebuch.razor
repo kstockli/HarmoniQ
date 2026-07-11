@@ -81,7 +81,7 @@ else
                             <div style="flex:1;min-width:0;">
                                 <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@b.Titel</MudText>
                                 <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                                    @b.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(b.Ort) ? "" : $" · {b.Ort}")
+                                    @KonzertZeitFormat.Kompakt(b.Datum, b.Uhrzeit)@(string.IsNullOrWhiteSpace(b.Ort) ? "" : $" · {b.Ort}")
                                 </MudText>
                                 @if (b.BewertetAnzahl > 0)
                                 {
@@ -132,7 +132,7 @@ else
 
         var besuche = await db.KonzertBesuche
             .Where(b => b.BenutzerId == userId)
-            .Select(b => new { b.KonzertId, b.Konzert.Datum, b.Konzert.Name, b.Konzert.Ort, b.Notiz })
+            .Select(b => new { b.KonzertId, b.Konzert.Datum, b.Konzert.Uhrzeit, b.Konzert.Name, b.Konzert.Ort, b.Notiz })
             .ToListAsync();
 
         // Alle Stück-Eindrücke des Users (für Aggregation je Konzert + Höhepunkte).
@@ -155,7 +155,7 @@ else
             .Select(b =>
             {
                 proKonzert.TryGetValue(b.KonzertId, out var agg);
-                return new BesuchZeile(b.KonzertId, b.Datum, b.Name, b.Ort, b.Notiz,
+                return new BesuchZeile(b.KonzertId, b.Datum, b.Uhrzeit, b.Name, b.Ort, b.Notiz,
                     agg.Anzahl, agg.Anzahl > 0 ? agg.Schnitt : null);
             })
             .ToList();
@@ -174,7 +174,7 @@ else
         _geladen = true;
     }
 
-    private record BesuchZeile(Guid KonzertId, DateOnly Datum, string? Name, string? Ort, string? Notiz,
+    private record BesuchZeile(Guid KonzertId, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, string? Notiz,
         int BewertetAnzahl, double? Schnitt)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");

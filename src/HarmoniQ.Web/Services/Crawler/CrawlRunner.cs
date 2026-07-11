@@ -595,6 +595,7 @@ public class CrawlRunner(
 
             var daten = new KonzertFundDaten(
                 Datum: ev.Datum,
+                Uhrzeit: ev.Uhrzeit,
                 Name: ev.Name,
                 Ort: ev.Saal != null ? $"KKL Luzern, {ev.Saal}" : "KKL Luzern",
                 Beschreibung: ev.Beschreibung,

@@ -510,6 +510,7 @@ CONSTRAINT: AnfragerPersonId <> EmpfaengerPersonId
 Konzert                             (NEU – ein Auftritt/Event, an dem eine oder mehrere Bands mitwirken)
 ├── Id (Guid)
 ├── Datum (DateOnly)               ← PFLICHT
+├── Uhrzeit (TimeOnly?)            ← NEU: optionale Startzeit (v. a. künftige Konzerte); null = unbekannt
 ├── Name (string?)                 ← optional, z. B. "Jahreskonzert 2025", "Eidg. Musikfest"
 ├── LokalId (FK? → Lokal)          ← NEU: Veranstaltungsort als Referenz (find-or-create)
 ├── Ort (string?)                  ← Alt/Fallback-Freitext; neue Konzerte nutzen Lokal. Anzeige = Lokal.Name ?? Ort
@@ -523,7 +524,9 @@ Konzert                             (NEU – ein Auftritt/Event, an dem eine ode
 > **Namensentscheid:** Entität heißt **`Konzert`** (klar und gebräuchlich). „Auftritt"/„Event"
 > wäre breiter (Umzug, Probe …); falls künftig nötig, lässt sich ein optionales `Typ`-Enum
 > (Konzert / Wertungsspiel / Sonstiges) ergänzen, ohne das Modell umzubauen. Vorerst bewusst
-> schlank: nur Datum (Pflicht) + optional Name/Ort.
+> schlank: nur Datum (Pflicht) + optional Uhrzeit/Name/Ort. Die **Uhrzeit** ist durchgängig optional
+(Erfassung, Crawler-Extraktion, Anzeige) – bestehende Konzerte ohne Zeit bleiben null; die Anzeige
+hängt „· HH:mm" nur an, wenn eine Zeit gesetzt ist (zentraler Helfer `KonzertZeitFormat`).
 
 Lokal                               (NEU – Veranstaltungsort; ersetzt den Freitext-`Ort` am Konzert)
 ├── Id (Guid)

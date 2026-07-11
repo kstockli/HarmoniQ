@@ -34,7 +34,7 @@ else
         <div>
             <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_konzert.Titel</MudText>
             <MudText Typo="Typo.body2" Style="color:#A78FC0;">
-                @_konzert.Datum.ToString("dddd, dd.MM.yyyy")@(string.IsNullOrWhiteSpace(_konzert.Ort) ? "" : $" · {_konzert.Ort}")
+                @_konzert.Datum.ToString("dddd, dd.MM.yyyy")@KonzertZeitFormat.ZeitZusatz(_konzert.Uhrzeit)@(string.IsNullOrWhiteSpace(_konzert.Ort) ? "" : $" · {_konzert.Ort}")
             </MudText>
         </div>
     </MudStack>
@@ -306,7 +306,7 @@ else
 
         var k = await db.Konzerte.Include(x => x.Lokal).FirstOrDefaultAsync(x => x.Id == Id);
         if (k == null) { Nav.NavigateTo("/konzerte"); return; }
-        _konzert = new KonzertKopf(k.Id, k.Datum, k.Name, k.Lokal?.Name ?? k.Ort, k.Beschreibung, k.BildUrl);
+        _konzert = new KonzertKopf(k.Id, k.Datum, k.Uhrzeit, k.Name, k.Lokal?.Name ?? k.Ort, k.Beschreibung, k.BildUrl);
 
         // Koordinaten für die Karte (nur wenn beide gesetzt).
         _lokalLat = _lokalLng = null;
@@ -453,7 +453,10 @@ else
             ["@context"] = "https://schema.org",
             ["@type"] = "MusicEvent",
             ["name"] = _konzert.Titel,
-            ["startDate"] = _konzert.Datum.ToString("yyyy-MM-dd"),
+            // startDate als ISO-Datetime, wenn eine Uhrzeit bekannt ist (schema.org unterstützt das).
+            ["startDate"] = _konzert.Uhrzeit is TimeOnly u
+                ? _konzert.Datum.ToString("yyyy-MM-dd") + "T" + u.ToString("HH\\:mm")
+                : _konzert.Datum.ToString("yyyy-MM-dd"),
             ["url"] = Nav.Uri
         };
         if (!string.IsNullOrWhiteSpace(_konzert.BildUrl)) obj["image"] = _konzert.BildUrl;
@@ -586,7 +589,7 @@ else
         }
     </span>;
 
-    private record KonzertKopf(Guid Id, DateOnly Datum, string? Name, string? Ort, string? Beschreibung, string? BildUrl)
+    private record KonzertKopf(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, string? Beschreibung, string? BildUrl)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }

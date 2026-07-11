@@ -90,7 +90,7 @@ Vereins-Webseiten (Konzertprogramme, Leitung) automatisch vorgeschlagen werden. 
 nichts wird automatisch publiziert.
 
 **Im Scope (Start):**
-- **Konzerte** (Datum, Name, Ort) inkl. **Programm** (Stück + Komponist:in) und **Band**.
+- **Konzerte** (Datum, optionale **Uhrzeit**, Name, Ort) inkl. **Programm** (Stück + Komponist:in) und **Band**.
 - **Dirigent:innen / Leitung** einer Band.
 - **Band-Stammdaten**, soweit auffindbar: **Kategorie** (Harmonie/Brassband/Fanfare/Unterhaltung) und
   **Stärkeklasse** (Höchstklasse/Elite/1.–4. Klasse/Ober-/Mittel-/Unterstufe). Auf Wettbewerbs-Ranglisten
@@ -176,7 +176,10 @@ Vereinsschreibweisen werden als `BandAlias` geführt (Find-or-create matcht übe
 
 **Event-Regel „(Lokal, Datum) → ein Konzert" (entscheidend):** Spielplan-Zeilen werden nach **Ort/Lokal + Datum**
 gruppiert; daraus entsteht **je Gruppe ein `Konzert`**; je teilnehmenden Verein ein `KonzertBand`; je gespieltem
-Stück ein `KonzertStueck` (Stück + Komponist:in). Das bildet das HarmoniQ-Konzertmodell 1:1 ab.
+Stück ein `KonzertStueck` (Stück + Komponist:in). Das bildet das HarmoniQ-Konzertmodell 1:1 ab. Eine
+**Uhrzeit** wird – falls im Quelltext genannt – zusätzlich als optionale Startzeit übernommen; sie ist
+**nicht** Teil des Dedup-Schlüssels (Identität bleibt Lokal + Datum). Bei WMC (ganztägige Session je
+Ort/Datum) gilt die früheste Auftrittszeit als Konzertbeginn; KKL liefert die Startzeit aus dem Event-Zeitstempel.
 
 **Join mehrerer Quellen:** Rangliste-PDF (Verein, Rang, Kategorie – **ohne** Stücke) und Spielplan
 (Stücke je Verein) werden über den **Vereinsnamen** zusammengeführt. Der Admin kann zwei Quellen einem
@@ -268,7 +271,7 @@ Ticketing-Anbieter **vivenu**; pro Event eine öffentliche JSON-API `vivenu.com/
 2. **Discovery:** Liste rendern und die clientseitig nachgeladenen **vivenu-API-Antworten mitschneiden**
    (`ISeitenRenderer.RenderUndSammleAsync`, Filter `vivenu.com/api/events/info`). Direkt-Navigation zur
    `?genre=`-URL löst die gefilterten vivenu-Calls aus (verifiziert: `?genre=Blasmusik` → 10 Blasmusik-Events).
-3. **Mapping** (`KklImporter.Parse`, verifiziert): je Event → Titel (`name`), **Datum** (`start`, in CH-Zeit),
+3. **Mapping** (`KklImporter.Parse`, verifiziert): je Event → Titel (`name`), **Datum + Uhrzeit** (`start`, in CH-Zeit),
    **Saal** (`meta.venue`: konzertsaal → **„Weisser Saal"**, luzernersaal → „Luzerner Saal"), **Bild** (`image`),
    **Beschreibung** (`description` Rich-Text → Klartext), Slug (`url`) für die klickbare Quell-URL.
 4. **Detailseite rendern → Programm + Besetzung:** je Event die Detailseite rendern, die Tabs **„Programm"** und
@@ -324,7 +327,7 @@ direktem Genre-Parameter.
    über die bereits als offen geführte **Ort→Kanton-Anreicherung** (§4.1, Phase C4) — kein neuer Mechanismus,
    sondern Wiederverwendung. Bis diese existiert: Übergangslösung über PLZ-Bereiche/Ortsnamen-Liste
    Deutschschweizer Kantone (fehleranfällig bei zweisprachigen Kantonen FR/VS/BE-Jura).
-4. **Konzert-Fund:** Datum, Titel, Ort, Veranstalter-Name (sofern von der API geliefert), Quell-URL,
+4. **Konzert-Fund:** Datum (+ optionale **Uhrzeit** aus der Event-Startzeit), Titel, Ort, Veranstalter-Name (sofern von der API geliefert), Quell-URL,
    **Konfidenz** (Hoch bei eindeutigem Keyword-Treffer, Mittel/Tief bei LLM-Filter-Treffer) — nutzt das
    bestehende `CrawlFund.Konfidenz`-Feld, kein neues Feld nötig. **Programm/Stücke** liefert Eventfrog nicht
    (reine Ticketing-Plattform ohne Werkangaben) — im Unterschied zu KKL bleibt das Programm hier grundsätzlich

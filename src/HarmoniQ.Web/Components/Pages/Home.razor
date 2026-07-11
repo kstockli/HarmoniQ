@@ -205,7 +205,7 @@
             @foreach (var k in _kalender)
             {
                 <MudItem xs="12" sm="6" md="4">
-                    <KonzertKarte Id="k.Id" Datum="k.Datum" Titel="@k.Titel" BandNamen="k.BandNamen"
+                    <KonzertKarte Id="k.Id" Datum="k.Datum" Uhrzeit="k.Uhrzeit" Titel="@k.Titel" BandNamen="k.BandNamen"
                                   Ort="@k.Ort" Distanz="k.Distanz" VideoAnzahl="k.VideoAnzahl"
                                   RelativLabel="@k.RelativLabel" />
                 </MudItem>
@@ -516,7 +516,7 @@
             .OrderBy(k => k.Datum)
             .Select(k => new
             {
-                k.Id, k.Datum, k.Name,
+                k.Id, k.Datum, k.Uhrzeit, k.Name,
                 Ort = k.Lokal != null ? k.Lokal.Name : k.Ort,
                 Lat = k.Lokal != null ? k.Lokal.Lat : null,
                 Lng = k.Lokal != null ? k.Lokal.Lng : null,
@@ -528,7 +528,7 @@
         return konzerte
             .Select(k => new KalenderZeile(k.Id, k.Datum, k.Name, k.Ort,
                 RelativLabel(k.Datum, heute), k.Datum == heute, k.Datum < heute)
-            { Lat = k.Lat, Lng = k.Lng, BandNamen = k.BandNamen, VideoAnzahl = k.VideoAnzahl })
+            { Uhrzeit = k.Uhrzeit, Lat = k.Lat, Lng = k.Lng, BandNamen = k.BandNamen, VideoAnzahl = k.VideoAnzahl })
             .ToList();
     }
 
@@ -736,6 +736,7 @@
         string RelativLabel, bool IstHeute, bool IstVergangen)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+        public TimeOnly? Uhrzeit { get; init; }
         public double? Lat { get; init; }
         public double? Lng { get; init; }
         public double? Distanz { get; set; }   // dekorativ, nur wenn Bezugspunkt bekannt

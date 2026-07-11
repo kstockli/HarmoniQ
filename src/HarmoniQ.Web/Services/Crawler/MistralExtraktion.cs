@@ -29,6 +29,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
     {
         var o = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         o.Converters.Add(new ToleranterDatumConverter());
+        o.Converters.Add(new ToleranterZeitConverter());
         o.Converters.Add(new ToleranterIntConverter());
         return o;
     }
@@ -40,7 +41,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "Trenne sauber Stück-Titel und Komponist:in (auch bei „arr.\"-Bearbeitungen: Titel = Werk, " +
         "komponistName = die genannte Person). Antworte AUSSCHLIESSLICH mit gültigem JSON in genau " +
         "diesem Schema (leere Arrays wenn nichts gefunden):\n" +
-        "{\"konzerte\":[{\"datum\":\"YYYY-MM-DD|null\",\"name\":\"|null\",\"ort\":\"|null\"," +
+        "{\"konzerte\":[{\"datum\":\"YYYY-MM-DD|null\",\"uhrzeit\":\"HH:MM|null\",\"name\":\"|null\",\"ort\":\"|null\"," +
         "\"programm\":[{\"stueckTitel\":\"\",\"komponistName\":\"|null\",\"arrangeurName\":\"|null\"," +
         "\"bandName\":\"|null\",\"reihenfolge\":null}]}]," +
         "\"leitungen\":[{\"personName\":\"\",\"bandName\":\"|null\",\"funktion\":\"Dirigent\"," +
@@ -71,6 +72,8 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "(1, 2, 3, …). Behalte die zeitliche/Programm-Reihenfolge bei.\n" +
         "- datum: vollständiges Datum YYYY-MM-DD. Ist nur das Jahr (oder Jahr+Monat) bekannt, NICHT mit " +
         "Nullen auffüllen – fehlende Teile weglassen (also \"2024\" oder \"2024-06\", nicht \"2024-00-00\").\n" +
+        "- uhrzeit: Startzeit des Konzerts als \"HH:MM\" (24h, z. B. \"19:30\", \"20:00\"), NUR wenn im Text " +
+        "ausdrücklich genannt. Nicht raten – ist keine Zeit angegeben, null.\n" +
         "- Enthält die Admin-Anweisung eine EINSCHRÄNKUNG – z. B. nur ab einem Jahr, nur ein Ort/Lokal, " +
         "nur ein Land, nur eine Stärkeklasse (z. B. Höchstklasse/Elite/1. Klasse), nur eine Kategorie/" +
         "Besetzung (Harmonie/Brassband/Fanfare …), nur mit Stück-Angaben – dann gib AUSSCHLIESSLICH " +
@@ -562,7 +565,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                 .ToList();
             // Nur sinnvolle Konzert-Funde (Datum oder Programm vorhanden).
             if (k.Datum is null && programm.Count == 0) continue;
-            var daten = new KonzertFundDaten(k.Datum, Leer(k.Name), Leer(k.Ort), null, programm);
+            var daten = new KonzertFundDaten(k.Datum, k.Uhrzeit, Leer(k.Name), Leer(k.Ort), null, programm);
             yield return new ExtrahierterFund(CrawlFundTyp.Konzert, CrawlDaten.Serialisiere(daten));
         }
 
@@ -666,7 +669,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         string? Kategorie, string? Staerkeklasse, string? Geschichte,
         string? Instagram, string? Facebook, string? YouTube, string? X, string? Wikipedia,
         string? EMail, string? Mobile);
-    private record KonzertDto(DateOnly? Datum, string? Name, string? Ort, List<ProgrammDto>? Programm);
+    private record KonzertDto(DateOnly? Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, List<ProgrammDto>? Programm);
     private record ProgrammDto(string? StueckTitel, string? KomponistName, string? BandName, int? Reihenfolge, string? ArrangeurName);
     private record LeitungDto(string? PersonName, string? BandName, string? Funktion, int? VonJahr, int? BisJahr);
     private record StueckDto(string? Titel, string? KomponistName, int? Jahr);
@@ -698,6 +701,31 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         public override void Write(Utf8JsonWriter w, DateOnly? v, JsonSerializerOptions o)
         {
             if (v is null) w.WriteNullValue(); else w.WriteStringValue(v.Value.ToString("yyyy-MM-dd"));
+        }
+    }
+
+    /// <summary>Liest Uhrzeiten tolerant: „19:30", „19.30", „20 Uhr", „0800", „8" → TimeOnly.
+    /// Unlesbares oder außerhalb 00:00–23:59 → null. Verhindert FormatException-Crashes.</summary>
+    private sealed class ToleranterZeitConverter : JsonConverter<TimeOnly?>
+    {
+        public override TimeOnly? Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
+        {
+            if (reader.TokenType == JsonTokenType.Null) return null;
+            if (reader.TokenType != JsonTokenType.String) { reader.Skip(); return null; }
+            var s = reader.GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(s)) return null;
+
+            // Erlaubt Trenner „:" / „." / keiner (0800). Minuten optional.
+            var m = Regex.Match(s, @"(\d{1,2})\s*[:.hu]?\s*(\d{2})?");
+            if (!m.Success || !int.TryParse(m.Groups[1].Value, out var std)) return null;
+            var min = m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : 0;
+            if (std is < 0 or > 23 || min is < 0 or > 59) return null;
+            return new TimeOnly(std, min);
+        }
+
+        public override void Write(Utf8JsonWriter w, TimeOnly? v, JsonSerializerOptions o)
+        {
+            if (v is null) w.WriteNullValue(); else w.WriteStringValue(v.Value.ToString("HH\\:mm"));
         }
     }
 

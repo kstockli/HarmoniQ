@@ -31,6 +31,7 @@
 @code {
     [Parameter, EditorRequired] public Guid Id { get; set; }
     [Parameter, EditorRequired] public DateOnly Datum { get; set; }
+    [Parameter] public TimeOnly? Uhrzeit { get; set; }
     [Parameter, EditorRequired] public string Titel { get; set; } = "";
     [Parameter] public List<string> BandNamen { get; set; } = [];
     [Parameter] public string? Ort { get; set; }
@@ -39,9 +40,10 @@
     /// <summary>Optional („morgen", „in 9 Tagen") – für die Startseiten-„Demnächst"-Ansicht.</summary>
     [Parameter] public string? RelativLabel { get; set; }
 
-    // Kopf-Zeile: [Relativ ·] Datum
+    // Kopf-Zeile: [Relativ ·] Datum [· Uhrzeit]
     private string Kopf =>
-        (string.IsNullOrWhiteSpace(RelativLabel) ? "" : RelativLabel + " · ") + Datum.ToString("dd.MM.yyyy");
+        (string.IsNullOrWhiteSpace(RelativLabel) ? "" : RelativLabel + " · ")
+        + Datum.ToString("dd.MM.yyyy") + KonzertZeitFormat.ZeitZusatz(Uhrzeit, mitUhr: false);
 
     private string OrtMitKm
     {

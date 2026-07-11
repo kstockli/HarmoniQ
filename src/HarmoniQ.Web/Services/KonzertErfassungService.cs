@@ -19,6 +19,7 @@ public static class KonzertErfassungService
 
     public record Eingabe(
         DateOnly Datum,
+        TimeOnly? Uhrzeit,
         string? Name,
         string? Ort,
         string? Beschreibung,
@@ -128,6 +129,7 @@ public static class KonzertErfassungService
     private static void KopfSetzen(Konzert k, Eingabe e)
     {
         k.Datum = e.Datum;
+        k.Uhrzeit = e.Uhrzeit;
         k.Name = Leer(e.Name);
         k.Ort = Leer(e.Ort);
         k.Beschreibung = Leer(e.Beschreibung);

@@ -21,7 +21,7 @@ public class WmcImportService(
     ILogger<WmcImportService> logger)
 {
     /// <summary>Ein geplantes Konzert = eine Session (Tag + Ort) mit allen dort auftretenden Bands.</summary>
-    public record KonzertPlan(DateOnly Datum, string Ort, string Name, string Beschreibung,
+    public record KonzertPlan(DateOnly Datum, TimeOnly? Uhrzeit, string Ort, string Name, string Beschreibung,
         IReadOnlyList<WmcImporter.Auftritt> Auftritte);
 
     public record VorschauZeile(DateOnly Datum, string Ort, string Name, int AnzahlBands, int AnzahlStuecke,
@@ -69,9 +69,21 @@ public class WmcImportService(
             .Select(g =>
             {
                 var list = g.OrderBy(a => a.Zeit ?? "~").ToList();
-                return new KonzertPlan(g.Key.Datum, g.Key.Ort, KonzertName(list), KonzertBeschreibung(g.Key.Datum, g.Key.Ort, list), list);
+                return new KonzertPlan(g.Key.Datum, ZeitMin(list), g.Key.Ort, KonzertName(list),
+                    KonzertBeschreibung(g.Key.Datum, g.Key.Ort, list), list);
             })
             .ToList();
+    }
+
+    /// <summary>Konzert-„Session" = ganzer Tag am Ort; als Startzeit die früheste Auftrittszeit (falls parsbar).</summary>
+    private static TimeOnly? ZeitMin(IReadOnlyList<WmcImporter.Auftritt> list)
+    {
+        TimeOnly? min = null;
+        foreach (var a in list)
+            if (TimeOnly.TryParse((a.Zeit ?? "").Replace('.', ':'), System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var t) && (min is null || t < min))
+                min = t;
+        return min;
     }
 
     private static string KonzertName(IReadOnlyList<WmcImporter.Auftritt> list)
@@ -167,7 +179,7 @@ public class WmcImportService(
                 .Select(a => new MitwirkendeEingabe(a.Dirigent!, PersonRolleTyp.Dirigent, a.BandName))
                 .ToList();
 
-            var eingabe = new Eingabe(plan.Datum, plan.Name, plan.Ort, plan.Beschreibung, null, programm, mitwirkende);
+            var eingabe = new Eingabe(plan.Datum, plan.Uhrzeit, plan.Name, plan.Ort, plan.Beschreibung, null, programm, mitwirkende);
             await ErfasseOderAktualisiereAsync(db, eingabe);
 
             return new Ergebnis(1, bandsNeu, programm.Count, fehler);

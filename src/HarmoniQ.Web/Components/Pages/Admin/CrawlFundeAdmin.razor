@@ -243,7 +243,7 @@ else
                     {
                         fe.FriendlyTitel = "Konzert" + (string.IsNullOrWhiteSpace(k.Name) ? "" : $": {k.Name}");
                         var t = new List<string>();
-                        t.Add(k.Datum is { } d ? d.ToString("dd.MM.yyyy") : "Datum fehlt");
+                        t.Add(k.Datum is { } d ? KonzertZeitFormat.Kompakt(d, k.Uhrzeit) : "Datum fehlt");
                         if (!string.IsNullOrWhiteSpace(k.Ort)) t.Add(k.Ort!);
                         t.Add($"{(k.Programm?.Count ?? 0)} Stück(e)");
                         fe.FriendlySub = string.Join(" · ", t);

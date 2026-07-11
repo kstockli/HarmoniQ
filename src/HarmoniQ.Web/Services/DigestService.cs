@@ -69,7 +69,7 @@ public static class DigestService
         var bisA = heute.AddDays(KommendeTage);
         var kommendeRoh = await db.KonzertBands
             .Where(kb => bandIds.Contains(kb.BandId) && kb.Konzert.Datum >= heute && kb.Konzert.Datum <= bisA)
-            .Select(kb => new { kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Name, kb.Konzert.Ort, Band = kb.Band.Name })
+            .Select(kb => new { kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Uhrzeit, kb.Konzert.Name, kb.Konzert.Ort, Band = kb.Band.Name })
             .ToListAsync();
         var kommende = kommendeRoh
             .GroupBy(x => x.KonzertId)
@@ -79,7 +79,7 @@ public static class DigestService
             {
                 var e = g.First();
                 var bands = string.Join(", ", g.Select(x => x.Band).Distinct());
-                var detail = e.Datum.ToString("dd.MM.yyyy")
+                var detail = e.Datum.ToString("dd.MM.yyyy") + KonzertZeitFormat.ZeitZusatz(e.Uhrzeit, mitUhr: false)
                     + (string.IsNullOrWhiteSpace(e.Ort) ? "" : $" · {e.Ort}") + $" · {bands}";
                 return new Posten(BenachrichtigungTyp.KommendesKonzert, g.Key,
                     e.Name ?? e.Datum.ToString("dd.MM.yyyy"), detail, $"/konzerte/{g.Key}");
@@ -92,7 +92,7 @@ public static class DigestService
             .Select(x => x.KonzertId).ToListAsync()).ToHashSet();
         var vergangenRoh = await db.KonzertBands
             .Where(kb => bandIds.Contains(kb.BandId) && kb.Konzert.Datum >= vonB && kb.Konzert.Datum < heute)
-            .Select(kb => new { kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Name, kb.Konzert.Ort, Band = kb.Band.Name })
+            .Select(kb => new { kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Uhrzeit, kb.Konzert.Name, kb.Konzert.Ort, Band = kb.Band.Name })
             .ToListAsync();
         var nachfragen = vergangenRoh
             .GroupBy(x => x.KonzertId)
@@ -102,7 +102,7 @@ public static class DigestService
             {
                 var e = g.First();
                 var bands = string.Join(", ", g.Select(x => x.Band).Distinct());
-                var detail = e.Datum.ToString("dd.MM.yyyy")
+                var detail = e.Datum.ToString("dd.MM.yyyy") + KonzertZeitFormat.ZeitZusatz(e.Uhrzeit, mitUhr: false)
                     + (string.IsNullOrWhiteSpace(e.Ort) ? "" : $" · {e.Ort}") + $" · {bands}";
                 return new Posten(BenachrichtigungTyp.TagebuchNachfrage, g.Key,
                     e.Name ?? e.Datum.ToString("dd.MM.yyyy"), detail, $"/konzerte/{g.Key}");
@@ -135,7 +135,7 @@ public static class DigestService
                     && k.Lokal != null && k.Lokal.Lat != null && k.Lokal.Lng != null)
                 .Select(k => new
                 {
-                    k.Id, k.Datum, k.Name,
+                    k.Id, k.Datum, k.Uhrzeit, k.Name,
                     Ort = k.Lokal!.Name, Lat = k.Lokal.Lat!.Value, Lng = k.Lokal.Lng!.Value,
                     Bands = k.Bands.Select(b => b.Band.Name).ToList()
                 })
@@ -150,7 +150,8 @@ public static class DigestService
                 .Select(x =>
                 {
                     var bands = string.Join(", ", x.k.Bands.Distinct());
-                    var detail = x.k.Datum.ToString("dd.MM.yyyy") + $" · {x.k.Ort} · ~{Math.Round(x.Km)} km"
+                    var detail = x.k.Datum.ToString("dd.MM.yyyy") + KonzertZeitFormat.ZeitZusatz(x.k.Uhrzeit, mitUhr: false)
+                        + $" · {x.k.Ort} · ~{Math.Round(x.Km)} km"
                         + (string.IsNullOrWhiteSpace(bands) ? "" : $" · {bands}");
                     return new Posten(BenachrichtigungTyp.NahesKonzert, x.k.Id,
                         x.k.Name ?? x.k.Datum.ToString("dd.MM.yyyy"), detail, $"/konzerte/{x.k.Id}");

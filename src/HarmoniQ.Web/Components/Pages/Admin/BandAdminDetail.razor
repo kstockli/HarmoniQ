@@ -281,7 +281,7 @@ else
                             <div style="flex:1;">
                                 @k.Titel
                                 <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
-                                    @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                                    @KonzertZeitFormat.Kompakt(k.Datum, k.Uhrzeit)@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
                                 </MudText>
                             </div>
                             @if (_darfBearbeiten)
@@ -478,7 +478,7 @@ else
 
         _konzerte = await db.KonzertBands.Where(kb => kb.BandId == BandId)
             .OrderByDescending(kb => kb.Konzert.Datum)
-            .Select(kb => new KonzertZeile(kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Name, kb.Konzert.Ort))
+            .Select(kb => new KonzertZeile(kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Uhrzeit, kb.Konzert.Name, kb.Konzert.Ort))
             .ToListAsync();
 
         _videos = await db.Videos.Where(v => v.BandId == BandId)
@@ -633,7 +633,7 @@ else
     };
 
     private record AliasZeile(Guid Id, string Name);
-    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort)
+    private record KonzertZeile(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }

@@ -91,6 +91,7 @@ public static class CrawlUebernahmeService
 
         var eingabe = new KonzertErfassungService.Eingabe(
             Datum: datum,
+            Uhrzeit: d.Uhrzeit,
             Name: d.Name,
             Ort: d.Ort,
             Beschreibung: d.Beschreibung,

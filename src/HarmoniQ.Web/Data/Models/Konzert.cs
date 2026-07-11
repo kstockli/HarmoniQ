@@ -12,6 +12,9 @@ public class Konzert : AuditierteEntitaet
     /// <summary>Datum des Konzerts (Pflicht).</summary>
     public DateOnly Datum { get; set; }
 
+    /// <summary>Optionale Startzeit des Konzerts (v. a. für künftige Konzerte). Null = keine Zeit bekannt.</summary>
+    public TimeOnly? Uhrzeit { get; set; }
+
     /// <summary>Optionaler Name, z. B. „Jahreskonzert 2025“.</summary>
     public string? Name { get; set; }
 

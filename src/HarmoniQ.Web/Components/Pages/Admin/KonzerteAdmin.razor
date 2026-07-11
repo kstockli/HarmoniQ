@@ -46,7 +46,7 @@
 <MudDataGrid T="Konzert" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
     <Columns>
         <TemplateColumn Title="Datum" SortBy="@(k => k.Datum)">
-            <CellTemplate>@context.Item.Datum.ToString("dd.MM.yyyy")</CellTemplate>
+            <CellTemplate>@KonzertZeitFormat.Kompakt(context.Item.Datum, context.Item.Uhrzeit)</CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="k => k.Name" Title="Name" />
         <PropertyColumn Property="k => k.Ort" Title="Ort" />

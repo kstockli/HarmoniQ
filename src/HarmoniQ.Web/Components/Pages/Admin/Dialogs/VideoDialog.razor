@@ -129,7 +129,7 @@
     private static string KonzertText(Konzert? k)
     {
         if (k is null) return "";
-        var datum = k.Datum.ToString("dd.MM.yyyy");
+        var datum = KonzertZeitFormat.Kompakt(k.Datum, k.Uhrzeit);
         return k.Name is { Length: > 0 } ? $"{datum} – {k.Name}" : datum;
     }
 

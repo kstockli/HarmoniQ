@@ -41,6 +41,7 @@ public record ProgrammZeileDaten(
 /// </summary>
 public record KonzertFundDaten(
     DateOnly? Datum = null,
+    TimeOnly? Uhrzeit = null,
     string? Name = null,
     string? Ort = null,
     string? Beschreibung = null,

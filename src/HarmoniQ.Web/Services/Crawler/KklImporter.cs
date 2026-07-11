@@ -84,7 +84,7 @@ public static class KklImporter
     }
 
     /// <summary>Ein aus dem vivenu-JSON extrahiertes Event (Kernfelder für den Konzert-Fund).</summary>
-    public record Event(string Id, string Name, string? Beschreibung, string? Saal, string? Bild, DateOnly? Datum, string? Slug);
+    public record Event(string Id, string Name, string? Beschreibung, string? Saal, string? Bild, DateOnly? Datum, TimeOnly? Uhrzeit, string? Slug);
 
     /// <summary>Klickbare KKL-Detail-URL (über den Slug), sonst die Eventliste mit ID-Anker.</summary>
     public static string DetailUrl(Event ev) =>
@@ -159,12 +159,14 @@ public static class KklImporter
             var name = Str(r, "name");
             if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) return null;
 
+            var (kDatum, kZeit) = DatumZeitAusStart(Str(r, "start"));
             return new Event(
                 id!, name!.Trim(),
                 Beschreibung: FlattenBeschreibung(r),
                 Saal: SaalAusVenue(StrIn(r, "meta", "venue")),
                 Bild: Str(r, "image"),
-                Datum: DatumAusStart(Str(r, "start")),
+                Datum: kDatum,
+                Uhrzeit: kZeit,
                 Slug: Str(r, "url"));
         }
         catch { return null; }
@@ -229,16 +231,21 @@ public static class KklImporter
         return text.Length == 0 ? null : text;
     }
 
-    private static DateOnly? DatumAusStart(string? startIso)
+    private static (DateOnly? Datum, TimeOnly? Zeit) DatumZeitAusStart(string? startIso)
     {
-        if (string.IsNullOrWhiteSpace(startIso)) return null;
+        if (string.IsNullOrWhiteSpace(startIso)) return (null, null);
         if (!DateTimeOffset.TryParse(startIso, null,
             System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
-            out var dto)) return null;
-        // In Schweizer Zeit umrechnen (Datum kann sonst bei späten Events kippen).
+            out var dto)) return (null, null);
+        // In Schweizer Zeit umrechnen (Datum/Zeit kann sonst bei späten Events kippen).
         foreach (var tzId in new[] { "Europe/Zurich", "W. Europe Standard Time" })
-            try { return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(dto, TimeZoneInfo.FindSystemTimeZoneById(tzId)).DateTime); }
+            try
+            {
+                var lokal = TimeZoneInfo.ConvertTime(dto, TimeZoneInfo.FindSystemTimeZoneById(tzId)).DateTime;
+                return (DateOnly.FromDateTime(lokal), TimeOnly.FromDateTime(lokal));
+            }
             catch { }
-        return DateOnly.FromDateTime(dto.UtcDateTime);
+        var utc = dto.UtcDateTime;
+        return (DateOnly.FromDateTime(utc), TimeOnly.FromDateTime(utc));
     }
 }

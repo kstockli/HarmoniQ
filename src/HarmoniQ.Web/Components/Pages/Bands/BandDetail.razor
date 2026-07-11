@@ -167,7 +167,7 @@ else
                              Style="color:#F0E6FF;">
                     @k.Titel
                     <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                        @k.Datum.ToString("dd.MM.yyyy")@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                        @KonzertZeitFormat.Kompakt(k.Datum, k.Uhrzeit)@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
                     </MudText>
                 </MudListItem>
             }
@@ -322,7 +322,7 @@ else
         _konzerte = await db.KonzertBands
             .Where(kb => kb.BandId == Id)
             .OrderByDescending(kb => kb.Konzert.Datum)
-            .Select(kb => new KonzertZeile(kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Name, kb.Konzert.Ort))
+            .Select(kb => new KonzertZeile(kb.KonzertId, kb.Konzert.Datum, kb.Konzert.Uhrzeit, kb.Konzert.Name, kb.Konzert.Ort))
             .ToListAsync();
 
         var mitglieder = await db.BandMitgliedschaften
@@ -381,7 +381,7 @@ else
 
     private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel, Guid StueckId, string StueckTitel);
     private record StueckZeile(Guid Id, string Titel, int? Jahr);
-    private record KonzertZeile(Guid Id, DateOnly Datum, string? Name, string? Ort)
+    private record KonzertZeile(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }
