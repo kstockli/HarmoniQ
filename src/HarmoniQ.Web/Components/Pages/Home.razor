@@ -1,4 +1,5 @@
 @page "/"
+@attribute [StreamRendering]
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.Caching.Memory
 @using QRCoder
@@ -436,18 +437,16 @@
         _bewertungenCount = global.BewertungenCount;
         _komponisten = global.Komponisten;
         _bands = global.Bands;
+        _neueVideos = global.NeueVideos;   // global gecacht (kommende Konzerte/neue Videos ändern selten)
+        _kalender = global.Kalender;
 
-        // (2) Verbleibende unabhängige Queries parallel ausführen – je Task ein eigener Kontext aus
-        // der Factory (DbContext ist nicht thread-sicher), gesammelt via Task.WhenAll statt sequenziell.
-        var neueVideosTask = NeueVideosLadenAsync();
-        var kalenderTask = KalenderLadenAsync();
+        // (2) Nur noch die NUTZER-SPEZIFISCHEN Queries laufen pro Aufruf – parallel, je Task ein
+        // eigener Kontext aus der Factory (DbContext ist nicht thread-sicher), via Task.WhenAll.
         var userStatusTask = UserStatusLadenAsync();
         var teaserTask = TagebuchTeaserLadenAsync();
         var feedTask = FeedLadenAsync();
-        await Task.WhenAll(neueVideosTask, kalenderTask, userStatusTask, teaserTask, feedTask);
+        await Task.WhenAll(userStatusTask, teaserTask, feedTask);
 
-        _neueVideos = neueVideosTask.Result;
-        _kalender = kalenderTask.Result;
         (_onboardingNoetig, _offeneAnfragen, _folgeAufruf, _adminBands) = userStatusTask.Result;
         _teaser = teaserTask.Result;
         _feed = feedTask.Result;
@@ -487,8 +486,12 @@
             .Take(6)
             .ToListAsync();
 
+        // Ebenfalls für alle User identisch → in denselben Cache (nur bei Cache-Miss berechnet).
+        var neueVideos = await NeueVideosLadenAsync();
+        var kalender = await KalenderLadenAsync();
+
         return new GlobaleDaten(komponistenCount, personenCount, bandsCount, stueckeCount,
-            videosCount, bewertungenCount, komponisten, bands);
+            videosCount, bewertungenCount, komponisten, bands, neueVideos, kalender);
     }
 
     private async Task<List<VideoZeile>> NeueVideosLadenAsync()
@@ -724,7 +727,8 @@
     private record GlobaleDaten(
         int KomponistenCount, int PersonenCount, int BandsCount, int StueckeCount,
         int VideosCount, int BewertungenCount,
-        List<Zeile> Komponisten, List<BandZeile> Bands);
+        List<Zeile> Komponisten, List<BandZeile> Bands,
+        List<VideoZeile> NeueVideos, List<KalenderZeile> Kalender);
 
     private record TagebuchTeaser(int Heuer, int Gesamt, Guid? LetzterKonzertId, string? LetzterTitel);
     private record FreundZeile(string Name, string Aktion, string Icon, string RelativLabel, string Href);

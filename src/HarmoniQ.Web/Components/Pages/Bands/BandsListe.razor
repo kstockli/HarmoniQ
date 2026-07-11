@@ -1,4 +1,5 @@
 @page "/bands"
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
@@ -7,6 +8,7 @@
 @inject IJSRuntime JS
 @inject GeocodingService Geo
 @inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>Bands – HarmoniQ</PageTitle>
 
@@ -23,88 +25,94 @@ else if (_alle.Count == 0)
 else
 {
     <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
-        <MudGrid Spacing="3">
-            <MudItem xs="12" sm="5">
-                <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Name)"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
-            </MudItem>
-            <MudItem xs="6" sm="3">
-                <MudSelect T="BandKategorie?" @bind-Value="_kategorie" @bind-Value:after="Filtern"
-                           Label="Kategorie" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                    @foreach (var k in Enum.GetValues<BandKategorie>())
-                    {
-                        <MudSelectItem T="BandKategorie?" Value="@k">@KategorieLabel(k)</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="6" sm="4">
-                <MudSelect T="Staerkeklasse?" @bind-Value="_klasse" @bind-Value:after="Filtern"
-                           Label="Stärkeklasse" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                    @foreach (var s in Enum.GetValues<Staerkeklasse>())
-                    {
-                        <MudSelectItem T="Staerkeklasse?" Value="@s">@KlasseLabel(s)</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-        </MudGrid>
-
-        @* Bands in der Nähe: Bezugspunkt via Standort ODER PLZ, dann Umkreis (wie Konzerte). *@
-        <MudDivider Class="my-2" Style="border-color:#3a1060;" />
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-            <MudIcon Icon="@Icons.Material.Filled.NearMe" Style="color:#1ABC9C;" />
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
-                       StartIcon="@Icons.Material.Filled.MyLocation" OnClick="MeinStandort" Disabled="_standortLaeuft">
-                @(_standortLaeuft ? "…" : "Mein Standort")
-            </MudButton>
-            <MudTextField @bind-Value="_plz" Label="oder PLZ" Variant="Variant.Outlined" Margin="Margin.Dense"
-                          Style="max-width:120px;" Immediate="true" />
-            <MudButton Size="Size.Small" OnClick="PlzAnwenden" Disabled="@(string.IsNullOrWhiteSpace(_plz))">Anwenden</MudButton>
-            <MudSelect T="int?" @bind-Value="_radiusKm" @bind-Value:after="Filtern" Label="Umkreis"
-                       Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Style="max-width:130px;">
-                <MudSelectItem T="int?" Value="10">≤ 10 km</MudSelectItem>
-                <MudSelectItem T="int?" Value="25">≤ 25 km</MudSelectItem>
-                <MudSelectItem T="int?" Value="50">≤ 50 km</MudSelectItem>
-                <MudSelectItem T="int?" Value="100">≤ 100 km</MudSelectItem>
-            </MudSelect>
-            @if (_refLat is not null)
-            {
-                <MudChip T="string" Size="Size.Small" Style="color:#1ABC9C;" OnClose="StandortZuruecksetzen">Bezugspunkt gesetzt</MudChip>
-            }
-            else
-            {
-                <MudText Typo="Typo.caption" Style="color:#6f5a86;">für „in der Nähe": Standort freigeben oder PLZ eingeben</MudText>
-            }
+        @* Ein Hauptfilter (Suche); Details hinter „Mehr Filter" (User-Test-Feedback: einfacher). *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudTextField @bind-Value="_suche" @bind-Value:after="FilterGeaendert" Label="Band suchen"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true"
+                          DebounceInterval="250" OnKeyDown="SucheKeyDown"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+            <MudButton Variant="Variant.Text" Style="color:#9B59B6;white-space:nowrap;"
+                       StartIcon="@(_mehrFilter ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.Tune)"
+                       OnClick="MehrFilterUmschalten">@(_mehrFilter ? "Weniger" : "Mehr Filter")</MudButton>
         </MudStack>
-        <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Bands</MudText>
+
+        @if (_mehrFilter)
+        {
+            <MudGrid Spacing="3" Class="mt-1">
+                <MudItem xs="6" sm="4">
+                    <MudSelect T="BandKategorie?" @bind-Value="_kategorie" @bind-Value:after="FilterGeaendert"
+                               Label="Kategorie" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                        @foreach (var k in Enum.GetValues<BandKategorie>())
+                        {
+                            <MudSelectItem T="BandKategorie?" Value="@k">@KategorieLabel(k)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6" sm="4">
+                    <MudSelect T="Staerkeklasse?" @bind-Value="_klasse" @bind-Value:after="FilterGeaendert"
+                               Label="Stärkeklasse" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                        @foreach (var s in Enum.GetValues<Staerkeklasse>())
+                        {
+                            <MudSelectItem T="Staerkeklasse?" Value="@s">@KlasseLabel(s)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            @* Bands in der Nähe: Bezugspunkt via Standort ODER PLZ, dann Umkreis. *@
+            <MudDivider Class="my-2" Style="border-color:#3a1060;" />
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudIcon Icon="@Icons.Material.Filled.NearMe" Style="color:#1ABC9C;" />
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                           StartIcon="@Icons.Material.Filled.MyLocation" OnClick="MeinStandort" Disabled="_standortLaeuft">
+                    @(_standortLaeuft ? "…" : "Mein Standort")
+                </MudButton>
+                <MudTextField @bind-Value="_plz" Label="oder PLZ" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Style="max-width:120px;" Immediate="true" />
+                <MudButton Size="Size.Small" OnClick="PlzAnwenden" Disabled="@(string.IsNullOrWhiteSpace(_plz))">Anwenden</MudButton>
+                <MudSelect T="int?" @bind-Value="_radiusKm" @bind-Value:after="FilterGeaendert" Label="Umkreis"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Style="max-width:130px;">
+                    <MudSelectItem T="int?" Value="10">≤ 10 km</MudSelectItem>
+                    <MudSelectItem T="int?" Value="25">≤ 25 km</MudSelectItem>
+                    <MudSelectItem T="int?" Value="50">≤ 50 km</MudSelectItem>
+                    <MudSelectItem T="int?" Value="100">≤ 100 km</MudSelectItem>
+                </MudSelect>
+                @if (_refLat is not null)
+                {
+                    <MudChip T="string" Size="Size.Small" Style="color:#1ABC9C;" OnClose="StandortZuruecksetzen">Bezugspunkt gesetzt</MudChip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">für „in der Nähe": Standort freigeben oder PLZ eingeben</MudText>
+                }
+            </MudStack>
+        }
+        <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Bands</MudText>
     </MudPaper>
 
-    <MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
-        <Columns>
-            <TemplateColumn Title="Name" SortBy="@(z => z.Name)">
-                <CellTemplate>
-                    <MudLink Href="@($"/bands/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
-                             Underline="Underline.Hover">@context.Item.Name</MudLink>
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Kategorie" SortBy="@(z => z.Kategorie.HasValue ? (int)z.Kategorie : 99)">
-                <CellTemplate>@(context.Item.Kategorie.HasValue ? KategorieLabel(context.Item.Kategorie.Value) : "—")</CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Stärkeklasse" SortBy="@(z => z.Klasse.HasValue ? (int)z.Klasse : 99)">
-                <CellTemplate>@(context.Item.Klasse.HasValue ? KlasseLabel(context.Item.Klasse.Value) : "—")</CellTemplate>
-            </TemplateColumn>
-            <PropertyColumn Property="z => z.Ort" Title="Ort" />
-            @if (_refLat is not null)
-            {
-                <TemplateColumn Title="Entfernung" SortBy="@(z => z.Distanz ?? double.MaxValue)">
-                    <CellTemplate>@(context.Item.Distanz is double d ? $"{d:0.#} km" : "–")</CellTemplate>
+    @* Kernspalten laut Feedback: Name · Ort · Folgen (Kategorie/Klasse/… stecken im Filter). *@
+    <div id="bands-ergebnisse">
+        <MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
+            <Columns>
+                <TemplateColumn Title="Name" SortBy="@(z => z.Name)">
+                    <CellTemplate>
+                        <MudLink Href="@($"/bands/{context.Item.Id}")" Style="color:#F0E6FF;font-weight:500;"
+                                 Underline="Underline.Hover">@context.Item.Name</MudLink>
+                    </CellTemplate>
                 </TemplateColumn>
-            }
-            <PropertyColumn Property="z => z.Land" Title="Land" />
-            <PropertyColumn Property="z => z.Mitglieder" Title="Mitglieder" />
-            <PropertyColumn Property="z => z.Videos" Title="Videos" />
-        </Columns>
-    </MudDataGrid>
+                <PropertyColumn Property="z => z.Ort" Title="Ort" />
+                @if (_refLat is not null)
+                {
+                    <TemplateColumn Title="Entfernung" SortBy="@(z => z.Distanz ?? double.MaxValue)">
+                        <CellTemplate>@(context.Item.Distanz is double d ? $"{d:0.#} km" : "–")</CellTemplate>
+                    </TemplateColumn>
+                }
+                <TemplateColumn Title="Folgen" Sortable="false">
+                    <CellTemplate>@FolgenZelle(context.Item.Id)</CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    </div>
 }
 
 @code {
@@ -117,6 +125,18 @@ else
     private int? _radiusKm;
     private string _plz = "";
     private bool _standortLaeuft;
+    private bool _mehrFilter;
+    private bool _bereit;   // true nach erstem Render → JS-Interop (Filter merken) erlaubt
+
+    // Folgen-Status
+    private Guid? _personId;
+    private HashSet<Guid> _folgeIds = [];
+    private HashSet<Guid> _mitgliedIds = [];
+
+    private const string FilterKey = "bands.filter";
+    private string LoginHref => $"/Account/Login?ReturnUrl={Uri.EscapeDataString("/bands")}";
+
+    private record FilterState(string? Q, BandKategorie? Kat, Staerkeklasse? Klasse, string? Plz, int? Km, bool Mehr);
 
     protected override async Task OnInitializedAsync()
     {
@@ -129,20 +149,84 @@ else
                 b.HeimatLokal != null ? b.HeimatLokal.Lat : null,
                 b.HeimatLokal != null ? b.HeimatLokal.Lng : null))
             .ToListAsync();
+
+        // Folgen-Status des angemeldeten Kontos (für den Folgen-Knopf in der Liste).
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _personId = await BandFolgenService.PersonIdAsync(db, userId);
+        if (_personId is Guid pid)
+        {
+            _folgeIds = (await db.BandInteressen.Where(i => i.PersonId == pid).Select(i => i.BandId).ToListAsync()).ToHashSet();
+            _mitgliedIds = (await db.BandMitgliedschaften.Where(m => m.PersonId == pid).Select(m => m.BandId).ToListAsync()).ToHashSet();
+        }
+
         Filtern();
     }
 
-    // Beim ersten Render den (aktuelleren) Geo-Standort holen, falls schon freigegeben.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _refLat is not null) return;
+        if (!firstRender) return;
+
+        // (1) Zuletzt genutzten Filter wiederherstellen – überlebt „in Band rein → zurück".
         try
         {
-            var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
-                      ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
-            if (pos is { Length: 2 }) { await RefSetzen(pos[0], pos[1], speichern: false); StateHasChanged(); }
+            var json = await JS.InvokeAsync<string?>("harmoniqUi.get", FilterKey);
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                var s = System.Text.Json.JsonSerializer.Deserialize<FilterState>(json);
+                if (s != null)
+                {
+                    _suche = s.Q ?? ""; _kategorie = s.Kat; _klasse = s.Klasse;
+                    _plz = s.Plz ?? ""; _radiusKm = s.Km; _mehrFilter = s.Mehr;
+                }
+            }
         }
-        catch { /* Geo nicht verfügbar */ }
+        catch { /* sessionStorage nicht verfügbar */ }
+
+        // (2) Standort (falls schon freigegeben) für „in der Nähe".
+        if (_refLat is null)
+        {
+            try
+            {
+                var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
+                          ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
+                if (pos is { Length: 2 }) { _refLat = pos[0]; _refLng = pos[1]; _radiusKm ??= 50; }
+            }
+            catch { /* Geo nicht verfügbar */ }
+        }
+
+        _bereit = true;
+        Filtern();
+        StateHasChanged();
+    }
+
+    private async Task FilterGeaendert()
+    {
+        Filtern();
+        await FilterMerken();
+    }
+
+    private async Task MehrFilterUmschalten()
+    {
+        _mehrFilter = !_mehrFilter;
+        await FilterMerken();
+    }
+
+    private async Task FilterMerken()
+    {
+        if (!_bereit) return;
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new FilterState(_suche, _kategorie, _klasse, _plz, _radiusKm, _mehrFilter));
+        try { await JS.InvokeVoidAsync("harmoniqUi.set", FilterKey, json); } catch { }
+    }
+
+    private async Task SucheKeyDown(KeyboardEventArgs e)
+    {
+        // Smartphone: nach Enter zum ersten Resultat scrollen (statt oben mit Tastatur zu bleiben).
+        if (e.Key == "Enter" || e.Key == "NumpadEnter")
+        {
+            try { await JS.InvokeVoidAsync("harmoniqUi.scrollTo", "#bands-ergebnisse"); } catch { }
+        }
     }
 
     private void Filtern()
@@ -159,8 +243,7 @@ else
             var list = q.ToList();
             foreach (var z in list)
                 z.Distanz = (z.Lat is double la && z.Lng is double lo) ? Distanz(rlat, rlng, la, lo) : null;
-            // Nur Bands mit BEKANNTER Distanz ausserhalb des Umkreises ausblenden; Bands ohne
-            // hinterlegten Ort bleiben sichtbar (ohne km), nach Distanz aufsteigend (ohne Ort zuletzt).
+            // Bands ohne hinterlegten Ort bleiben sichtbar (ohne km), Distanz-gefilterte nur bei bekannter Distanz.
             if (_radiusKm is int r)
                 list = list.Where(z => z.Distanz is not double d || d <= r).ToList();
             _gefiltert = list.OrderBy(z => z.Distanz ?? double.MaxValue).ThenBy(z => z.Name).ToList();
@@ -169,6 +252,36 @@ else
         {
             _gefiltert = q.OrderBy(z => z.Name).ToList();
         }
+    }
+
+    private RenderFragment FolgenZelle(Guid bandId) => __builder =>
+    {
+        if (_personId is null)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#9B59B6;"
+                       Href="@LoginHref">Anmelden zum Folgen</MudButton>
+        }
+        else if (_mitgliedIds.Contains(bandId))
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Mitglied</MudChip>
+        }
+        else
+        {
+            var folgt = _folgeIds.Contains(bandId);
+            <MudButton Size="Size.Small" Variant="@(folgt ? Variant.Filled : Variant.Outlined)"
+                       Style="@(folgt ? "background:#1ABC9C;color:#0e0018;" : "color:#1ABC9C;border-color:#1ABC9C;")"
+                       StartIcon="@(folgt ? Icons.Material.Filled.Check : Icons.Material.Filled.Add)"
+                       OnClick="@(() => FolgenUmschalten(bandId))">@(folgt ? "Folge ich" : "Folgen")</MudButton>
+        }
+    };
+
+    private async Task FolgenUmschalten(Guid bandId)
+    {
+        if (_personId is not Guid pid) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var jetzt = await BandFolgenService.UmschaltenAsync(db, pid, bandId);
+        if (jetzt) _folgeIds.Add(bandId); else _folgeIds.Remove(bandId);
+        Snackbar.Add(jetzt ? "Du folgst dieser Band." : "Nicht mehr gefolgt.", jetzt ? Severity.Success : Severity.Info);
     }
 
     private async Task MeinStandort()
@@ -193,6 +306,7 @@ else
         _radiusKm ??= 50;
         if (speichern) await JS.InvokeVoidAsync("harmoniqGeo.save", lat, lng);
         Filtern();
+        await FilterMerken();
     }
 
     private async Task StandortZuruecksetzen()
@@ -201,6 +315,7 @@ else
         _radiusKm = null;
         await JS.InvokeVoidAsync("harmoniqGeo.clear");
         Filtern();
+        await FilterMerken();
     }
 
     private static double Distanz(double lat1, double lng1, double lat2, double lng2)

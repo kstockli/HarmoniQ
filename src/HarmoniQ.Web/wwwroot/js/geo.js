@@ -37,3 +37,13 @@ window.harmoniqGeo = {
     },
     clear: function () { try { localStorage.removeItem('harmoniq.geo'); } catch (e) { } }
 };
+
+// Kleine UI-Helfer: Filter je Tab merken (sessionStorage, überlebt „in Detail → zurück")
+// und zu einem Element scrollen (Smartphone: nach Enter zum ersten Resultat).
+window.harmoniqUi = {
+    get: function (k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { sessionStorage.setItem(k, v); } catch (e) { } },
+    scrollTo: function (sel) {
+        try { var el = document.querySelector(sel); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
+    }
+};
