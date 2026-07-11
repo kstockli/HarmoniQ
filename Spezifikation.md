@@ -313,6 +313,8 @@ Band
 ├── Gruendungsjahr (int?)           — NEU
 ├── Geschichte (string?)            — NEU (analog Person.Biografie)
 ├── HeimatLokalId (FK? → Lokal)     — NEU: Heimatort/Probelokal der Band (für „Bands in der Nähe“)
+├── EinladungVerworfenAm (DateTime?)— NEU: Admin will diese Band NICHT (per Kontakt) einladen; null = offen
+├── EinladungVerworfenVon (string?) — NEU: AspNetUsers-Id des verwerfenden Admins
 ├── Aliase [1:n] → BandAlias        — NEU: alternative Namen
 ├── Links [1:n] → BandLink          — NEU: Instagram/X/YouTube/EMail (Homepage bleibt in Webseite)
 ├── Videos [1:n]
@@ -451,6 +453,15 @@ BandAdministrator                   (Konto „verwaltet" eine Band – band-skop
 > globalen Admin ernannt; weitere durch bestehende Band-Admins; später Crawler-Einladung
 > (UX-Spec §5.3.1). Solo-Band-Konzerte darf ein Band-Admin löschen/mergen, sobald eine fremde Band
 > beteiligt ist nur der globale Admin. Löschen/Merge der Band selbst = globaler Admin.
+
+> **Einladungs-Vorschläge aus gefundenen Kontakten (Phase 2 A) — UMGESETZT:** Der Crawler erntet
+> offizielle Vereins-E-Mails (als `BandLink` Typ `EMail`). Daraus erzeugt die Admin-Seite
+> `/admin/band-einladungen` je Band **einen Vorschlag** – **kein Auto-Versand**. Der globale Admin
+> prüft die Band (Link auf die Band-Seite) und entscheidet: **Einladen** (nutzt den bestehenden
+> `BandAdminEinladung`-Flow) / **Nicht einladen** (setzt `Band.EinladungVerworfenAm`) / später **Doch
+> einladen** (Marker zurücksetzen). Der Status je Band wird **abgeleitet**: `Offen` (E-Mail da, kein
+> Admin, keine Einladung, nicht verworfen) · `Gesendet` (offene `BandAdminEinladung`, inkl. Datum/Ablauf)
+> · `Angenommen`/`Verwaltet` (`BandAdministrator` existiert) · `Verworfen` (`EinladungVerworfenAm`).
 
 > **Wiederkehr-Schleife – Benachrichtigungs-Entitäten (Details UX-Spec 4.2):**
 > - `BenachrichtigungPraeferenz` (pro Konto, Kanäle **unabhängig**: `EmailAktiv`/`PushAktiv`, Default an,

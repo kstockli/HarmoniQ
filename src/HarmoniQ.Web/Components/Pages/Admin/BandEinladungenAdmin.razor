@@ -1,0 +1,198 @@
+@page "/admin/band-einladungen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IBenachrichtigungsMail Mail
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Band-Admin-Einladungen – Admin</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/admin"
+               StartIcon="@Icons.Material.Filled.ArrowBack">Admin</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Band-Admin-Einladungen</MudText>
+    <MudSpacer />
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Style="color:#D4AF37;" OnClick="Laden" title="Aktualisieren" />
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+    Bands mit einer gefundenen offiziellen E-Mail (z. B. aus dem Crawler). <strong>Nichts wird automatisch
+    verschickt.</strong> Prüfe zuerst die Band (Link) – erst dann „Einladen". So entscheidest du je Band:
+    einladen, bewusst nicht einladen, oder siehst, dass (und wann) bereits eingeladen wurde.
+</MudText>
+
+@if (_alle is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
+        @foreach (var f in _filter)
+        {
+            var aktiv = _aktiv?.Equals(f.Wert) == true || (_aktiv is null && f.Wert is null);
+            <MudButton Size="Size.Small" Variant="@(aktiv ? Variant.Filled : Variant.Outlined)"
+                       Style="@(aktiv ? "background:#D4AF37;color:#0e0018;" : "color:#C9A6E0;border-color:#7a3fa0;")"
+                       OnClick="@(() => _aktiv = f.Wert)">@f.Label (@Anzahl(f.Wert))</MudButton>
+        }
+    </MudStack>
+
+    @if (!Gefiltert.Any())
+    {
+        <MudText Typo="Typo.body2" Style="color:#A78FC0;">Keine Einträge in dieser Ansicht.</MudText>
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            @foreach (var v in Gefiltert)
+            {
+                <MudPaper Class="pa-3" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                        @if (!string.IsNullOrWhiteSpace(v.BildUrl))
+                        {
+                            <MudAvatar Style="height:44px;width:44px;"><MudImage Src="@v.BildUrl" /></MudAvatar>
+                        }
+                        else
+                        {
+                            <MudAvatar Style="height:44px;width:44px;background:#3a1060;color:#D4AF37;">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups" />
+                            </MudAvatar>
+                        }
+                        <div style="flex:1;min-width:200px;">
+                            <MudLink Href="@($"/admin/bands/{v.BandId}")" Style="color:#F0E6FF;font-weight:600;"
+                                     Underline="Underline.Hover">@v.BandName</MudLink>
+                            <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
+                                <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Style="vertical-align:text-bottom;" />
+                                @(v.EMail ?? "—")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="d-block" Style="color:#6f5a86;">@StatusText(v)</MudText>
+                        </div>
+                        @StatusChip(v)
+                        <div>
+                            @switch (v.Status)
+                            {
+                                case BandAdminService.VorschlagStatus.Offen:
+                                    <MudButton Variant="Variant.Filled" Size="Size.Small" Class="mr-2"
+                                               Style="background:#D4AF37;color:#0e0018;"
+                                               StartIcon="@Icons.Material.Filled.Send"
+                                               OnClick="@(() => Einladen(v))">Einladen</MudButton>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#A78FC0;"
+                                               OnClick="@(() => Verwerfen(v))">Nicht einladen</MudButton>
+                                    break;
+                                case BandAdminService.VorschlagStatus.Gesendet:
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Class="mr-2" Style="color:#C9A6E0;"
+                                               StartIcon="@Icons.Material.Filled.Send"
+                                               OnClick="@(() => Einladen(v))">Erneut senden</MudButton>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#A78FC0;"
+                                               OnClick="@(() => Zurueckziehen(v))">Zurückziehen</MudButton>
+                                    break;
+                                case BandAdminService.VorschlagStatus.Verworfen:
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Style="color:#C9A6E0;"
+                                               StartIcon="@Icons.Material.Filled.Undo"
+                                               OnClick="@(() => Freigeben(v))">Doch einladen</MudButton>
+                                    break;
+                            }
+                        </div>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    }
+}
+
+@code {
+    private List<BandAdminService.EinladungsVorschlag>? _alle;
+    private BandAdminService.VorschlagStatus? _aktiv = BandAdminService.VorschlagStatus.Offen;
+    private string? _userId;
+
+    private readonly (string Label, BandAdminService.VorschlagStatus? Wert)[] _filter =
+    [
+        ("Offen", BandAdminService.VorschlagStatus.Offen),
+        ("Gesendet", BandAdminService.VorschlagStatus.Gesendet),
+        ("Verworfen", BandAdminService.VorschlagStatus.Verworfen),
+        ("Verwaltet", BandAdminService.VorschlagStatus.Angenommen),
+        ("Alle", null),
+    ];
+
+    private IEnumerable<BandAdminService.EinladungsVorschlag> Gefiltert =>
+        _alle is null ? [] : _aktiv is null ? _alle : _alle.Where(v => v.Status == _aktiv);
+
+    private int Anzahl(BandAdminService.VorschlagStatus? s) =>
+        _alle is null ? 0 : s is null ? _alle.Count : _alle.Count(v => v.Status == s);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        await Laden();
+    }
+
+    private async Task Laden()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _alle = await BandAdminService.VorschlaegeAsync(db);
+    }
+
+    private async Task Einladen(BandAdminService.EinladungsVorschlag v)
+    {
+        if (string.IsNullOrWhiteSpace(v.EMail)) { Snackbar.Add("Keine E-Mail hinterlegt.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var meldung = await BandAdminService.ErnennenOderEinladenAsync(db, Mail, Nav.BaseUri, v.BandId, v.EMail, _userId);
+        Snackbar.Add(meldung, Severity.Success);
+        await Laden();
+    }
+
+    private async Task Verwerfen(BandAdminService.EinladungsVorschlag v)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await BandAdminService.VorschlagVerwerfenAsync(db, v.BandId, _userId);
+        Snackbar.Add($"{v.BandName}: nicht einladen.", Severity.Info);
+        await Laden();
+    }
+
+    private async Task Freigeben(BandAdminService.EinladungsVorschlag v)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await BandAdminService.VorschlagFreigebenAsync(db, v.BandId);
+        Snackbar.Add($"{v.BandName}: wieder offen.", Severity.Info);
+        await Laden();
+    }
+
+    private async Task Zurueckziehen(BandAdminService.EinladungsVorschlag v)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        foreach (var e in await BandAdminService.OffeneEinladungenAsync(db, v.BandId))
+            await BandAdminService.StornierenAsync(db, e.Id);
+        Snackbar.Add($"{v.BandName}: Einladung zurückgezogen.", Severity.Info);
+        await Laden();
+    }
+
+    private static string StatusText(BandAdminService.EinladungsVorschlag v) => v.Status switch
+    {
+        BandAdminService.VorschlagStatus.Gesendet =>
+            $"Eingeladen{(v.EingeladenAm is { } d ? $" am {d.ToLocalTime():dd.MM.yyyy}" : "")}"
+            + (v.AblaufAm is { } a ? $" · läuft ab am {a.ToLocalTime():dd.MM.yyyy}" : ""),
+        BandAdminService.VorschlagStatus.Angenommen => $"Verwaltet{(v.VerwaltetVon is { } m ? $" von {m}" : "")}",
+        BandAdminService.VorschlagStatus.Verworfen =>
+            $"Nicht einladen{(v.VerworfenAm is { } d ? $" (seit {d.ToLocalTime():dd.MM.yyyy})" : "")}",
+        _ => "Zu entscheiden",
+    };
+
+    private RenderFragment StatusChip(BandAdminService.EinladungsVorschlag v) => __builder =>
+    {
+        var (farbe, text) = v.Status switch
+        {
+            BandAdminService.VorschlagStatus.Gesendet => (Color.Info, "Gesendet"),
+            BandAdminService.VorschlagStatus.Angenommen => (Color.Success, "Verwaltet"),
+            BandAdminService.VorschlagStatus.Verworfen => (Color.Default, "Verworfen"),
+            _ => (Color.Warning, "Offen"),
+        };
+        <MudChip T="string" Size="Size.Small" Color="farbe" Variant="Variant.Outlined">@text</MudChip>
+    };
+}

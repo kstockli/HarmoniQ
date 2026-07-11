@@ -170,4 +170,82 @@ public static class BandAdminService
         await db.SaveChangesAsync();
         return e.BandId;
     }
+
+    // ── Einladungs-Vorschläge aus gefundenen Kontakten (Phase 2 A) ─────────────────────
+    // Kein Auto-Versand: der Admin sieht je Band mit gefundener E-Mail einen Vorschlag, prüft die
+    // Band und entscheidet „Einladen" / „Nicht einladen". Status wird abgeleitet aus bereits
+    // vorhandenen Daten (BandAdministrator/BandAdminEinladung) + dem Verworfen-Marker an der Band.
+
+    public enum VorschlagStatus { Offen, Gesendet, Angenommen, Verworfen }
+
+    public record EinladungsVorschlag(
+        Guid BandId, string BandName, string? BildUrl, string? EMail, VorschlagStatus Status,
+        DateTime? EingeladenAm, DateTime? AblaufAm, string? VerwaltetVon, DateTime? VerworfenAm);
+
+    /// <summary>Alle Bands mit einer gefundenen offiziellen E-Mail (<see cref="LinkTyp.EMail"/>) als
+    /// Einladungs-Vorschläge, inkl. abgeleitetem Status. Nur solche Bands sind (per Kontakt) einladbar.</summary>
+    public static async Task<List<EinladungsVorschlag>> VorschlaegeAsync(ApplicationDbContext db)
+    {
+        var mails = await db.BandLinks.Where(l => l.Typ == LinkTyp.EMail)
+            .Select(l => new { l.BandId, l.Url }).ToListAsync();
+        var bandIds = mails.Select(m => m.BandId).Distinct().ToList();
+        var mailByBand = mails.GroupBy(m => m.BandId).ToDictionary(g => g.Key, g => g.First().Url);
+
+        var bands = await db.Bands.Where(b => bandIds.Contains(b.Id))
+            .Select(b => new { b.Id, b.Name, b.BildUrl, b.EinladungVerworfenAm })
+            .ToListAsync();
+
+        // Verwaltende Konten (angenommen/direkt ernannt) → E-Mail des ersten Admins zur Anzeige.
+        var admins = await db.BandAdministratoren.Where(a => bandIds.Contains(a.BandId))
+            .Join(db.Users, a => a.BenutzerId, u => u.Id, (a, u) => new { a.BandId, u.Email })
+            .ToListAsync();
+        var adminByBand = admins.GroupBy(a => a.BandId).ToDictionary(g => g.Key, g => g.First().Email);
+
+        // Offene Einladungen (verschickt, noch nicht angenommen).
+        var einladungen = await db.BandAdminEinladungen
+            .Where(e => bandIds.Contains(e.BandId) && e.Status == BandAdminEinladungStatus.Offen)
+            .Select(e => new { e.BandId, e.CreateTime, e.AblaufAm }).ToListAsync();
+        var einlByBand = einladungen.GroupBy(e => e.BandId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.AblaufAm).First());
+
+        var liste = new List<EinladungsVorschlag>();
+        foreach (var b in bands)
+        {
+            mailByBand.TryGetValue(b.Id, out var mail);
+            VorschlagStatus status;
+            DateTime? eingeladenAm = null, ablaufAm = null;
+            string? verwaltetVon = null;
+            if (adminByBand.TryGetValue(b.Id, out var av)) { status = VorschlagStatus.Angenommen; verwaltetVon = av; }
+            else if (einlByBand.TryGetValue(b.Id, out var e)) { status = VorschlagStatus.Gesendet; eingeladenAm = e.CreateTime; ablaufAm = e.AblaufAm; }
+            else if (b.EinladungVerworfenAm is not null) status = VorschlagStatus.Verworfen;
+            else status = VorschlagStatus.Offen;
+            liste.Add(new EinladungsVorschlag(b.Id, b.Name, b.BildUrl, mail, status,
+                eingeladenAm, ablaufAm, verwaltetVon, b.EinladungVerworfenAm));
+        }
+        // Offen zuerst (Handlungsbedarf), dann Gesendet, Verworfen, Angenommen; je alphabetisch.
+        return liste.OrderBy(v => v.Status).ThenBy(v => v.BandName).ToList();
+    }
+
+    /// <summary>Anzahl offener Vorschläge (Band mit E-Mail, ohne Admin/Einladung, nicht verworfen) – Badge.</summary>
+    public static async Task<int> OffeneVorschlaegeCountAsync(ApplicationDbContext db)
+    {
+        var mitMail = db.BandLinks.Where(l => l.Typ == LinkTyp.EMail).Select(l => l.BandId);
+        var mitAdmin = db.BandAdministratoren.Select(a => a.BandId);
+        var mitEinladung = db.BandAdminEinladungen
+            .Where(e => e.Status == BandAdminEinladungStatus.Offen).Select(e => e.BandId);
+        return await db.Bands.CountAsync(b => b.EinladungVerworfenAm == null
+            && mitMail.Contains(b.Id) && !mitAdmin.Contains(b.Id) && !mitEinladung.Contains(b.Id));
+    }
+
+    /// <summary>Markiert einen Vorschlag als „nicht einladen" (bewusst übersprungen). Speichert.</summary>
+    public static Task VorschlagVerwerfenAsync(ApplicationDbContext db, Guid bandId, string? userId)
+        => db.Bands.Where(b => b.Id == bandId).ExecuteUpdateAsync(s => s
+            .SetProperty(b => b.EinladungVerworfenAm, DateTime.UtcNow)
+            .SetProperty(b => b.EinladungVerworfenVon, userId));
+
+    /// <summary>Hebt „nicht einladen" wieder auf → Vorschlag ist wieder offen. Speichert.</summary>
+    public static Task VorschlagFreigebenAsync(ApplicationDbContext db, Guid bandId)
+        => db.Bands.Where(b => b.Id == bandId).ExecuteUpdateAsync(s => s
+            .SetProperty(b => b.EinladungVerworfenAm, (DateTime?)null)
+            .SetProperty(b => b.EinladungVerworfenVon, (string?)null));
 }

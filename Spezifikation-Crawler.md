@@ -439,8 +439,14 @@ CrawlFund                           (Kandidat zur Übernahme)
   Übernahme-Pfade: Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft` (Funktion „Dirigent",
   optional Von/Bis-Jahr); Stück → `Stueck` (+ `StueckBeitrag` Komponist/Arrangeur); Komponist:in → `Person`;
   **Verein → `Band`** (Abgleich über Name/Alias; füllt leere Stammdaten – Land, Webseite, Kategorie,
-  Stärkeklasse, Gründungsjahr, Geschichte – und ergänzt `BandAlias` + `BandLink`-Social-Links);
+  Stärkeklasse, Gründungsjahr, Geschichte – und ergänzt `BandAlias` + `BandLink`-Social-Links **inkl.
+  offizieller E-Mail**);
   **Webseite → inaktive BandDomain-Quelle (Vorschlag)**.
+- **Band-Admin-Einladung aus gefundenem Kontakt (Phase 2 A):** Eine übernommene Vereins-**E-Mail**
+  (`BandLink` Typ `EMail`) erzeugt **keine** automatische Mail. Sie erscheint als **Vorschlag** auf
+  `/admin/band-einladungen`; der globale Admin **prüft die Band** und entscheidet manuell
+  Einladen / Nicht einladen (Details Spezifikation.md, Abschnitt BandAdministrator). So geht keine
+  Einladung an eine halbfertige/falsche Band raus.
   Bei **BandDomain**-Funden wird das Konzert immer der Quell-Band zugeordnet. Ebenso werden **Personen**
   von einer Vereinsseite (Dirigent, Vorstand, Muko) tendenziell der **Quell-Band** zugeordnet (Quell-Band
   vor evtl. fehlerhaft erkanntem Namen). Hat eine BandDomain-Quelle keine Ziel-Band, wird sie zu

@@ -113,6 +113,9 @@
             <MudNavLink Href="/admin/bandantraege" Icon="@Icons.Material.Filled.GroupAdd">
                 Band-Anträge @Badge(_bandantraegeOffen)
             </MudNavLink>
+            <MudNavLink Href="/admin/band-einladungen" Icon="@Icons.Material.Filled.MarkEmailRead">
+                Band-Einladungen @Badge(_einladungenOffen)
+            </MudNavLink>
 
             <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary">Import-Assistenten</MudText>
             <MudNavLink Href="/admin/crawler" Icon="@Icons.Material.Filled.TravelExplore">
@@ -127,7 +130,7 @@
 </MudNavMenu>
 
 @code {
-    private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen, _crawlerFundeOffen;
+    private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen, _crawlerFundeOffen, _einladungenOffen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -140,6 +143,7 @@
             _verknuepfungenOffen = await db.PersonAnsprueche.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
             _bandantraegeOffen = await db.BandbeitrittAntraege.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
             _crawlerFundeOffen = await db.CrawlFunde.CountAsync(f => f.Status == CrawlFundStatus.Offen);
+            _einladungenOffen = await BandAdminService.OffeneVorschlaegeCountAsync(db);
         }
         catch { /* Menü darf nie wegen Zählern brechen */ }
     }

@@ -23,6 +23,12 @@ public class Band : AuditierteEntitaet
     public Guid? HeimatLokalId { get; set; }
     public Lokal? HeimatLokal { get; set; }
 
+    /// <summary>Admin hat bewusst entschieden, diese Band NICHT (per gefundenem Kontakt) als Band-Admin
+    /// einzuladen. Null = noch offen. Steuert die „Einladungs-Vorschläge"-Liste (Phase 2 A).</summary>
+    public DateTime? EinladungVerworfenAm { get; set; }
+    /// <summary>AspNetUsers-Id des Admins, der die Einladung verworfen hat.</summary>
+    public string? EinladungVerworfenVon { get; set; }
+
     public ICollection<Video> Videos { get; set; } = [];
     public ICollection<BandMitgliedschaft> Mitgliedschaften { get; set; } = [];
     /// <summary>Personen, die dieser Band „folgen" (privat) – UX-Spec 4.2.</summary>
