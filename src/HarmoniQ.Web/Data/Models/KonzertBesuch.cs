@@ -18,7 +18,7 @@ public class KonzertBesuch
     public string BenutzerId { get; set; } = null!;
     public ApplicationUser? Benutzer { get; set; }
 
-    /// <summary>Optionale private Gesamt-Notiz zum Konzertbesuch.</summary>
+    /// <summary>Optionale private Gesamt-Notiz zum Konzertbesuch (auch im Voraus erfassbar).</summary>
     public string? Notiz { get; set; }
 
     /// <summary>

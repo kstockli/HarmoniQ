@@ -134,7 +134,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("Zeitpunkt");
 
-                    b.ToTable("Aktivitaeten");
+                    b.ToTable("Aktivitaeten", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Band", b =>
@@ -197,7 +197,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("HeimatLokalId");
 
-                    b.ToTable("Bands");
+                    b.ToTable("Bands", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandAdminEinladung", b =>
@@ -248,7 +248,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("Token")
                         .IsUnique();
 
-                    b.ToTable("BandAdminEinladungen");
+                    b.ToTable("BandAdminEinladungen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandAdministrator", b =>
@@ -286,7 +286,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("BenutzerId", "BandId")
                         .IsUnique();
 
-                    b.ToTable("BandAdministratoren");
+                    b.ToTable("BandAdministratoren", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandAlias", b =>
@@ -318,7 +318,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("BandId", "Name")
                         .IsUnique();
 
-                    b.ToTable("BandAliase");
+                    b.ToTable("BandAliase", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandInteresse", b =>
@@ -355,7 +355,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("PersonId", "BandId")
                         .IsUnique();
 
-                    b.ToTable("BandInteressen");
+                    b.ToTable("BandInteressen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandLink", b =>
@@ -389,7 +389,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("BandId");
 
-                    b.ToTable("BandLinks");
+                    b.ToTable("BandLinks", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandMitgliedschaft", b =>
@@ -436,7 +436,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("BandId", "PersonId");
 
-                    b.ToTable("BandMitgliedschaften");
+                    b.ToTable("BandMitgliedschaften", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BandbeitrittAntrag", b =>
@@ -490,7 +490,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("BandbeitrittAntraege");
+                    b.ToTable("BandbeitrittAntraege", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BenachrichtigungGesendet", b =>
@@ -527,7 +527,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("BenutzerId", "Typ", "EntitaetId");
 
-                    b.ToTable("BenachrichtigungenGesendet");
+                    b.ToTable("BenachrichtigungenGesendet", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.BenachrichtigungPraeferenz", b =>
@@ -572,7 +572,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("BenutzerId")
                         .IsUnique();
 
-                    b.ToTable("BenachrichtigungPraeferenzen");
+                    b.ToTable("BenachrichtigungPraeferenzen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Bewertung", b =>
@@ -639,7 +639,7 @@ namespace HarmoniQ.Web.Migrations
                         .IsUnique()
                         .HasFilter("\"BenutzerId\" IS NOT NULL");
 
-                    b.ToTable("Bewertungen");
+                    b.ToTable("Bewertungen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.CrawlFund", b =>
@@ -704,7 +704,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("Typ");
 
-                    b.ToTable("CrawlFunde");
+                    b.ToTable("CrawlFunde", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.CrawlLauf", b =>
@@ -758,7 +758,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("CrawlLaeufe");
+                    b.ToTable("CrawlLaeufe", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.CrawlQuelle", b =>
@@ -826,7 +826,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("BandId");
 
-                    b.ToTable("CrawlQuellen");
+                    b.ToTable("CrawlQuellen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.CrawlSeite", b =>
@@ -872,7 +872,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("QuelleId", "Url")
                         .IsUnique();
 
-                    b.ToTable("CrawlSeiten");
+                    b.ToTable("CrawlSeiten", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Freundschaft", b =>
@@ -917,7 +917,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("AnfragerPersonId", "EmpfaengerPersonId")
                         .IsUnique();
 
-                    b.ToTable("Freundschaften");
+                    b.ToTable("Freundschaften", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Instrument", b =>
@@ -951,7 +951,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Instrumente");
+                    b.ToTable("Instrumente", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Konzert", b =>
@@ -1003,7 +1003,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("LokalId");
 
-                    b.ToTable("Konzerte");
+                    b.ToTable("Konzerte", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.KonzertBand", b =>
@@ -1036,7 +1036,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("BandId");
 
-                    b.ToTable("KonzertBands");
+                    b.ToTable("KonzertBands", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.KonzertBesuch", b =>
@@ -1080,7 +1080,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("BenutzerId", "KonzertId")
                         .IsUnique();
 
-                    b.ToTable("KonzertBesuche");
+                    b.ToTable("KonzertBesuche", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.KonzertPerson", b =>
@@ -1122,7 +1122,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("KonzertId", "PersonId", "Rolle")
                         .IsUnique();
 
-                    b.ToTable("KonzertPersonen");
+                    b.ToTable("KonzertPersonen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.KonzertStueck", b =>
@@ -1164,7 +1164,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("KonzertId", "StueckId", "BandId")
                         .IsUnique();
 
-                    b.ToTable("KonzertStuecke");
+                    b.ToTable("KonzertStuecke", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Lokal", b =>
@@ -1220,7 +1220,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("Lokale");
+                    b.ToTable("Lokale", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.LokalAlias", b =>
@@ -1252,7 +1252,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("LokalId", "Name")
                         .IsUnique();
 
-                    b.ToTable("LokalAliase");
+                    b.ToTable("LokalAliase", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Person", b =>
@@ -1310,7 +1310,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("BenutzerId")
                         .IsUnique();
 
-                    b.ToTable("Personen");
+                    b.ToTable("Personen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonAlias", b =>
@@ -1342,7 +1342,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("PersonId", "Name")
                         .IsUnique();
 
-                    b.ToTable("PersonAliase");
+                    b.ToTable("PersonAliase", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonAnspruch", b =>
@@ -1390,7 +1390,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("PersonId", "BenutzerId", "Status");
 
-                    b.ToTable("PersonAnsprueche");
+                    b.ToTable("PersonAnsprueche", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonInstrument", b =>
@@ -1417,7 +1417,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("InstrumentId");
 
-                    b.ToTable("PersonInstrumente");
+                    b.ToTable("PersonInstrumente", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonLink", b =>
@@ -1451,7 +1451,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("PersonId");
 
-                    b.ToTable("PersonLinks");
+                    b.ToTable("PersonLinks", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PersonRolle", b =>
@@ -1478,7 +1478,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("Rolle");
 
-                    b.ToTable("PersonRollen");
+                    b.ToTable("PersonRollen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.PushSubscription", b =>
@@ -1521,7 +1521,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("Endpoint")
                         .IsUnique();
 
-                    b.ToTable("PushSubscriptions");
+                    b.ToTable("PushSubscriptions", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Richtigstellung", b =>
@@ -1575,7 +1575,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("BetrifftTyp", "BetrifftId");
 
-                    b.ToTable("Richtigstellungen");
+                    b.ToTable("Richtigstellungen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Stimme", b =>
@@ -1608,7 +1608,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("InstrumentId", "Bezeichnung")
                         .IsUnique();
 
-                    b.ToTable("Stimmen");
+                    b.ToTable("Stimmen", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Stueck", b =>
@@ -1654,7 +1654,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Stuecke");
+                    b.ToTable("Stuecke", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.StueckAlias", b =>
@@ -1686,7 +1686,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("StueckId", "Name")
                         .IsUnique();
 
-                    b.ToTable("StueckAliase");
+                    b.ToTable("StueckAliase", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.StueckBeitrag", b =>
@@ -1723,7 +1723,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("StueckId", "PersonId", "Rolle")
                         .IsUnique();
 
-                    b.ToTable("StueckBeitraege");
+                    b.ToTable("StueckBeitraege", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.StueckEindruck", b =>
@@ -1770,7 +1770,7 @@ namespace HarmoniQ.Web.Migrations
                     b.HasIndex("BenutzerId", "KonzertStueckId")
                         .IsUnique();
 
-                    b.ToTable("StueckEindruecke");
+                    b.ToTable("StueckEindruecke", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.Video", b =>
@@ -1843,7 +1843,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("VorgeschlagenVonId");
 
-                    b.ToTable("Videos");
+                    b.ToTable("Videos", (string)null);
                 });
 
             modelBuilder.Entity("HarmoniQ.Web.Data.Models.VideoMitwirkung", b =>
@@ -1900,7 +1900,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasIndex("VorgeschlagenVonId");
 
-                    b.ToTable("VideoMitwirkungen");
+                    b.ToTable("VideoMitwirkungen", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -1919,7 +1919,7 @@ namespace HarmoniQ.Web.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys");
+                    b.ToTable("DataProtectionKeys", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -2733,7 +2733,7 @@ namespace HarmoniQ.Web.Migrations
 
                             b1.HasKey("IdentityUserPasskeyCredentialId");
 
-                            b1.ToTable("AspNetUserPasskeys");
+                            b1.ToTable("AspNetUserPasskeys", (string)null);
 
                             b1
                                 .ToJson("Data")

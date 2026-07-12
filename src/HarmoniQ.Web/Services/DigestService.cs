@@ -88,6 +88,7 @@ public static class DigestService
 
         // ── B: Tagebuch-Nachfrage zu kürzlich vergangenen Konzerten ────────────
         var vonB = heute.AddDays(-RueckblickTage);
+        // Bereits im Tagebuch (egal ob als Besuch oder Vormerkung) → nicht erneut nachfragen.
         var besucht = (await db.KonzertBesuche.Where(x => x.BenutzerId == userId)
             .Select(x => x.KonzertId).ToListAsync()).ToHashSet();
         var vergangenRoh = await db.KonzertBands

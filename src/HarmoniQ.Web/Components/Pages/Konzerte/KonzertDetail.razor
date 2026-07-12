@@ -74,7 +74,7 @@ else
         <RichtigstellungMelden Typ="RichtigstellungTyp.Konzert" Id="_konzert.Id" />
     </MudStack>
 
-    <KonzertTagebuchPanel KonzertId="_konzert.Id" Programm="_tagebuchProgramm" />
+    <KonzertTagebuchPanel KonzertId="_konzert.Id" Datum="_konzert.Datum" Programm="_tagebuchProgramm" />
 
     @if (_eindruecke.Count > 0)
     {
@@ -284,7 +284,7 @@ else
             p.KonzertStueckId, p.StueckId, p.StueckTitel, p.BandId, p.BandName,
             _komponisten.TryGetValue(p.StueckId, out var ks)
                 ? ks.Select(k => new KonzertTagebuchPanel.Komponist(k.Id, k.Name)).ToList()
-                : [])).ToList();
+                : [], p.Reihenfolge)).ToList();
 
     private Guid? _eigenePersonId;
     private bool _kannMitwirken;   // Person hat eine Bühnenrolle (nicht nur Zuhörer:in)
@@ -346,7 +346,7 @@ else
             .Where(ks => ks.KonzertId == Id)
             .OrderBy(ks => ks.Reihenfolge)
             .ThenBy(ks => ks.Stueck.Titel)
-            .Select(ks => new ProgrammZeile(ks.Id, ks.StueckId, ks.Stueck.Titel, ks.BandId, ks.Band != null ? ks.Band.Name : null))
+            .Select(ks => new ProgrammZeile(ks.Id, ks.StueckId, ks.Stueck.Titel, ks.BandId, ks.Band != null ? ks.Band.Name : null, ks.Reihenfolge))
             .ToListAsync();
 
         // Mitwirkende & Gäste (Konzert↔Person mit Rolle); Namen sichtbarkeitsabhängig.
@@ -598,7 +598,7 @@ else
     private record PersonRef(Guid Id, string Name);
     private record BandZeile(Guid Id, string Name, int? Rang, int? Punkte, PersonRef? Dirigent, List<StueckRef> Stuecke);
     private record VideoZeile(Guid Id, Guid? BandId, VideoPlattform Plattform, string ExternId, string Titel, string StueckTitel);
-    private record ProgrammZeile(Guid KonzertStueckId, Guid StueckId, string StueckTitel, Guid? BandId, string? BandName);
+    private record ProgrammZeile(Guid KonzertStueckId, Guid StueckId, string StueckTitel, Guid? BandId, string? BandName, int? Reihenfolge);
     private record EindruckZeile(Guid PersonId, string Name, bool ZeigtInhalt, string? Notiz,
         List<(string Titel, int? Sterne, string? Notiz)> Bewertungen);
     private record MitwirkendeZeile(Guid PersonId, string AnzeigeName, PersonRolleTyp Rolle, Guid? BandId, string? BandName);

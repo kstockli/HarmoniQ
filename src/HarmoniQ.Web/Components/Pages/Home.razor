@@ -140,6 +140,28 @@
     </MudPaper>
 }
 
+@* „Ich möchte hingehen" – vorgemerkte künftige Konzerte (Übersicht, UX-Feedback Punkt 5). *@
+@if (_geplant.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+            <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Style="color:#1ABC9C;" />
+            <MudText Typo="Typo.h6" Style="color:#1ABC9C;">Du möchtest hingehen</MudText>
+        </MudStack>
+        <MudList T="string" Dense="true">
+            @foreach (var g in _geplant)
+            {
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Event" Href="@($"/konzerte/{g.Id}")" Style="color:#F0E6FF;">
+                    @g.Titel
+                    <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
+                        @KonzertZeitFormat.Kompakt(g.Datum, g.Uhrzeit)@(string.IsNullOrWhiteSpace(g.Ort) ? "" : $" · {g.Ort}")
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+}
+
 @* „Für dich" – personalisierter Feed aus deinen UND gefolgten Bands + Freunde-News (UX-Spec 4.2). *@
 @if (_feed is not null && (!_feed.Leer || _hatFreundeNews))
 {
@@ -394,6 +416,11 @@
     private DigestService.Digest? _feed;
     private bool _hatFreundeNews;
     private List<FreundZeile> _freundeNews = [];
+    private List<GeplantRef> _geplant = [];   // „möchte hingehen": vorgemerkte künftige Konzerte
+    private record GeplantRef(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort)
+    {
+        public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+    }
     private MarkupString _qrSvg = QrErzeugen();
 
     private RenderFragment FeedBlock(string titel, string icon, List<DigestService.Posten> posten) => __builder =>
@@ -456,11 +483,13 @@
         var userStatusTask = UserStatusLadenAsync();
         var teaserTask = TagebuchTeaserLadenAsync();
         var feedTask = FeedLadenAsync();
-        await Task.WhenAll(userStatusTask, teaserTask, feedTask);
+        var geplantTask = GeplantLadenAsync();
+        await Task.WhenAll(userStatusTask, teaserTask, feedTask, geplantTask);
 
         (_onboardingNoetig, _offeneAnfragen, _folgeAufruf, _adminBands) = userStatusTask.Result;
         _teaser = teaserTask.Result;
         _feed = feedTask.Result;
+        _geplant = geplantTask.Result;
         _geladen = true;
 
         // Geladene Daten für den interaktiven Lauf sichern (Prerender→Interaktiv).
@@ -480,7 +509,7 @@
         _komponistenCount, _personenCount, _bandsCount, _stueckeCount, _videosCount, _bewertungenCount,
         _komponisten, _bands, _neueVideos, _kalender,
         _onboardingNoetig, _offeneAnfragen, _folgeAufruf, _adminBands,
-        _teaser, _feed, _hatFreundeNews, _freundeNews);
+        _teaser, _feed, _hatFreundeNews, _freundeNews, _geplant);
 
     private void Anwenden(HomeSnapshot s)
     {
@@ -490,6 +519,7 @@
         _onboardingNoetig = s.OnboardingNoetig; _offeneAnfragen = s.OffeneAnfragen;
         _folgeAufruf = s.FolgeAufruf; _adminBands = s.AdminBands;
         _teaser = s.Teaser; _feed = s.Feed; _hatFreundeNews = s.HatFreundeNews; _freundeNews = s.FreundeNews;
+        _geplant = s.Geplant;
         _geladen = true;
     }
 
@@ -497,7 +527,8 @@
         int KomponistenCount, int PersonenCount, int BandsCount, int StueckeCount, int VideosCount, int BewertungenCount,
         List<Zeile> Komponisten, List<BandZeile> Bands, List<VideoZeile> NeueVideos, List<KalenderZeile> Kalender,
         bool OnboardingNoetig, int OffeneAnfragen, bool FolgeAufruf, List<BandRef> AdminBands,
-        TagebuchTeaser? Teaser, DigestService.Digest? Feed, bool HatFreundeNews, List<FreundZeile> FreundeNews);
+        TagebuchTeaser? Teaser, DigestService.Digest? Feed, bool HatFreundeNews, List<FreundZeile> FreundeNews,
+        List<GeplantRef> Geplant);
 
     // Globale, gecachte Daten – einmalig pro Cache-Intervall für alle User berechnet.
     private async Task<GlobaleDaten> GlobaleDatenLadenAsync()
@@ -599,6 +630,23 @@
         return new TagebuchTeaser(
             besuche.Count(b => b.Datum.Year == _heuer), besuche.Count,
             letzter.KonzertId, letzter.Name ?? letzter.Datum.ToString("dd.MM.yyyy"));
+    }
+
+    // „Ich möchte hingehen": vorgemerkte KÜNFTIGE Konzerte des Kontos (Status Geplant), nächste zuerst.
+    private async Task<List<GeplantRef>> GeplantLadenAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return [];
+        var heute = DateOnly.FromDateTime(DateTime.Today);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.KonzertBesuche
+            .Where(b => b.BenutzerId == userId && b.Konzert.Datum > heute)
+            .OrderBy(b => b.Konzert.Datum)
+            .Select(b => new GeplantRef(b.KonzertId, b.Konzert.Datum, b.Konzert.Uhrzeit, b.Konzert.Name,
+                b.Konzert.Lokal != null ? b.Konzert.Lokal.Name : b.Konzert.Ort))
+            .Take(6)
+            .ToListAsync();
     }
 
     // „Für dich"-Feed: Live-Zusammenstellung (ohne Dedup) aus Mitglied- ∪ gefolgten Bands.

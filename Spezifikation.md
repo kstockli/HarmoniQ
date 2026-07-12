@@ -666,7 +666,7 @@ KonzertBesuch                       (NEU – Konzert-Tagebuch: privates „Ich w
 ├── Id (Guid)
 ├── KonzertId (FK, Cascade)
 ├── BenutzerId (FK → AspNetUsers, erforderlich; Tagebuch erfordert Login)
-├── Notiz (Text?)                   ← optionale private Gesamt-Notiz zum Besuch
+├── Notiz (Text?)                   ← optionale private Gesamt-Notiz zum Besuch (auch vorab)
 ├── Sichtbarkeit (enum TagebuchSichtbarkeit, 1 Regler für den ganzen Eintrag):
 │     NurIch (0) / FreundeAnwesenheit (1, Default) / Freunde (2) / Oeffentlich (3)
 ├── ErstelltAm (DateTime)
@@ -711,6 +711,16 @@ StueckEindruck                      (NEU – privater Live-Eindruck je gespielte
 > je Programmpunkt (Bewerten impliziert „war dabei"). (2) Seite **„Mein Konzert-Tagebuch"**
 > (`/account/tagebuch`, Konto-Menü) – nach Jahr gruppierte Liste der Besuche + „Mein Konzert-Jahr"-
 > Statistik (Konzerte heuer/gesamt, bewertete Stücke, ⌀ Bewertung, Höhepunkte).
+>
+> **„Ich möchte hingehen" (UX-Feedback 2026-07, bewusst OHNE Status-Feld):** Ob ein Eintrag „möchte hin"
+> oder „war dabei" ist, wird **rein aus dem Konzertdatum** abgeleitet – kein zusätzliches Feld:
+> **strikt künftig** (Datum > heute) = „Da möchte ich hin", **heute oder vergangen** = „war dabei".
+> Ein `KonzertBesuch` ist einfach die Markierung. **Notizen** (Konzert- und Stück-Notiz) sind **auch
+> vorab** erfassbar; **Sterne-Bewertung** erst **ab dem Konzerttag** (Datum ≤ heute, unabhängig von der
+> Uhrzeit). Der Feed-Eintrag „war beim Konzert" entsteht nur für heutige/vergangene Konzerte (nie für
+> Vormerkungen). Wer doch nicht hingeht, wählt es einfach wieder ab („Doch nicht"). Geplante Konzerte
+> erscheinen in der **Übersicht**: Startseite (Block „Du möchtest hingehen") und Tagebuch (Abschnitt
+> „Ich möchte hingehen", aufsteigend); Statistik/Höhepunkte zählen die vergangenen/heutigen Einträge.
 > **Offen (Folgeschritt):** Import der bestehenden Excel-Besuchshistorie (Format noch zu klären).
 
 Richtigstellung                     (Freitext-Hinweis/Korrektur von eingeloggten Usern)

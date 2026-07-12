@@ -257,7 +257,8 @@ else
         var s = _suche.Trim();
         if (s.Length > 0)
             q = q.Where(k => (k.Name ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)
-                          || (k.Ort ?? "").Contains(s, StringComparison.OrdinalIgnoreCase));
+                          || (k.Ort ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)
+                          || k.BandNamen.Any(b => b.Contains(s, StringComparison.OrdinalIgnoreCase)));
 
         var liste = q.ToList();
         _ausgeblendet = 0;

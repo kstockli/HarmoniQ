@@ -75,18 +75,20 @@ hat (führt neue Nutzer zum Folgen → macht den Feed erst wertvoll). Sobald ein
 
 ---
 
-## 5. Konzerte: „Ich möchte hingehen" (statt „war da") 🔜
+## 5. Konzerte: „Ich möchte hingehen" (statt „war da") ✅
 **Feedback:** „Bei zukünftigen Konzerten kann man nicht ‚ich war da' sagen, sondern **‚ich möchte an
 dieses Konzert gehen'**. Solange das Konzert nicht durch ist, müsste das in meiner Übersicht sichtbar sein."
 
-**Plan (Datenmodell → Spezifikation.md mitpflegen):**
-- `KonzertBesuch` bekommt einen **Status: Geplant / Besucht**.
-- **Zukünftiges** Konzert: Aktion **„Ich möchte hingehen"** (Status Geplant). **Vergangenes**: „Ich war dabei"
-  (Besucht). Nach dem Konzertdatum fragt die bestehende **Tagebuch-Nachfrage** „Warst du da?" → Geplant→Besucht.
-- **Übersicht:** geplante (künftige) Konzerte erscheinen auf der **Startseite** und im **Tagebuch**
-  (Abschnitt „Geplant"), getrennt von den besuchten.
+**Umgesetzt — bewusst OHNE Status-Feld** (nach Diskussion mit Kuno: einfacher):
+- Ob „möchte hin" oder „war dabei", wird **rein aus dem Konzertdatum** abgeleitet (kein neues Feld,
+  keine Status-Migration). Strikt künftig (> heute) → **„Da möchte ich hin"**; heute/vergangen → **„Ich
+  war im Publikum"**. Ein `KonzertBesuch` ist einfach die Markierung; abwählen via „Doch nicht".
+- **Notizen** (Konzert + je Stück) schon **vorab** möglich; **Sterne** erst **ab dem Konzerttag**
+  (Datum ≤ heute, unabhängig von der Uhrzeit). Feed „war beim Konzert" nur für heutige/vergangene.
+- **Übersicht:** künftige Vormerkungen auf **Startseite** (Block „Du möchtest hingehen") und im
+  **Tagebuch** (Abschnitt „Ich möchte hingehen", aufsteigend), getrennt von den Besuchen.
 
-Größter Brocken, aber hoher Nutzen.
+Hinweis: der zwischenzeitliche Status-Ansatz wurde wieder entfernt (Migration zurückgenommen, war nur lokal).
 
 ---
 
