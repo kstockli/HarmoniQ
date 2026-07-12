@@ -1,22 +1,27 @@
-﻿@page "/Account/Login"
+@page "/Account/Login"
 
 @using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
 @using HarmoniQ.Web.Data
 
 @inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
 @inject SignInManager<ApplicationUser> SignInManager
+@inject IEmailSender<ApplicationUser> EmailSender
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Log in</PageTitle>
+<PageTitle>Anmelden</PageTitle>
 
 <div class="auth-wrap">
     <div class="auth-card">
-        <h1 class="auth-title">Anmelden</h1>
-        <p class="auth-sub">Melde dich mit deinem Konto an, um Aufnahmen zu bewerten.</p>
+        <h1 class="auth-title">@Titel</h1>
+        <p class="auth-sub">@Untertitel</p>
 
         @if (!string.IsNullOrEmpty(errorMessage))
         {
@@ -31,52 +36,80 @@
             </div>
         }
 
-        <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
-            <DataAnnotationsValidator />
-
-            <div class="auth-field">
-                <label for="Input.Email" class="auth-label">E-Mail-Adresse</label>
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="auth-input"
-                           autocomplete="username webauthn" aria-required="true" placeholder="name@beispiel.ch" />
-                <ValidationMessage For="() => Input.Email" class="text-danger" />
-            </div>
-
-            <div class="auth-field">
-                <label for="Input.Password" class="auth-label">Passwort</label>
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="auth-input"
-                           autocomplete="current-password" aria-required="true" placeholder="Dein Passwort" />
-                <ValidationMessage For="() => Input.Password" class="text-danger" />
-            </div>
-
-            <label class="auth-check">
-                <InputCheckbox @bind-Value="Input.RememberMe" /> Angemeldet bleiben
-            </label>
-
-            <button type="submit" class="auth-btn">Anmelden</button>
-
+        @* Schritt 1: externe Dienste zuerst, dann E-Mail. *@
+        @if (Input.Phase == "email")
+        {
+            <ExternalLoginPicker />
             <div class="auth-divider">oder</div>
-            <div style="text-align:center;">
-                <PasskeySubmit Operation="PasskeyOperation.Request" Name="Input.Passkey" EmailName="Input.Email" class="btn btn-link">Mit Passkey anmelden</PasskeySubmit>
-            </div>
+        }
 
-            <div class="auth-links">
-                <a href="Account/ForgotPassword">Passwort vergessen?</a><br />
-                <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Neues Konto erstellen</a>
-            </div>
+        <EditForm Model="Input" method="post" OnSubmit="Weiter" FormName="auth">
+            <input type="hidden" name="Input.Phase" value="@Input.Phase" />
+
+            @if (Input.Phase == "email")
+            {
+                <div class="auth-field">
+                    <label for="Input.Email" class="auth-label">E-Mail-Adresse</label>
+                    <InputText @bind-Value="Input.Email" id="Input.Email" class="auth-input"
+                               autocomplete="username webauthn" aria-required="true" placeholder="name@beispiel.ch" />
+                </div>
+                <button type="submit" class="auth-btn">Weiter</button>
+
+                <div class="auth-divider">oder</div>
+                <div style="text-align:center;">
+                    <PasskeySubmit Operation="PasskeyOperation.Request" Name="Input.Passkey" EmailName="Input.Email" class="btn btn-link">Mit Passkey anmelden</PasskeySubmit>
+                </div>
+            }
+            else
+            {
+                @* Schritt 2: E-Mail steht fest (änderbar über „ändern"). *@
+                <div class="auth-field">
+                    <label class="auth-label">E-Mail-Adresse</label>
+                    <div style="display:flex; align-items:center; gap:.5rem;">
+                        <InputText @bind-Value="Input.Email" class="auth-input" readonly style="flex:1;" />
+                        <button type="submit" name="Input.Aktion" value="aendern" formnovalidate
+                                class="btn btn-link" style="white-space:nowrap;">ändern</button>
+                    </div>
+                </div>
+
+                @if (Input.Phase == "login")
+                {
+                    <div class="auth-field">
+                        <label for="Input.Password" class="auth-label">Passwort</label>
+                        <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="auth-input"
+                                   autocomplete="current-password" aria-required="true" placeholder="Dein Passwort" />
+                    </div>
+                    <label class="auth-check">
+                        <InputCheckbox @bind-Value="Input.RememberMe" /> Angemeldet bleiben
+                    </label>
+                    <button type="submit" class="auth-btn">Anmelden</button>
+                    <div class="auth-links">
+                        <a href="Account/ForgotPassword">Passwort vergessen?</a>
+                    </div>
+                }
+                else
+                {
+                    <p class="auth-sub" style="margin-top:0;">Diese E-Mail hat noch kein Konto – wir erstellen jetzt ein kostenloses.</p>
+                    <div class="auth-field">
+                        <label for="Input.Password" class="auth-label">Passwort wählen</label>
+                        <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="auth-input"
+                                   autocomplete="new-password" aria-required="true" placeholder="Mindestens 6 Zeichen" />
+                    </div>
+                    <div class="auth-field">
+                        <label for="Input.ConfirmPassword" class="auth-label">Passwort wiederholen</label>
+                        <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="auth-input"
+                                   autocomplete="new-password" aria-required="true" placeholder="Passwort nochmals eingeben" />
+                    </div>
+                    <button type="submit" class="auth-btn">Kostenlos registrieren</button>
+                }
+            }
         </EditForm>
-    </div>
-
-    <div class="auth-card">
-        <h2 class="auth-title" style="font-size:1.3rem;">Mit Dienst anmelden</h2>
-        <p class="auth-sub">Schnell und ohne neues Passwort.</p>
-        <ExternalLoginPicker />
     </div>
 </div>
 
 @code {
     private string? errorMessage;
     private bool _emailUnbestaetigt;
-    private EditContext editContext = default!;
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -87,46 +120,100 @@
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
+    private string Titel => Input.Phase switch
+    {
+        "login" => "Willkommen zurück",
+        "register" => "Konto erstellen",
+        _ => "Anmelden oder registrieren"
+    };
+
+    private string Untertitel => Input.Phase switch
+    {
+        "login" => "Gib dein Passwort ein.",
+        "register" => "Nur noch ein Passwort wählen – fertig.",
+        _ => "Melde dich an oder erstelle ein Konto – ein Einstieg für beides."
+    };
+
     protected override async Task OnInitializedAsync()
     {
         Input ??= new();
 
-        editContext = new EditContext(Input);
-
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
-            // Clear the existing external cookie to ensure a clean login process
+            // Sauberer Start: bestehendes externes Cookie entfernen.
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
     }
 
-    public async Task LoginUser()
+    public async Task Weiter()
     {
-        if (!string.IsNullOrEmpty(Input.Passkey?.Error))
+        errorMessage = null;
+
+        // „ändern": zurück zu Schritt 1, E-Mail bleibt bearbeitbar erhalten.
+        if (Input.Aktion == "aendern")
         {
-            errorMessage = $"Error: {Input.Passkey.Error}";
+            Input.Phase = "email";
+            Input.Password = Input.ConfirmPassword = "";
+            Input.Aktion = null;
             return;
         }
 
-        SignInResult result;
+        // Passkey (aus Schritt 1): keine Formularvalidierung nötig.
+        if (!string.IsNullOrEmpty(Input.Passkey?.Error))
+        {
+            errorMessage = $"Fehler: {Input.Passkey.Error}";
+            return;
+        }
         if (!string.IsNullOrEmpty(Input.Passkey?.CredentialJson))
         {
-            // When performing passkey sign-in, don't perform form validation.
-            result = await SignInManager.PasskeySignInAsync(Input.Passkey.CredentialJson);
+            NachSignIn(await SignInManager.PasskeySignInAsync(Input.Passkey.CredentialJson));
+            return;
         }
-        else
+
+        var email = (Input.Email ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
         {
-            // If doing a password sign-in, validate the form.
-            if (!editContext.Validate())
+            Input.Phase = "email";
+            errorMessage = "Bitte gib eine gültige E-Mail-Adresse ein.";
+            return;
+        }
+
+        // Schritt 1 → entscheiden: bekanntes Konto (Anmelden) oder neu (Registrieren).
+        if (Input.Phase == "email")
+        {
+            var vorhanden = await UserManager.FindByEmailAsync(email);
+            Input.Phase = vorhanden is null ? "register" : "login";
+            Input.Password = Input.ConfirmPassword = "";
+            return;
+        }
+
+        if (Input.Phase == "login")
+        {
+            if (string.IsNullOrEmpty(Input.Password))
             {
+                errorMessage = "Bitte gib dein Passwort ein.";
                 return;
             }
-
-            // This doesn't count login failures towards account lockout
-            // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-            result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+            NachSignIn(await SignInManager.PasswordSignInAsync(email, Input.Password, Input.RememberMe, lockoutOnFailure: false));
+            return;
         }
 
+        // register
+        if (Input.Password.Length < 6)
+        {
+            errorMessage = "Das Passwort muss mindestens 6 Zeichen lang sein.";
+            return;
+        }
+        if (Input.Password != Input.ConfirmPassword)
+        {
+            errorMessage = "Passwort und Bestätigung stimmen nicht überein.";
+            return;
+        }
+        await RegistrierenAsync(email);
+    }
+
+    private void NachSignIn(SignInResult result)
+    {
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
@@ -134,8 +221,7 @@
         }
         else if (result.RequiresTwoFactor)
         {
-            RedirectManager.RedirectTo(
-                "Account/LoginWith2fa",
+            RedirectManager.RedirectTo("Account/LoginWith2fa",
                 new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
         }
         else if (result.IsLockedOut)
@@ -150,22 +236,80 @@
         }
         else
         {
-            errorMessage = "Anmeldung fehlgeschlagen: E-Mail oder Passwort ist falsch.";
+            errorMessage = "Anmeldung fehlgeschlagen: Passwort ist falsch.";
         }
+    }
+
+    private async Task RegistrierenAsync(string email)
+    {
+        var user = CreateUser();
+        await UserStore.SetUserNameAsync(user, email, CancellationToken.None);
+        var emailStore = GetEmailStore();
+        await emailStore.SetEmailAsync(user, email, CancellationToken.None);
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (!result.Succeeded)
+        {
+            errorMessage = "Registrierung fehlgeschlagen: " + string.Join(", ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        Logger.LogInformation("User created a new account with password.");
+
+        var userId = await UserManager.GetUserIdAsync(user);
+        var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+        code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+        var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+            NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+            new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+
+        await EmailSender.SendConfirmationLinkAsync(user, email, HtmlEncoder.Default.Encode(callbackUrl));
+
+        if (UserManager.Options.SignIn.RequireConfirmedAccount)
+        {
+            RedirectManager.RedirectTo("Account/RegisterConfirmation",
+                new() { ["email"] = email, ["returnUrl"] = ReturnUrl });
+        }
+        else
+        {
+            await SignInManager.SignInAsync(user, isPersistent: false);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+    }
+
+    private ApplicationUser CreateUser()
+    {
+        try
+        {
+            return Activator.CreateInstance<ApplicationUser>();
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
+                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor.");
+        }
+    }
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    {
+        if (!UserManager.SupportsUserEmail)
+        {
+            throw new NotSupportedException("The default UI requires a user store with email support.");
+        }
+        return (IUserEmailStore<ApplicationUser>)UserStore;
     }
 
     private sealed class InputModel
     {
-        [Required]
-        [EmailAddress]
         public string Email { get; set; } = "";
-
-        [Required]
-        [DataType(DataType.Password)]
         public string Password { get; set; } = "";
-
-        [Display(Name = "Remember me?")]
+        public string ConfirmPassword { get; set; } = "";
         public bool RememberMe { get; set; }
+
+        // Ablaufsteuerung der einen Maske: email → login | register.
+        public string Phase { get; set; } = "email";
+        // Nur für den „ändern"-Knopf (zurück zu Schritt 1).
+        public string? Aktion { get; set; }
 
         public PasskeyInputModel? Passkey { get; set; }
     }

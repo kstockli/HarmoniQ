@@ -58,7 +58,8 @@ else
     private BandAdminEinladung? _einladung;
 
     private string Ziel => $"/einladung/{Token}";
-    private string RegisterUrl => $"Account/Register?ReturnUrl={Uri.EscapeDataString(Ziel)}";
+    // Registrieren und Anmelden laufen über dieselbe identifier-first-Maske (/Account/Login).
+    private string RegisterUrl => $"Account/Login?ReturnUrl={Uri.EscapeDataString(Ziel)}";
     private string LoginUrl => $"Account/Login?ReturnUrl={Uri.EscapeDataString(Ziel)}";
 
     protected override async Task OnInitializedAsync()
