@@ -73,6 +73,14 @@ via `PersistentComponentState` vermeiden — dafür Prod-Logs der langsamsten Qu
   Prod deployen, Konzert öffnen, die `KonzertDetail …: total …ms`-Logzeile aus Railway teilen** → dann ist
   klar, ob Kaltstart-Kompilierung, DB-Latenz oder Doppellauf. Mögliche Fixes danach: App warm halten
   (Infra), EF-Query-Warmup beim Start, `PersistentComponentState` gegen den Doppellauf.
+- **GELÖST (2026-07-12): Ursache war die DB-Region.** Prod-Log zeigte **~140 ms JE Abfrage** (× ~15 × 2
+  Läufe ≈ 4 s). Grund: **Web-Service in Amsterdam, Postgres in den USA** (interne Verbindung, aber
+  Cross-Region-Round-Trip ~140 ms). Nach **Postgres → Amsterdam**: `KonzertDetail … total 47ms`
+  (Konzert-Query 3 ms statt 140 ms). ✅ An der Wurzel gelöst.
+  Danach aufgeräumt: temporäre Zeitmess-Logzeile **entfernt**; `[StreamRendering]` auf KonzertDetail
+  **zurückgenommen** (erzwang unkomprimierte Antwort → jetzt wieder `br`-komprimiert). Der **Doppellauf**
+  (Prerender + Hydration, by-design für Tempo/SEO) ist bei 47 ms vernachlässigbar → bewusst belassen;
+  saubere Vermeidung via `PersistentComponentState` nur auf der Startseite (dort lohnend).
 
 ---
 
@@ -169,14 +177,17 @@ wurde nie gebaut**.
 des Kontos entfernen, `BandAdminEinladung.EingeladenVon` → null; dann `UserManager.DeleteAsync`
 (räumt AspNetUserRoles/Claims/Logins). FK-Verhalten je Tabelle vor der Umsetzung prüfen.
 
-## 9. Person-Löschen „hängt" (Prod) 🔜
-**Feedback:** „Beim Person-Löschen hängt es auch auf harmoniq.q-no.ch."
-**Diagnose:** `db.Personen.Remove` + `SaveChanges` löst DB-**Cascade** über viele abhängige Tabellen aus
-(KonzertPersonen, StueckBeitraege, Aktivitäten, Aliase, Rollen, Instrumente, Links, Mitgliedschaften,
-Interessen …). Lokal (wenig Daten) schnell, auf Prod (mehr Daten) langsam – vermutlich fehlende Indizes
-auf einzelnen `PersonId`-FKs oder tiefe Cascade-Kette.
-**Plan:** mit Prod-Logs/`EXPLAIN` die langsame(n) Cascade-Query(s) finden; fehlende FK-Indizes ergänzen;
-zudem im UI einen **Lade-/„läuft…"-Zustand** zeigen, damit es nicht „eingefroren" wirkt.
+## 9. Person-Löschen scheitert (Prod) ✅
+**Feedback / Prod-Fehler:** `update or delete on table "Personen" violates RESTRICT setting of foreign key
+constraint "FK_Freundschaften_Personen_AnfragerPersonId"`.
+**Ursache:** `Freundschaft` hat zwei FKs auf `Person` mit **`OnDelete(Restrict)`** (bewusst, um doppelte
+Kaskadenpfade zu vermeiden — laut Code-Kommentar sollte „die Person vorher aus Freundschaften entfernt"
+werden). Genau dieses Vorab-Löschen fehlte im **direkten Admin-Löschen** (`PersonenAdmin.Loeschen`). Der
+**Merge** (`PersonMergeService`) macht es korrekt; nur das Löschen nicht. Alle anderen Person-FKs sind
+Cascade/SetNull.
+**Fix:** In `PersonenAdmin.Loeschen` vor `Personen.Remove` die Freundschaften der Person per
+`ExecuteDeleteAsync` entfernen (beide FK-Richtungen). DB-verifiziert: alter Weg → exakt dieser
+FK-Fehler; neuer Weg (erst Freundschaften, dann Person) → Erfolg.
 
 ## Empfohlene Reihenfolge
 1. **Performance** ✅ Code (Stream-Rendering + Cache); Railway-Keep-warm bleibt Kunos Infra-Schritt.

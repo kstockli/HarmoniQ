@@ -195,6 +195,11 @@
         if (result is null || result.Canceled) return;
 
         await using var db = await DbFactory.CreateDbContextAsync();
+        // Freundschaften sind bewusst RESTRICT (kein Cascade, um doppelte Kaskadenpfade zu vermeiden) →
+        // vor dem Löschen der Person explizit entfernen, sonst bricht das Löschen mit FK-Fehler ab.
+        await db.Freundschaften
+            .Where(f => f.AnfragerPersonId == z.Id || f.EmpfaengerPersonId == z.Id)
+            .ExecuteDeleteAsync();
         var entity = await db.Personen.FindAsync(z.Id);
         if (entity != null) { db.Personen.Remove(entity); await db.SaveChangesAsync(); Snackbar.Add("Gelöscht.", Severity.Success); }
         await Laden();
