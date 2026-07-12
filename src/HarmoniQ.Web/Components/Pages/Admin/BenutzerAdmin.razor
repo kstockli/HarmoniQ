@@ -71,6 +71,13 @@
                            StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => Bearbeiten(context.Item))">
                     Verknüpfung
                 </MudButton>
+                @if (context.Item.Id != _aktuellerUserId)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.DeleteOutline" OnClick="@(() => Loeschen(context.Item))">
+                        Löschen
+                    </MudButton>
+                }
             </CellTemplate>
         </TemplateColumn>
     </Columns>
@@ -205,6 +212,45 @@
         }
 
         Snackbar.Add("Gespeichert.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Loeschen(Zeile z)
+    {
+        if (z.Id == _aktuellerUserId)
+        {
+            Snackbar.Add("Du kannst dein eigenes Konto hier nicht löschen.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Text, $"Benutzerkonto \"{z.Email ?? z.Id}\" endgültig löschen? Die verknüpfte Person bleibt erhalten (wird nur entkoppelt). Tagebuch, Bewertungen, Benachrichtigungen und Band-Admin-Rechte dieses Kontos werden entfernt." }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Benutzer löschen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        // Vor dem Löschen bereinigen, was die DB NICHT automatisch räumt:
+        // - Bewertungen: FK ist NO ACTION → würde das Löschen blockieren.
+        // - BandAdministratoren / BandAdminEinladung.EingeladenVon: keine DB-FK auf AspNetUsers → sonst
+        //   blieben „Geister"-Adminrechte bzw. dangling Verweise auf ein gelöschtes Konto zurück.
+        // Alles Übrige (Tagebuch, Präferenzen, Push, Ansprüche, Identity-Tabellen) ist CASCADE,
+        // Person/Videos/Richtigstellungen sind SET NULL → erledigt die DB beim Löschen selbst.
+        await db.Bewertungen.Where(b => b.BenutzerId == z.Id).ExecuteDeleteAsync();
+        await db.BandAdministratoren.Where(a => a.BenutzerId == z.Id).ExecuteDeleteAsync();
+        await db.BandAdminEinladungen.Where(e => e.EingeladenVon == z.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.EingeladenVon, (string?)null));
+
+        var user = await UserManager.FindByIdAsync(z.Id);
+        if (user is null) { Snackbar.Add("Benutzer nicht gefunden.", Severity.Warning); await Laden(); return; }
+
+        var res = await UserManager.DeleteAsync(user);
+        Snackbar.Add(res.Succeeded
+            ? "Benutzer gelöscht."
+            : "Löschen fehlgeschlagen: " + string.Join(", ", res.Errors.Select(e => e.Description)),
+            res.Succeeded ? Severity.Success : Severity.Error);
         await Laden();
     }
 

@@ -168,14 +168,19 @@ entscheidet das System, ob bekannt (→ Passwort) oder neu (→ Registrierung). 
 
 Auth-sensibel → sorgfältig umsetzen und testen (bestehende Identity-Flows/Bestätigungsmail beachten).
 
-## 8. Admin: Benutzer löschen 🔜
-**Feedback:** „Wieso kann ich als Admin keine Benutzer löschen?"
-**Antwort/Diagnose:** Auf `/admin/benutzer` gibt es nur „Verknüpfung" (Person zuordnen) – ein **Löschen
-wurde nie gebaut**.
-**Plan:** Lösch-Aktion mit Bestätigung. Sauber verknüpfte Daten behandeln: `Person.BenutzerId` → null
-(Person bleibt), `BandAdministrator`/`KonzertBesuch`/`PushSubscription`/`BenachrichtigungPraeferenz`
-des Kontos entfernen, `BandAdminEinladung.EingeladenVon` → null; dann `UserManager.DeleteAsync`
-(räumt AspNetUserRoles/Claims/Logins). FK-Verhalten je Tabelle vor der Umsetzung prüfen.
+## 8. Admin: Benutzer löschen ✅
+**Feedback:** „Wieso kann ich als Admin keine Benutzer löschen?" → Auf `/admin/benutzer` gab es nur
+„Verknüpfung"; ein Löschen war nie gebaut.
+**FK-Verhalten (aus der DB abgefragt):** CASCADE = Identity-Tabellen, KonzertBesuche, StueckEindruecke,
+PersonAnsprueche, Benachrichtigungen/Praeferenzen, PushSubscriptions · SET NULL = Personen.BenutzerId,
+Videos/Richtigstellungen/BandbeitrittAntraege/VideoMitwirkungen (…VonId) · **NO ACTION = Bewertungen**
+(blockiert!) · **keine DB-FK = BandAdministratoren, BandAdminEinladung.EingeladenVon** (Waisen-Gefahr).
+**Umgesetzt** (`BenutzerAdmin.razor`): Lösch-Knopf pro Zeile (nicht fürs eigene Konto) + Bestätigung.
+Vor `UserManager.DeleteAsync` werden **Bewertungen** und **BandAdministratoren** des Kontos per
+`ExecuteDeleteAsync` entfernt und `BandAdminEinladung.EingeladenVon` genullt; den Rest erledigt die DB
+(Cascade/SetNull). Person bleibt erhalten (nur entkoppelt).
+**DB-verifiziert:** ohne Bereinigung → Block durch `FK_Bewertungen_AspNetUsers_BenutzerId`; mit Fix →
+User weg, KonzertBesuch weg (Cascade), Person bleibt mit `BenutzerId = NULL` (SET NULL).
 
 ## 9. Person-Löschen scheitert (Prod) ✅
 **Feedback / Prod-Fehler:** `update or delete on table "Personen" violates RESTRICT setting of foreign key
