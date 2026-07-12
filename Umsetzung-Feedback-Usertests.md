@@ -39,6 +39,15 @@ danach **~1,1 s** (lokal ~0,1 s). Nach dem Deploy des Stream-Renderings sollte �
 etwas" deutlich besser sein (Gerüst kommt vor den DB-Abfragen). Die ~1,1 s warm deuten auf
 **App↔DB-Latenz** (Railway-Netz) + Circuit-Start; nach Deploy neu messen, ggf. DB-Region/Pooling prüfen.
 
+**„Zurück zur Startseite" laggy (~3 s) — Fix per Konto-Cache (2026-07-12):** Ursache: jede Navigation
+ZURÜCK zur Startseite lädt die Seite komplett neu und führt **alle nutzerspezifischen Abfragen erneut**
+aus (`FeedLadenAsync` + `DigestService` ≈ 12 DB-Round-Trips); der `PersistentComponentState`-Cache
+greift nur beim allerersten Aufruf. Fix: die teuren nutzerspezifischen Daten (Feed/Status/Teaser)
+werden **pro Konto 30 s server-seitig gecacht** (`home:user:{userId}`); die **Vormerkungen („geplant")
+bleiben live** (schlanke Query) → „zurück" ist schnell UND eine soeben gesetzte „möchte hin" ist sofort
+sichtbar. Lokal verifiziert (Feed aus Cache, Vormerkung live). **Prod-Wirkung nach Deploy bestätigen.**
+Offen falls der ERSTE Aufruf noch zu langsam ist: `DigestService`-Queries reduzieren/bündeln.
+
 ---
 
 ## 2. Bands-Liste & Filter ✅

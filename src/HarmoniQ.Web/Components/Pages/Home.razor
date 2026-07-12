@@ -478,18 +478,33 @@
         _neueVideos = global.NeueVideos;   // global gecacht (kommende Konzerte/neue Videos ändern selten)
         _kalender = global.Kalender;
 
-        // (2) Nur noch die NUTZER-SPEZIFISCHEN Queries laufen pro Aufruf – parallel, je Task ein
-        // eigener Kontext aus der Factory (DbContext ist nicht thread-sicher), via Task.WhenAll.
-        var userStatusTask = UserStatusLadenAsync();
-        var teaserTask = TagebuchTeaserLadenAsync();
-        var feedTask = FeedLadenAsync();
-        var geplantTask = GeplantLadenAsync();
-        await Task.WhenAll(userStatusTask, teaserTask, feedTask, geplantTask);
+        // (2) Nutzer-spezifische, TEURE Daten (Feed/Status/Teaser – zusammen ~12 DB-Round-Trips) pro
+        // Konto kurz cachen (30 s). Das macht „zurück zur Startseite" schnell (auf Prod war es sonst
+        // ~3 s, weil bei jedem Aufruf alle Abfragen erneut gegen die latente DB liefen). Diese Daten
+        // ändern sich nicht durch eine Konzert-Vormerkung, daher unbedenklich.
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-        (_onboardingNoetig, _offeneAnfragen, _folgeAufruf, _adminBands) = userStatusTask.Result;
-        _teaser = teaserTask.Result;
-        _feed = feedTask.Result;
-        _geplant = geplantTask.Result;
+        var ud = string.IsNullOrEmpty(userId)
+            ? new UserHomeDaten(false, 0, false, [], null, new([], [], [], []), false, [])
+            : (await Cache.GetOrCreateAsync($"home:user:{userId}", async e =>
+            {
+                e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30);
+                var statusT = UserStatusLadenAsync();
+                var teaserT = TagebuchTeaserLadenAsync();
+                var feedT = FeedLadenAsync(userId);
+                await Task.WhenAll(statusT, teaserT, feedT);
+                var (on, of, fa, ab) = statusT.Result;
+                var fe = feedT.Result;
+                return new UserHomeDaten(on, of, fa, ab, teaserT.Result, fe.Feed, fe.HatFreundeNews, fe.FreundeNews);
+            }))!;
+
+        _onboardingNoetig = ud.OnboardingNoetig; _offeneAnfragen = ud.OffeneAnfragen;
+        _folgeAufruf = ud.FolgeAufruf; _adminBands = ud.AdminBands;
+        _teaser = ud.Teaser; _feed = ud.Feed; _hatFreundeNews = ud.HatFreundeNews; _freundeNews = ud.FreundeNews;
+
+        // Vormerkungen IMMER live (eine schlanke Query) → eine soeben gesetzte „möchte hin" ist sofort da.
+        _geplant = await GeplantLadenAsync();
         _geladen = true;
 
         // Geladene Daten für den interaktiven Lauf sichern (Prerender→Interaktiv).
@@ -651,11 +666,8 @@
 
     // „Für dich"-Feed: Live-Zusammenstellung (ohne Dedup) aus Mitglied- ∪ gefolgten Bands.
     // Ermittelt nebenbei, ob es Freunde-News gibt (steuert die Freunde-Sektion im „Für dich").
-    private async Task<DigestService.Digest> FeedLadenAsync()
+    private async Task<FeedErgebnis> FeedLadenAsync(string userId)
     {
-        var authState = await AuthProvider.GetAuthenticationStateAsync();
-        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userId)) return new([], [], [], []);
         await using var db = await DbFactory.CreateDbContextAsync();
 
         // Freunde-News (sichtbare Aktivitäten von Freund:innen/Bandkolleg:innen), kompakt & gekappt,
@@ -679,15 +691,19 @@
             .ToDictionaryAsync(x => x.Id, x => x.T);
 
         var jetzt = DateTime.UtcNow;
-        _freundeNews = roh.Select(a =>
+        var freundeNews = roh.Select(a =>
         {
             var (aktion, href) = AktivitaetText(a.Typ, a.Text, a.ZielTyp, a.ZielId, vTitel, kTitel, a.NebenPersonId, a.NebenName, a.AkteurPersonId);
             return new FreundZeile(a.Name, aktion, AktivitaetIcon(a.Typ), AktivitaetLabel(a.Zeitpunkt, jetzt), href);
         }).ToList();
-        _hatFreundeNews = _freundeNews.Count > 0;
 
-        return await DigestService.ErstelleAsync(db, userId, nurUngesehene: false);
+        var digest = await DigestService.ErstelleAsync(db, userId, nurUngesehene: false);
+        return new FeedErgebnis(digest, freundeNews.Count > 0, freundeNews);
     }
+
+    private record FeedErgebnis(DigestService.Digest Feed, bool HatFreundeNews, List<FreundZeile> FreundeNews);
+    private record UserHomeDaten(bool OnboardingNoetig, int OffeneAnfragen, bool FolgeAufruf, List<BandRef> AdminBands,
+        TagebuchTeaser? Teaser, DigestService.Digest Feed, bool HatFreundeNews, List<FreundZeile> FreundeNews);
 
     private static string Kurz(string? s, int max = 90)
         => string.IsNullOrWhiteSpace(s) ? "" : (s.Length > max ? s[..max] + "…" : s);
