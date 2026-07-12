@@ -1,8 +1,10 @@
 @inherits LayoutComponentBase
 @using Microsoft.Extensions.Hosting
+@using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
 @inject IWebHostEnvironment Env
 @inject AuthenticationStateProvider AuthProvider
+@inject IDbContextFactory<HarmoniQ.Web.Data.ApplicationDbContext> DbFactory
 @inject HarmoniQ.Web.Data.BenutzerKontext BenutzerKontext
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
@@ -68,7 +70,15 @@
                     background:#12001f;border-top:1px solid #3a1060;">
             @BottomTab("/", Icons.Material.Filled.Home, "Start")
             @BottomTab("/konzerte", Icons.Material.Filled.Event, "Konzerte")
-            @BottomTab("/account/tagebuch", Icons.Material.Filled.MenuBook, "Tagebuch")
+            @* Ohne Tagebuch-Eintrag führt der Tab zu „Bands" (Folgen macht den Feed erst wertvoll, UX-Feedback). *@
+            @if (_hatTagebuch)
+            {
+                @BottomTab("/account/tagebuch", Icons.Material.Filled.MenuBook, "Tagebuch")
+            }
+            else
+            {
+                @BottomTab("/bands", Icons.Material.Filled.Groups, "Bands")
+            }
             @BottomTab("/videos", Icons.Material.Filled.VideoLibrary, "Videos")
             <div @onclick="ToggleDrawer" style="@_bottomItemStyle">
                 <MudIcon Icon="@Icons.Material.Filled.Menu" Size="Size.Small" Style="color:#D4AF37;" />
@@ -96,7 +106,17 @@
         // Aktuelle Person für die Audit-Spalten (createuser/modifyuser) im Circuit hinterlegen.
         var state = await AuthProvider.GetAuthenticationStateAsync();
         BenutzerKontext.Setzen(state.User.Identity?.IsAuthenticated == true ? state.User.Identity.Name : null);
+
+        // Hat das Konto schon Tagebuch-Einträge? Sonst zeigt die Bottom-Nav „Bands" statt „Tagebuch".
+        var userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _hatTagebuch = await db.KonzertBesuche.AnyAsync(b => b.BenutzerId == userId);
+        }
     }
+
+    private bool _hatTagebuch;
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 

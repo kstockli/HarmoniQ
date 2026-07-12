@@ -56,7 +56,7 @@ etwas" deutlich besser sein (Gerüst kommt vor den DB-Abfragen). Die ~1,1 s warm
 
 ---
 
-## 3. Filter allgemein vereinfachen (öffentliche Seiten) — `/bands` ✅ · `/konzerte` 🔜
+## 3. Filter allgemein vereinfachen (öffentliche Seiten) — `/bands` ✅ · `/konzerte` ✅
 **Feedback:** „Einfacher: nur **1 Filter** und ein Knopf **‚Mehr Filter'**, wo man Standort/Stärkeklasse
 etc. detailliert filtern kann."
 
@@ -66,7 +66,7 @@ gleiche Muster steht für **`/konzerte`** noch aus.
 
 ---
 
-## 4. Einstieg / Bottom-Navigation 🔜
+## 4. Einstieg / Bottom-Navigation ✅
 **Feedback:** „Knöpfe unten: solange man kein Tagebuch hat, soll **Bands** da stehen."
 
 **Plan:** Bottom-Nav zeigt **„Bands"** statt „Tagebuch", solange das Konto **keinen Tagebuch-Eintrag**
