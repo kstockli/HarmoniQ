@@ -1,4 +1,5 @@
 @page "/konzerte/{Id:guid}"
+@attribute [StreamRendering]
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
@@ -10,6 +11,7 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ILogger<KonzertDetail> Logger
 
 <PageTitle>@(_konzert?.Titel ?? "Konzert") – HarmoniQ</PageTitle>
 
@@ -302,11 +304,17 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        // Temporäre Perf-Messung: zeigt in den (Prod-)Logs, welche Phase die Ladezeit frisst.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long tKonzert = 0, tPublic = 0, tDbOpen = 0;
+
         await using var db = await DbFactory.CreateDbContextAsync();
+        tDbOpen = sw.ElapsedMilliseconds;
 
         var k = await db.Konzerte.Include(x => x.Lokal).FirstOrDefaultAsync(x => x.Id == Id);
         if (k == null) { Nav.NavigateTo("/konzerte"); return; }
         _konzert = new KonzertKopf(k.Id, k.Datum, k.Uhrzeit, k.Name, k.Lokal?.Name ?? k.Ort, k.Beschreibung, k.BildUrl);
+        tKonzert = sw.ElapsedMilliseconds;
 
         // Koordinaten für die Karte (nur wenn beide gesetzt).
         _lokalLat = _lokalLng = null;
@@ -356,6 +364,7 @@ else
             .Include(kp => kp.Band)
             .ToListAsync();
 
+        tPublic = sw.ElapsedMilliseconds;
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
@@ -441,6 +450,10 @@ else
         await EindrueckeLadenAsync(db, userId, freundIds);
 
         _jsonLd = BaueJsonLd();
+
+        Logger.LogInformation(
+            "KonzertDetail {Id}: total {Total}ms (DbOpen {DbOpen}ms, Konzert {K}ms, PublicData bis {P}ms, User+Eindruecke {U}ms)",
+            Id, sw.ElapsedMilliseconds, tDbOpen, tKonzert, tPublic, sw.ElapsedMilliseconds - tPublic);
     }
 
     // Schema.org MusicEvent (JSON-LD) – nur öffentliche Konzertdaten (Titel/Datum/Ort/Geo/Bands),

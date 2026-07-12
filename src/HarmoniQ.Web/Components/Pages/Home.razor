@@ -489,7 +489,10 @@
             ? new UserHomeDaten(false, 0, false, [], null, new([], [], [], []), false, [])
             : (await Cache.GetOrCreateAsync($"home:user:{userId}", async e =>
             {
-                e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30);
+                // Gleitend: jeder Startseiten-Besuch verlängert die 30 s neu (Browsen bleibt schnell).
+                // Absolute Obergrenze 5 min gegen Dauer-Staleness.
+                e.SlidingExpiration = TimeSpan.FromSeconds(30);
+                e.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
                 var statusT = UserStatusLadenAsync();
                 var teaserT = TagebuchTeaserLadenAsync();
                 var feedT = FeedLadenAsync(userId);

@@ -48,6 +48,32 @@ bleiben live** (schlanke Query) → „zurück" ist schnell UND eine soeben gese
 sichtbar. Lokal verifiziert (Feed aus Cache, Vormerkung live). **Prod-Wirkung nach Deploy bestätigen.**
 Offen falls der ERSTE Aufruf noch zu langsam ist: `DigestService`-Queries reduzieren/bündeln.
 
+**Cache jetzt GLEITEND (2026-07-12):** war fälschlich absolut 30 s (ab Erstellung) → nach 30 s wieder
+langsam. Jetzt `SlidingExpiration = 30 s` (+ absolute Obergrenze 5 min) → jeder Startseiten-Besuch
+verlängert neu, Browsen bleibt schnell.
+
+**Konzert-Detailseite langsam (3–5 s) — auf PROD GEMESSEN (curl):** Server-TTFB **~1,1 s warm / 2,15 s
+kalt**, **kein** Stream-Marker → der Prerender blockierte bis alle Abfragen fertig waren. Die gefühlten
+3–5 s = Server-Render **+** Client: KonzertDetail hatte **kein** `PersistentComponentState`, d. h. beim
+(Enhanced-Navigation-)Laden laufen die Abfragen **zweimal** (Prerender + interaktive Hydration). Fix
+jetzt: **`@attribute [StreamRendering]`** auf KonzertDetail → Gerüst/Spinner **sofort**, Inhalt streamt
+nach (lokal verifiziert: Stream-Marker + Spinner im ersten Chunk). **Offen falls weiter zu langsam:**
+KonzertDetail-Abfragen parallelisieren/reduzieren (viele sequenzielle Round-Trips) und/oder Doppellauf
+via `PersistentComponentState` vermeiden — dafür Prod-Logs der langsamsten Query nutzen.
+
+**Weitere Mess-Befunde (2026-07-12, Prod-URL vom User):**
+- **Response-Compression war AUS** (Prod-Antwort ohne `Content-Encoding`, 95 KB HTML unkomprimiert). Jetzt
+  `AddResponseCompression` (Brotli/Gzip, `EnableForHttps`) in Program.cs. Lokal verifiziert: `/bands`,
+  `/`, `/konzerte` → `br`. **Hinweis:** eine `[StreamRendering]`-Seite, die tatsächlich streamt, liefert
+  `identity` (Blazor puffert den Stream nicht) → Konzert-Detailseite bleibt beim Streamen unkomprimiert;
+  Transfer ist laut Messung aber NICHT der Flaschenhals (total ≈ TTFB), daher ok.
+- **Zeitmessung in KonzertDetail eingebaut** (ILogger, temporär): loggt `total/DbOpen/Konzert/PublicData/
+  User+Eindruecke` ms. **Lokal: 1. Aufruf 518 ms (EF-Query-Erstkompilierung!), warm 76–144 ms.** Verdacht:
+  auf Prod zahlt jede Sitzung nach Railway-Leerlauf die EF-Kompilierung neu (Kaltstart). **Nächster Schritt:
+  Prod deployen, Konzert öffnen, die `KonzertDetail …: total …ms`-Logzeile aus Railway teilen** → dann ist
+  klar, ob Kaltstart-Kompilierung, DB-Latenz oder Doppellauf. Mögliche Fixes danach: App warm halten
+  (Infra), EF-Query-Warmup beim Start, `PersistentComponentState` gegen den Doppellauf.
+
 ---
 
 ## 2. Bands-Liste & Filter ✅

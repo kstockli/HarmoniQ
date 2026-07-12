@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
@@ -21,6 +22,15 @@ builder.Services.AddMudServices();
 // In-Memory-Cache für globale, nicht user-spezifische Startseiten-Daten (Zähler, Featured-
 // Komponist:innen/Bands) – nimmt ~8 DB-Queries pro Seitenaufbau aus dem Hot-Path (siehe Home.razor).
 builder.Services.AddMemoryCache();
+
+// Response-Compression (Brotli/Gzip) – komprimiert das dynamische Prerender-HTML (Blazor). Ohne dies
+// gingen ~95 KB HTML pro Konzertseite UNKOMPRIMIERT raus. EnableForHttps, da hinter Railway alles https ist.
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+});
 
 builder.Services.AddHttpClient<YouTubeMetadataService>();
 builder.Services.AddHttpClient<YouTubeSearchService>();
@@ -192,6 +202,9 @@ if (!app.Environment.IsDevelopment())
         return next();
     });
 }
+
+// Antworten komprimieren (früh in der Pipeline, damit nachfolgende Middleware/Endpoints profitieren).
+app.UseResponseCompression();
 
 // Authentifizierung EXPLIZIT hier einhängen – nach ForwardedHeaders/Scheme-Fix, damit die
 // OAuth-Middleware die redirect_uri mit dem korrekten https-Scheme baut (sonst hängt der
