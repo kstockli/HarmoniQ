@@ -38,4 +38,8 @@ public class StubExtraktion : IExtraktion
     // Ohne LLM keine Titel-Analyse – Nutzer:in erfasst Stück/Komponist:in manuell.
     public Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default) =>
         Task.FromResult(new VideoAnalyse(null, null));
+
+    // Ohne LLM keine Band-Erkennung aus Event-Titel/Beschreibung.
+    public Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
 }

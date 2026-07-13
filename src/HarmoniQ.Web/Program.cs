@@ -81,6 +81,7 @@ builder.Services.AddHttpClient<HarmoniQ.Web.Services.Wmc.WmcImportService>(c => 
 
 // Orchestrator: In-Memory-Queue (Singleton) + Hintergrund-Dienst, der Läufe sequenziell abarbeitet.
 builder.Services.AddSingleton<CrawlLaufQueue>();
+builder.Services.AddHttpClient<EventfrogImporter>();
 builder.Services.AddScoped<CrawlRunner>();
 builder.Services.AddHostedService<CrawlHostedService>();
 builder.Services.AddHostedService<WochenBenachrichtigungHostedService>();

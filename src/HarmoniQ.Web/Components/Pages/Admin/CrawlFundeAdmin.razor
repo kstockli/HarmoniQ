@@ -100,6 +100,13 @@ else
                 }
 
                 <!-- Benutzerfreundliche Zusammenfassung (aus dem aktuellen JSON berechnet) -->
+                @if (!string.IsNullOrWhiteSpace(f.FriendlyBand))
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;font-size:1.5rem;" />
+                        <MudText Typo="Typo.h6" Style="color:#D4AF37;font-weight:700;line-height:1.2;font-size:1.25rem;">@f.FriendlyBand</MudText>
+                    </MudStack>
+                }
                 <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@f.FriendlyTitel</MudText>
                 @if (!string.IsNullOrWhiteSpace(f.FriendlySub))
                 {
@@ -216,6 +223,7 @@ else
     {
         // Zurücksetzen, damit eine erneute Berechnung keine alten Werte stehen lässt.
         fe.FriendlyTitel = "";
+        fe.FriendlyBand = null;
         fe.FriendlySub = null;
         fe.FriendlyZeilen = [];
         fe.JsonGueltig = true;
@@ -242,6 +250,10 @@ else
                     if (k != null)
                     {
                         fe.FriendlyTitel = "Konzert" + (string.IsNullOrWhiteSpace(k.Name) ? "" : $": {k.Name}");
+                        // Auftretende Band(s) aus den Rang-Zeilen – groß hervorgehoben angezeigt.
+                        var bands = (k.Raenge ?? [])
+                            .Select(r => r.Band).Where(b => !string.IsNullOrWhiteSpace(b)).Distinct().ToList();
+                        fe.FriendlyBand = bands.Count is > 0 and <= 3 ? string.Join(", ", bands) : null;
                         var t = new List<string>();
                         t.Add(k.Datum is { } d ? KonzertZeitFormat.Kompakt(d, k.Uhrzeit) : "Datum fehlt");
                         if (!string.IsNullOrWhiteSpace(k.Ort)) t.Add(k.Ort!);
@@ -250,6 +262,8 @@ else
                         fe.FriendlyZeilen = (k.Programm ?? [])
                             .OrderBy(p => p.Reihenfolge ?? int.MaxValue)
                             .Select(ProgrammText).ToList();
+                        // Bei vielen Bands (Wettbewerb) statt der großen Zeile eine kompakte Auflistung.
+                        if (bands.Count > 3) fe.FriendlyZeilen = fe.FriendlyZeilen.Prepend("Bands: " + string.Join(", ", bands)).ToList();
                     }
                     break;
                 case CrawlFundTyp.Stueck:
@@ -461,6 +475,7 @@ else
 
         // Aufbereitete Anzeige (aus Json berechnet beim Laden und nach jeder JSON-Änderung)
         public string FriendlyTitel { get; set; } = "";
+        public string? FriendlyBand { get; set; }
         public string? FriendlySub { get; set; }
         public List<string> FriendlyZeilen { get; set; } = [];
         public bool JsonGueltig { get; set; } = true;

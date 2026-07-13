@@ -408,6 +408,55 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record KklAntwort(bool? Passt, string? Band);
 
+    public async Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default)
+    {
+        var sys = "Du extrahierst die AUFTRETENDE Musikformation eines Konzert-Events (Blasorchester, Brass Band, " +
+            "Ensemble, Orchester, Musikgesellschaft, Guggenmusik). Gib AUSSCHLIESSLICH JSON zurück: " +
+            "{\"band\":\"...\"|null}. band = der Name der Formation, DIE SPIELT. Sie steht oft im Titel vor einem " +
+            "Doppelpunkt (z. B. \"Harmonic Brass: Big Trip\" -> \"Harmonic Brass\") oder in der Beschreibung " +
+            "(z. B. \"... spielt das Christoph Walter Orchestra\", \"mit dem X\"). NICHT der Veranstalter/Sponsor/" +
+            "Serviceclub (z. B. Lions Club, Rotary), NICHT der Ort, NICHT eine Einzelperson (Dirigent:in/Solist:in). " +
+            "Wenn keine Formation klar genannt ist: null. Nichts erfinden.";
+        var besch = beschreibung is { Length: > 1200 } ? beschreibung[..1200] : beschreibung;
+        var user = $"Titel: {titel}\n\nVeranstalter (nur Hinweis, evtl. NICHT die Band): {veranstalter}\n\nBeschreibung: {besch}";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } }
+        };
+        // Bei Massen-Läufen (z. B. Eventfrog: viele Events) trifft man Mistral-Rate-Limits (429).
+        // Deshalb mit Backoff wiederholen (Retry-After beachten), statt still null zu liefern.
+        for (var versuch = 0; ; versuch++)
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+                req.Content = JsonContent.Create(body);
+                using var resp = await http.SendAsync(req, ct);
+                if (((int)resp.StatusCode == 429 || (int)resp.StatusCode >= 500) && versuch < 5)
+                {
+                    var warte = resp.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(Math.Min(8, Math.Pow(2, versuch)));
+                    logger.LogInformation("Event-Band-Extraktion: HTTP {Status}, warte {Sek}s (Versuch {V}).",
+                        (int)resp.StatusCode, warte.TotalSeconds, versuch + 1);
+                    await Task.Delay(warte, ct);
+                    continue;
+                }
+                if (!resp.IsSuccessStatusCode) return null;
+                var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+                var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+                if (string.IsNullOrWhiteSpace(inhalt)) return null;
+                return Leer(JsonSerializer.Deserialize<BandAntwort>(inhalt, MistralJson)?.Band);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) { logger.LogWarning(ex, "Event-Band-Extraktion fehlgeschlagen: {Titel}", titel); return null; }
+        }
+    }
+
+    private record BandAntwort(string? Band);
+
     public async Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default)
     {
         var leer = new KklProgramm([], [], null);

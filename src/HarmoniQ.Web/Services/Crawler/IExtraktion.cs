@@ -46,6 +46,12 @@ public interface IExtraktion
     /// genannt – die Komponist:in heraus (nicht raten). Optionaler Bandname hilft, ihn vom Stück zu trennen.
     /// Ohne LLM (Stub): beides null.</summary>
     Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default);
+
+    /// <summary>Liest aus Titel + Beschreibung (+ Veranstalter nur als Hinweis) eines Blasmusik-Events die
+    /// AUFTRETENDE Formation heraus (Blasorchester/Brass Band/Ensemble/Orchester) – nicht Veranstalter/
+    /// Sponsor/Ort und keine Einzelperson. Steht oft im Titel vor einem Doppelpunkt oder in der Beschreibung
+    /// („… spielt das X"). Null, wenn nicht klar genannt (nicht raten). Ohne LLM (Stub): null.</summary>
+    Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default);
 }
 
 /// <summary>Aus einem Videotitel erkanntes Stück + Komponist:in (jeweils null, wenn nicht klar erkennbar).</summary>

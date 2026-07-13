@@ -17,6 +17,7 @@ public class CrawlRunner(
     IExtraktion extraktion,
     KomponistSuche komponistSuche,
     ISeitenRenderer renderer,
+    EventfrogImporter eventfrog,
     ILogger<CrawlRunner> logger)
 {
     private string? _bandName;
@@ -78,6 +79,9 @@ public class CrawlRunner(
         {
             if (quelle.Typ == CrawlQuelleTyp.BandDomain)
                 await BandDomainCrawlAsync(lauf, quelle, ct);
+            // Eventfrog VOR dem generischen Veranstalter/KKL-Zweig (beide Typ „Veranstalter") – per URL unterscheiden.
+            else if (EventfrogImporter.IstZustaendig(quelle.StartUrl))
+                await EventfrogImportierenAsync(lauf, quelle, ct);
             else if (quelle.Typ == CrawlQuelleTyp.Wettbewerb || SbbwImporter.IstZustaendig(quelle.StartUrl))
                 await SbbwImportierenAsync(lauf, quelle, ct);
             else if (quelle.Typ == CrawlQuelleTyp.Veranstalter || KklImporter.IstZustaendig(quelle.StartUrl))
@@ -528,6 +532,121 @@ public class CrawlRunner(
     /// Stil-Hinweis zu einer KKL-Kategorie, filtert die Website selbst (<c>?genre=</c>), sonst filtert der
     /// LLM. Je passendem Event wird die <b>Detailseite gerendert</b> (Tabs „Programm"/„Mitwirkende") und per
     /// LLM in Stücke + Band + Dirigent:in strukturiert. Dedup über Läufe via vivenu-Event-ID (<see cref="CrawlFund.ExternKey"/>).</summary>
+    /// <summary>
+    /// Eventfrog (Spec §4.4): Blasmusik-Konzerte schweizweit über die Public API. Rubrik „Blasmusik"
+    /// dynamisch, Events ab heute (alle künftigen), Ort via Locations-Endpoint. Kein Programm (liefert
+    /// Eventfrog nicht). Band nur setzen, wenn der Veranstalter genau eine bestehende Band/Alias trifft
+    /// (sonst bandlos → Admin ordnet in der Review zu). Dedup/Inkrementell über ExternKey „eventfrog:{id}".
+    /// </summary>
+    private async Task EventfrogImportierenAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
+    {
+        if (!eventfrog.Verfuegbar)
+        {
+            lauf.Meldung = "Kein Eventfrog-API-Key (Crawler:Eventfrog:ApiKey) konfiguriert.";
+            logger.LogWarning("Eventfrog: {Meldung}", lauf.Meldung);
+            return;
+        }
+
+        var rubId = await eventfrog.RubrikIdAsync("Blasmusik", ct) ?? 63;   // dynamisch, Fallback 63
+        var heute = DateOnly.FromDateTime(DateTime.UtcNow);
+        logger.LogInformation("Eventfrog → Blasmusik-Konzerte (rubId={Rub}) ab {Von}.", rubId, heute);
+
+        // Alle künftigen Events paginiert holen (perPage 100, harte Obergrenze gegen Endlosschleifen).
+        var events = new List<EventfrogImporter.EfEvent>();
+        int total;
+        for (var page = 1; ; page++)
+        {
+            var (seite, t) = await eventfrog.EventeAsync(rubId, heute, page, 100, ct);
+            lauf.SeitenBesucht++;
+            total = t;
+            events.AddRange(seite);
+            if (seite.Count == 0 || events.Count >= total || page >= 20) break;
+        }
+
+        // Orte (Locations) für alle Events in einem Rutsch nachladen.
+        var locIds = events.SelectMany(e => e.LocationIds).Distinct().ToList();
+        var orte = await eventfrog.LocationsAsync(locIds, ct);
+        if (locIds.Count > 0) lauf.SeitenBesucht++;
+
+        // Bestehende Bands (Name + Aliase) normalisiert, um den Veranstalter genau zuzuordnen.
+        var bandNamen = await db.Bands.Select(b => b.Name).ToListAsync(ct);
+        var aliasNamen = await db.BandAliase.Select(a => a.Name).ToListAsync(ct);
+        var bekannteBands = new HashSet<string>(
+            bandNamen.Concat(aliasNamen).Select(NormBand).Where(s => s.Length > 0), StringComparer.Ordinal);
+
+        int angelegt = 0, uebersprungen = 0, abgesagt = 0;
+        foreach (var ev in events)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (ev.Abgesagt) { abgesagt++; continue; }
+
+            var externKey = "eventfrog:" + ev.Id;
+            var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(f => f.ExternKey == externKey, ct);
+            if (bestehend is { Status: not CrawlFundStatus.Offen }) { uebersprungen++; continue; }
+
+            // Auftretende Formation via LLM aus Titel/Beschreibung (der Veranstalter ist oft nur Sponsor/Serviceclub).
+            var band = await extraktion.EventBandAsync(ev.Titel ?? "", ev.Beschreibung, ev.Veranstalter, ct);
+            // Fallback: Veranstalter, wenn er exakt eine bestehende Band/Alias trifft.
+            if (string.IsNullOrWhiteSpace(band) && ev.Veranstalter != null && bekannteBands.Contains(NormBand(ev.Veranstalter)))
+                band = ev.Veranstalter;
+            var raenge = string.IsNullOrWhiteSpace(band) ? null : new List<RangZeileDaten> { new(band!) };
+
+            var daten = new KonzertFundDaten(
+                Datum: ev.Datum,
+                Uhrzeit: ev.Uhrzeit,
+                Name: ev.Titel,
+                Ort: OrtBauen(ev, orte),
+                Beschreibung: ev.Beschreibung,
+                Programm: null,                 // Eventfrog liefert kein Programm
+                Raenge: raenge,
+                BildUrl: ev.BildUrl);
+            var json = CrawlDaten.Serialisiere(daten);
+
+            if (bestehend != null)
+            {
+                bestehend.DatenJson = json;
+                bestehend.QuellUrl = ev.Url ?? bestehend.QuellUrl;
+                bestehend.AbgerufenAm = DateTime.UtcNow;
+            }
+            else
+            {
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    LaufId = lauf.Id,
+                    Typ = CrawlFundTyp.Konzert,
+                    ExternKey = externKey,
+                    QuellUrl = ev.Url ?? "",
+                    AbgerufenAm = DateTime.UtcNow,
+                    DatenJson = json,
+                    // Rubrik ist exakt „Blasmusik" → hohe Konfidenz (kein Keyword-/LLM-Ratefilter nötig).
+                    Konfidenz = Konfidenz.Hoch,
+                    Status = CrawlFundStatus.Offen
+                });
+                lauf.FundeAnzahl++;
+                angelegt++;
+            }
+        }
+
+        quelle.LetzterLaufAm = DateTime.UtcNow;
+        logger.LogInformation("Eventfrog: {Gesamt} Events, {Angelegt} neue Funde, {Skip} schon entschieden, {Ab} abgesagt.",
+            events.Count, angelegt, uebersprungen, abgesagt);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Ort-Text aus der ersten Location eines Events: „Halle, 6210 Sursee" bzw. was verfügbar ist.</summary>
+    private static string? OrtBauen(EventfrogImporter.EfEvent ev, IReadOnlyDictionary<string, EventfrogImporter.EfLocation> orte)
+    {
+        if (ev.LocationIds.Count == 0 || !orte.TryGetValue(ev.LocationIds[0], out var l)) return null;
+        var plzOrt = string.Join(" ", new[] { l.Plz, l.Ort }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var teile = new[] { l.Titel, plzOrt }.Where(x => !string.IsNullOrWhiteSpace(x));
+        var s = string.Join(", ", teile);
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    /// <summary>Normalisiert einen Bandnamen für den Abgleich (klein, ohne Randzeichen/Mehrfach-Spaces).</summary>
+    private static string NormBand(string? s) =>
+        string.IsNullOrWhiteSpace(s) ? "" : System.Text.RegularExpressions.Regex.Replace(s.Trim().ToLowerInvariant(), @"\s+", " ");
+
     private async Task KklImportierenAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
     {
         var basisUrl = string.IsNullOrWhiteSpace(quelle.StartUrl) ? KklImporter.EventsUrl : quelle.StartUrl;
