@@ -296,6 +296,29 @@ ExternKey übersprungen – um ihn mit verbesserter Extraktion neu zu ziehen, de
 
 ### 4.4 Veranstalter: Eventfrog.ch (Public API) — Spezial-Crawler
 
+> **UMGESETZT (2026-07-13), Vertrag live verifiziert.** `EventfrogImporter` + `CrawlRunner.EventfrogImportierenAsync`,
+> Quelltyp `Veranstalter`, Dispatch via `EventfrogImporter.IstZustaendig(StartUrl enthält „eventfrog")` **vor** dem
+> KKL-Zweig. **Korrekturen ggü. dem ursprünglichen Entwurf:**
+> - **Basis** `https://api.eventfrog.net/api/v1`; **Auth = `Authorization: Bearer <key>`** (NICHT der `apiKey`-Query-Param
+>   der veralteten Referenz-Lib). Key in `Crawler:Eventfrog:ApiKey`.
+> - **Kein Keyword-/LLM-Filter nötig:** Eventfrog hat eine **eigene Rubrik „Blasmusik" (id 63)** unter „Konzerte" (908).
+>   Der Handler ermittelt die ID dynamisch via `/rubrics.json` (Fallback 63) → `/events.json?rubId=63&from=heute` liefert
+>   direkt die Blasmusik-Konzerte (hohe Konfidenz).
+> - Ort via `/locations.json?id=…` (`title{de}, addressLine, zip, city`). Event-Felder: `id, title{de}, begin (ISO),
+>   organizerName, url, locationIds, shortDescription, emblemToShow.url, cancelled`.
+> - **Region:** v1 ganze Schweiz (kein harter Filter; Ort steht im Fund, Admin entscheidet).
+> - **Band via LLM:** `IExtraktion.EventBandAsync(titel, beschreibung, veranstalter)` liest die **auftretende**
+>   Formation aus Titel/Beschreibung (nicht den Veranstalter/Sponsor – der ist oft ein Serviceclub). Bsp.:
+>   „Harmonic Brass: Big Trip"→„Harmonic Brass"; „… spielt das Christoph Walter Orchestra"→„Christoph Walter
+>   Orchestra". Fallback: `organizerName`, wenn er exakt eine bestehende Band/`BandAlias` trifft. Als
+>   `RangZeileDaten` im Fund → find-or-create beim Übernehmen (Admin prüft). Ergebnis Testlauf: 85/102 mit Band.
+>   **Rate-Limit:** viele Events = viele Mistral-Calls → 429; `EventBandAsync` wiederholt mit Backoff
+>   (Retry-After beachtet), sonst fielen ~85% still auf null.
+> - **Kein Programm** (Eventfrog liefert keins). **Dedup/Inkrementell:** `ExternKey = "eventfrog:{id}"` (erneuter Lauf
+>   nur Neues; `modifiedSince` als spätere Optimierung verfügbar). Anlegen einer Quelle: `/admin/crawler`, Typ
+>   „Veranstalter", StartUrl z. B. `https://api.eventfrog.net`.
+
+
 **Ziel:** Schweizweit **neue** Blasmusik-Konzerte finden, die (noch) nicht über eigene Vereins-Crawls (§4.1
 BandDomain) oder andere Quellen bekannt sind. Anders als bei KKL (§4.3, ein einzelner Veranstaltungsort)
 deckt Eventfrog **viele tausend Veranstalter schweizweit** ab — entsprechend unspezifischer ist das
