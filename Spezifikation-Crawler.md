@@ -355,6 +355,53 @@ direktem Genre-Parameter.
 - Verhältnis zu Musiktreff.info als mögliche zweite Quelle (nur RSS, kein Rubrik-/Regionsfilter) — falls
   gewünscht, eigener Quelltyp/Handler, nicht Teil dieses Abschnitts.
 
+### 4.5 YouTube-Videos pro Band (Band-Admin, on-demand) — Direkt-Handler
+
+**Ziel:** Zu einer bestehenden Band deren YouTube-Auftritte finden und als `Video`-Datensätze übernehmen.
+Zwei Wege, beide mit LLM-Erkennung von **Stück + Komponist:in aus dem Videotitel**
+(`IExtraktion.VideoTitelAnalysierenAsync`, grounded auf den Titel — nicht raten):
+
+1. **Einzel-Link** (`/admin/bands/{id}/video`, `BandVideoHinzufuegen`): Admin fügt einen YouTube-Link ein →
+   Titel via oEmbed (`YouTubeMetadataService`, kein Key) → LLM schlägt Stück/Komponist:in vor → nach
+   Prüfung speichern. Erzeugt sofort ein **genehmigtes** `Video` (Band-Admin ist für die eigene Band
+   vertrauenswürdig).
+2. **Suche pro Band** (`/admin/bands/{id}/videos-suchen`, `BandVideosSuchen` + `BandVideoCrawlService`):
+   holt Kandidaten bei der YouTube Data API (`YouTube:ApiKey`), lässt je Treffer das LLM Stück/Komponist:in
+   vorschlagen und legt neue Treffer als `BandVideoFund` (Status Offen) ab. **Quelle bevorzugt der Kanal:**
+   ist an der Band ein YouTube-Link hinterlegt (`BandLink` Typ `YouTube`, z. B. `youtube.com/@Handle`,
+   `/channel/UC…`, `/user/…`), werden gezielt **dessen Uploads** durchgegangen (`channels.list` →
+   Uploads-Playlist → `playlistItems.list`); nur ohne Link (oder wenn der Kanal 0 Videos liefert) fällt der
+   Handler auf die **Namenssuche** (`search.list` über den Bandnamen) zurück. Die Review zeigt Thumbnail +
+   **Video-Preview** (Embed) und **editierbare** Felder Stück/Komponist:in; der Admin entscheidet je Fund
+   Übernehmen (→ `Video`, find-or-create Stück/Person wie bei der Konzert-Erfassung via `VideoErfassung`)
+   oder Ablehnen.
+
+**Konzert-Zuordnung (beide Wege, Entscheid 2026-07-13):** Beim Erfassen/Übernehmen wird das Video –
+falls erkennbar – dem passenden vergangenen Konzert der Band zugeordnet (`Video.KonzertId`). Logik in
+`VideoErfassung.BandKonzerteAsync`/`EindeutigesKonzert`: hat **genau ein** nicht-künftiges Konzert der Band
+das gewählte Stück im Programm, wird es **vorgeschlagen** (Feld „Konzert (optional)" vorbelegt, Hinweis
+„Automatisch erkannt …"); bei 0 oder mehreren Treffern bleibt es leer und der Admin **wählt** aus der
+(neueste-zuerst-)Liste der Band-Konzerte (passende mit ✓ markiert). Der Abgleich läuft in-memory
+(Titel + `StueckAlias`), reagiert also live auf Änderungen am Stück-Feld. So landet das Video auf der
+Konzert-Detailseite und Bewertungen/Notizen binden an den Konzerttag.
+
+**On-demand statt Sammellauf (Entscheid):** ausgelöst pro Band auf Knopfdruck. Grund: die YouTube-Suche
+kostet **100 Kontingent-Einheiten/Aufruf** (Default 10 000/Tag ≈ 100 Band-Suchen/Tag) — ein Sammellauf über
+alle Bands wäre kontingent-limitiert und müsste über Tage verteilt werden.
+
+**Kanal vor Namenssuche (Entscheid, 2026-07-13):** Der Kanal-Weg ist **präziser** (genau die Uploads dieser
+Band statt namensähnlicher Fremdtreffer) und **günstiger** (`channels.list` + `playlistItems.list` je
+1 Einheit statt 100 für die Suche). Deshalb: Kanal-Link, wenn vorhanden — die Namenssuche bleibt Fallback
+für Bands ohne hinterlegten Kanal. Empfehlung fürs Datenpflegen: bei den Bands den YouTube-Kanal als
+`BandLink` erfassen.
+
+**Inkrementell („nur Neueres"):** vor dem Anlegen wird jede Video-ID gegen bereits erfasste `Video`s der
+Band **und** bereits vorhandene `BandVideoFund`s (egal ob offen/entschieden) geprüft; Duplikate werden per
+Unique-Index `(BandId, ExternId)` zusätzlich hart verhindert. Ein erneuter Suchlauf liefert daher nur
+wirklich neue Treffer; einmal übernommene/abgelehnte Videos tauchen nicht wieder auf. Analog zum
+`ExternKey`-Dedup der übrigen Quellen (§7), hier über die dedizierte Sichtungstabelle statt `CrawlFund`,
+weil die Funde **standalone Band-Videos** ohne Konzert-/Lauf-Bezug sind.
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```
@@ -397,6 +444,17 @@ CrawlFund                           (Kandidat zur Übernahme)
 
 (optional) CrawlSeite               (Dedup/Politeness über Läufe)
 ├── Id · QuelleId (FK) · Url · InhaltsHash · AbgerufenAm · Relevant (bool)
+
+BandVideoFund                       (YouTube-Kandidat pro Band, §4.5 — eigene Sichtungstabelle)
+├── Id (Guid)
+├── BandId (FK → Band, Cascade)     ← Zielband; Band-Löschung räumt die Funde mit weg
+├── ExternId (string)               ← YouTube-Video-ID; Unique-Index (BandId, ExternId) = Dedup
+├── Titel (string) · KanalName (string?)
+├── StueckVorschlag (string?)       ← vom LLM aus dem Titel erkannt, in der Review editierbar
+├── KomponistVorschlag (string?)    ← dito
+├── Status (enum CrawlFundStatus: Offen / Übernommen / Verworfen)   ← Status hält „nur Neueres"
+├── GefundenAm (DateTime) · EntschiedenAm (DateTime?)
+└── ErgebnisVideoId (Guid?)         ← bei Übernahme: erzeugtes Video
 ```
 
 > `DatenJson` hält den Vorschlag flexibel (z. B. ein Konzert mit Programmzeilen). Die Review-UI

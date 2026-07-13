@@ -120,7 +120,7 @@ Shared Hosting unterstützt üblicherweise nur PHP/MySQL. Blazor Server benötig
 - Komponisten erfassen / bearbeiten / löschen (`/admin/komponisten`)
 - Stücke erfassen / bearbeiten / löschen (`/admin/stuecke`, mit Suche)
 - Bands erfassen / bearbeiten / löschen (`/admin/bands`; beim Löschen bleibt das Video erhalten, nur die Band-Zuordnung wird gelöst)
-- Videos verwalten (`/admin/videos`): Stück-Autocomplete, Band-Auswahl, **YouTube-Link-Erkennung** (volle URL → ID), **Duplikat-Prüfung**, Status setzen
+- Videos verwalten (`/admin/videos`): Stück-Autocomplete, Band-Auswahl, **YouTube-Link-Erkennung** (volle URL → ID), **Duplikat-Prüfung**, Status setzen, **Band-Filter** in der Liste (auch per `?band={id}` vorgewählt, z. B. vom Knopf „Videos verwalten" auf der Band-Seite)
 - **Bewertungen verwalten** (`/admin/bewertungen`): einzelne Bewertungen bearbeiten oder löschen (z. B. Spam entfernen)
 
 > **Video-Titel ist optional:** Wird beim Erfassen/Vorschlagen kein Titel angegeben, holt
@@ -447,12 +447,24 @@ BandAdministrator                   (Konto „verwaltet" eine Band – band-skop
 
 > **Zweck & Abgrenzung (UX-Spec Block 5):** Zwischenstufe zwischen User und globalem Admin.
 > Ein Band-Admin darf **seine** Band pflegen (Stammdaten inkl. Heimatort, Mitglieder/Vorstand,
-> Konzerte) und Claims sichtbarer Rollen bestätigen – **nicht** andere Bands, globale Daten,
+> Konzerte, **Videos**) und Claims sichtbarer Rollen bestätigen – **nicht** andere Bands, globale Daten,
 > Importe/Crawler oder private Nutzerdaten. **Bewusst getrennt** von `BandMitgliedschaft.Funktion`
 > (Präsident:in zu *sein* ≠ die App *verwalten* dürfen). Bootstrapping: erste:r Band-Admin vom
 > globalen Admin ernannt; weitere durch bestehende Band-Admins; später Crawler-Einladung
 > (UX-Spec §5.3.1). Solo-Band-Konzerte darf ein Band-Admin löschen/mergen, sobald eine fremde Band
 > beteiligt ist nur der globale Admin. Löschen/Merge der Band selbst = globaler Admin.
+
+> **Videos pflegen (Band-Admin) — UMGESETZT:** Zwei Wege, beide mit LLM-Erkennung von Stück +
+> Komponist:in aus dem Videotitel (Details in `Spezifikation-Crawler.md` §4.5). **(a) Einzel-Link**
+> (`/admin/bands/{id}/video`): YouTube-Link einfügen → Titel via oEmbed → Stück/Komponist:in werden
+> vorgeschlagen, prüfen, speichern. **(b) YouTube-Suche pro Band** (`/admin/bands/{id}/videos-suchen`):
+> bevorzugt den **hinterlegten YouTube-Kanal** der Band (dessen Uploads) und fällt sonst auf die Suche
+> über den Bandnamen zurück (YouTube Data API); zeigt je Treffer Thumbnail + Video-Preview und
+> **editierbare** Felder Stück/Komponist:in → Übernehmen/Ablehnen. **Konzert-Zuordnung** (beide Wege):
+> hat genau ein vergangenes Konzert der Band das Stück im Programm, wird es vorgeschlagen, sonst zur
+> Auswahl angeboten (`Video.KonzertId`). Entschiedene Treffer werden gemerkt
+> (`BandVideoFund`), ein erneuter Lauf zeigt nur Neues. Beides erzeugt sofort **genehmigte** Videos
+> (Band-Admin ist für die eigene Band vertrauenswürdig).
 
 > **Einladungs-Vorschläge aus gefundenen Kontakten (Phase 2 A) — UMGESETZT:** Der Crawler erntet
 > offizielle Vereins-E-Mails (als `BandLink` Typ `EMail`). Daraus erzeugt die Admin-Seite

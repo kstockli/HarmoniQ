@@ -34,6 +34,7 @@ builder.Services.AddResponseCompression(o =>
 
 builder.Services.AddHttpClient<YouTubeMetadataService>();
 builder.Services.AddHttpClient<YouTubeSearchService>();
+builder.Services.AddScoped<BandVideoCrawlService>();
 builder.Services.AddHttpClient<WebseitenScraper>(c =>
 {
     // Manche Webseiten blocken Requests ohne User-Agent.

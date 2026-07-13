@@ -1,0 +1,218 @@
+@page "/admin/bands/{BandId:guid}/video"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Services.Crawler
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+@inject YouTubeMetadataService YouTube
+@inject IExtraktion Extraktion
+
+<PageTitle>Video hinzufügen – @_bandName</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_zurueck"
+               StartIcon="@Icons.Material.Filled.ArrowBack">@_bandName</MudButton>
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Video hinzufügen</MudText>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+    YouTube-Link einfügen – Stück und Komponist:in werden aus dem Titel vorgeschlagen. Bitte vor dem
+    Speichern kurz prüfen und ggf. korrigieren.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Style="background:#1a0030; border:1px solid #3a1060;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        <MudTextField @bind-Value="_link" Label="YouTube-Link oder Video-ID" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Immediate="true" Style="flex:1; min-width:260px;"
+                      Placeholder="https://www.youtube.com/watch?v=…" />
+        <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                   StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="Analysieren"
+                   Disabled="@(_laeuft || string.IsNullOrWhiteSpace(_link))">
+            @(_laeuft ? "Analysiert…" : "Analysieren")
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (_analysiert)
+{
+    <MudPaper Class="pa-4 mb-4" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3" Wrap="Wrap.Wrap">
+            @if (!string.IsNullOrWhiteSpace(_externId))
+            {
+                <img src="https://i.ytimg.com/vi/@_externId/mqdefault.jpg" alt="" style="width:120px;border-radius:6px;" />
+            }
+            <div style="flex:1; min-width:220px;">
+                <MudText Typo="Typo.caption" Style="color:#6f5a86;">Videotitel</MudText>
+                <MudText Typo="Typo.body2" Style="color:#F0E6FF;">@(_videoTitel ?? "(kein Titel gefunden)")</MudText>
+            </div>
+        </MudStack>
+
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudAutocomplete T="string" Label="Stück" Variant="Variant.Outlined" Dense="true"
+                                 @bind-Value="_stueckTitel" @bind-Value:after="KonzertVorschlagen"
+                                 SearchFunc="@((s, c) => Suche(_stueckNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15"
+                                 HelperText="Vorhandenes Stück wählen oder neu erfassen." />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudAutocomplete T="string" Label="Komponist:in (bei neuem Stück)" Variant="Variant.Outlined" Dense="true"
+                                 @bind-Value="_komponist" SearchFunc="@((s, c) => Suche(_komponistNamen, s))"
+                                 CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
+            </MudItem>
+            @if (_konzerte.Count > 0)
+            {
+                <MudItem xs="12">
+                    <MudSelect T="Guid?" Label="Konzert (optional)" @bind-Value="_konzertId"
+                               @bind-Value:after="() => _konzertManuell = true" Variant="Variant.Outlined" Dense="true"
+                               Clearable="true" HelperText="@_konzertHinweis">
+                        @foreach (var k in _konzerte)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)k.Id)">
+                                @(k.Enthaelt(_stueckTitel) ? "✓ " : "")@k.Anzeige
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
+        </MudGrid>
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4">
+            <MudButton Variant="Variant.Text" Href="@_zurueck">Abbrechen</MudButton>
+            <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                       OnClick="Speichern" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_stueckTitel))">
+                @(_speichert ? "Speichert…" : "Video hinzufügen")
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid BandId { get; set; }
+
+    private string? _userId;
+    private string? _bandName;
+    private string _zurueck = "/bands";
+
+    private string _link = "";
+    private string? _externId;
+    private string? _videoTitel;
+    private string _stueckTitel = "";
+    private string _komponist = "";
+    private bool _analysiert;
+    private bool _laeuft;
+    private bool _speichert;
+
+    private List<string> _stueckNamen = [];
+    private List<string> _komponistNamen = [];
+
+    private List<VideoErfassung.KonzertKandidat> _konzerte = [];
+    private Guid? _konzertId;
+    private bool _konzertManuell;
+    private string _konzertHinweis = "Falls bekannt: zu welchem Konzert gehört das Video?";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var global = await BandAdminService.IstGlobalAdminAsync(db, _userId);
+        if (!global && !await BandAdminService.IstBandAdminAsync(db, _userId, BandId)) { Nav.NavigateTo("/"); return; }
+
+        _bandName = await db.Bands.Where(b => b.Id == BandId).Select(b => b.Name).FirstOrDefaultAsync();
+        if (_bandName is null) { Nav.NavigateTo("/bands"); return; }
+        _zurueck = $"/admin/bands/{BandId}";
+
+        _stueckNamen = await db.Stuecke.OrderBy(s => s.Titel).Select(s => s.Titel).ToListAsync();
+        _komponistNamen = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+        _konzerte = await VideoErfassung.BandKonzerteAsync(db, BandId);
+    }
+
+    // Genau ein vergangenes Konzert der Band mit diesem Stück → vorschlagen (solange nicht manuell gewählt).
+    private void KonzertVorschlagen()
+    {
+        if (_konzertManuell) return;
+        _konzertId = VideoErfassung.EindeutigesKonzert(_konzerte, _stueckTitel, DateOnly.FromDateTime(DateTime.Today));
+        _konzertHinweis = _konzertId is not null
+            ? "Automatisch erkannt: dieses Stück steht im Programm dieses Konzerts."
+            : "Falls bekannt: zu welchem Konzert gehört das Video?";
+    }
+
+    private static Task<IEnumerable<string>> Suche(List<string> alle, string? wert)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? alle
+            : alle.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(15));
+    }
+
+    private async Task Analysieren()
+    {
+        var id = YouTubeId.Extrahiere(_link);
+        if (string.IsNullOrEmpty(id))
+        {
+            Snackbar.Add("Kein gültiger YouTube-Link / keine Video-ID erkannt.", Severity.Warning);
+            return;
+        }
+        _laeuft = true;
+        _externId = id;
+        _videoTitel = await YouTube.HoleTitelAsync(id);
+        if (!string.IsNullOrWhiteSpace(_videoTitel))
+        {
+            // Stück + Komponist:in aus dem Titel vorschlagen (LLM; ohne LLM leer → manuell erfassen).
+            var a = await Extraktion.VideoTitelAnalysierenAsync(_videoTitel, _bandName);
+            _stueckTitel = a.StueckTitel ?? "";
+            _komponist = a.Komponist ?? "";
+        }
+        KonzertVorschlagen();
+        _analysiert = true;
+        _laeuft = false;
+    }
+
+    private async Task Speichern()
+    {
+        var id = _externId ?? YouTubeId.Extrahiere(_link);
+        if (string.IsNullOrEmpty(id)) { Snackbar.Add("Kein gültiger YouTube-Link.", Severity.Warning); return; }
+        if (string.IsNullOrWhiteSpace(_stueckTitel)) { Snackbar.Add("Bitte das Stück angeben.", Severity.Warning); return; }
+
+        _speichert = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var stueck = await VideoErfassung.StueckHolenAsync(db, _stueckTitel.Trim(), _komponist);
+
+        if (await db.Videos.AnyAsync(v => v.ExternId == id && v.StueckId == stueck.Id))
+        {
+            Snackbar.Add("Dieses Video ist für dieses Stück bereits erfasst.", Severity.Info);
+            _speichert = false;
+            return;
+        }
+
+        var titel = string.IsNullOrWhiteSpace(_videoTitel)
+            ? await YouTube.HoleTitelAsync(id) ?? "(ohne Titel)"
+            : _videoTitel!;
+
+        db.Videos.Add(new Video
+        {
+            Plattform = VideoPlattform.YouTube,
+            ExternId = id,
+            Titel = titel,
+            Stueck = stueck,
+            BandId = BandId,
+            KonzertId = _konzertId,
+            Status = VideoStatus.Genehmigt,   // Band-Admin ist für die eigene Band vertrauenswürdig
+            VorgeschlagenVonId = _userId
+        });
+        await db.SaveChangesAsync();
+        _speichert = false;
+        Snackbar.Add("Video hinzugefügt.", Severity.Success);
+        Nav.NavigateTo(_zurueck);
+    }
+}

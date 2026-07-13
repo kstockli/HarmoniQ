@@ -151,7 +151,7 @@ nicht als Ersatz für eine selbsterklärende Oberfläche.
 
 ---
 
-## 7. Anmelden / Registrieren – eine „clevere" Maske 🔜
+## 7. Anmelden / Registrieren – eine „clevere" Maske ✅
 **Feedback:** „Nicht klar, ob anmelden oder ‚Kostenlos registrieren'. Besser: **ein** Knopf, dort zuerst
 **Google/Microsoft**, dann E-Mail/Passwort. Ist die E-Mail neu, direkt die Registrierung ergänzen
 (2× Passwort o. Ä.). Also **eine** Login/Anmelde-Maske, evtl. clever. Wie machen es andere?"
@@ -160,13 +160,19 @@ nicht als Ersatz für eine selbsterklärende Oberfläche.
 entscheidet das System, ob bekannt (→ Passwort) oder neu (→ Registrierung). Social-Login-Knöpfe stehen
 **oben** („Weiter mit Google/Microsoft"), Trenner „oder", darunter das E-Mail-Feld.
 
-**Plan:** Eine kombinierte Seite:
-1. Oben **„Weiter mit Google" / „Weiter mit Microsoft"**, dann Trenner „oder".
-2. **E-Mail** eingeben → „Weiter".
-3. Bekannte E-Mail → Passwort-Feld. Neue E-Mail → Passwort **+ Wiederholung** (Registrierung inline),
-   ohne separate „Registrieren"-Seite. Ein einziger Einstieg, kein „Login vs. Registrieren"-Rätsel.
-
-Auth-sensibel → sorgfältig umsetzen und testen (bestehende Identity-Flows/Bestätigungsmail beachten).
+**Umgesetzt (identifier-first, `/Account/Login`):**
+1. Schritt 1 (für alle): oben **Google/Microsoft**, Trenner „oder", **E-Mail** + „Weiter", darunter Passkey.
+2. „Weiter" prüft server-seitig, ob die E-Mail existiert → **bekannt** = Passwort-Feld („Willkommen zurück",
+   Anmelden); **neu** = Passwort **+ Wiederholung** inline („Konto erstellen", Kostenlos registrieren).
+3. „ändern" führt zurück zu Schritt 1 (E-Mail bleibt erhalten). Ein Einstieg, kein „Login vs. Registrieren"-Rätsel.
+- Bewährte Flows unverändert dahinter (Bestätigungsmail, 2FA, Lockout, Passwort-vergessen, Passkey).
+  `/Account/Register` **leitet** auf die Maske um (alte Links); App-CTAs („Kostenlos starten", Einladung)
+  zeigen direkt auf `/Account/Login`.
+- **Verifiziert:** Schritt 1 (Social/E-Mail/Passkey), bekannte E-Mail → Anmelden, neue E-Mail → Registrieren,
+  „ändern"-Reset, `/Account/Register`-Redirect (ReturnUrl erhalten). Konsolen-„Fehler" nur WebAuthn/Passkey
+  (kein Authenticator im Preview) – keine Regression.
+- **Bewusst so (identifier-first):** die Existenz einer E-Mail wird beim „Weiter" erkennbar (wie bei
+  Google/Notion/Slack; die Registrierung verriet das ohnehin). Von Kuno abgesegnet.
 
 ## 8. Admin: Benutzer löschen ✅
 **Feedback:** „Wieso kann ich als Admin keine Benutzer löschen?" → Auf `/admin/benutzer` gab es nur
@@ -193,6 +199,29 @@ Cascade/SetNull.
 **Fix:** In `PersonenAdmin.Loeschen` vor `Personen.Remove` die Freundschaften der Person per
 `ExecuteDeleteAsync` entfernen (beide FK-Richtungen). DB-verifiziert: alter Weg → exakt dieser
 FK-Fehler; neuer Weg (erst Freundschaften, dann Person) → Erfolg.
+
+## 10. Band-Admin: Videos hinzufügen & YouTube-Crawler ✅ (vor dem Erklär-Video)
+**Auftrag Kuno:** „Band-Admin: einzelnes Video mit Link direkt hinzufügen (Stück + Komponist:in
+herausfinden, evtl. mit LLM). Und ein Crawler für die YouTube-Links der bestehenden Bands – nur einmal
+suchen, dann entscheiden ja/nein, beim nächsten Lauf nur Neueres."
+
+**A) Einzel-Link** (`/admin/bands/{id}/video`, `BandVideoHinzufuegen`) ✅ — Link einfügen → Titel via
+oEmbed → LLM (`VideoTitelAnalysierenAsync`, Mistral) schlägt Stück + Komponist:in aus dem Titel vor →
+prüfen/korrigieren → speichern (find-or-create Stück/Person via `VideoErfassung`, Video **genehmigt**).
+End-to-end verifiziert (inkl. Anlegen Stück + Komponist).
+
+**B) YouTube-Suche pro Band** (`/admin/bands/{id}/videos-suchen`, `BandVideosSuchen` +
+`BandVideoCrawlService`) ✅ — Entscheide:
+- **On-demand pro Band auf Knopfdruck** (nicht Sammellauf): YouTube-Suche kostet 100 Einheiten/Aufruf
+  (~100 Band-Suchen/Tag); Bands haben zudem keine Kanal-Links hinterlegt → **Suche über den Bandnamen**.
+- **Review mit editierbaren Feldern + Video-Preview** (Kunos Wunsch): je Treffer Thumbnail→Embed,
+  editierbares Stück/Komponist:in (LLM-Vorschlag), Übernehmen/Ablehnen.
+- **Inkrementell:** neue Entität `BandVideoFund` merkt jeden Treffer (Offen/Übernommen/Verworfen),
+  Unique-Index `(BandId, ExternId)`; ein erneuter Lauf zeigt nur Neues, Entschiedene tauchen nicht wieder auf.
+- Specs nachgeführt (`Spezifikation-Crawler.md` §4.5, `Spezifikation.md`).
+- **Verifiziert auf Dev** (Band Neuenkirch): Suche liefert Kandidaten, LLM erkennt Stück/Komponist
+  (z. B. „nabucco" → Nabucco / Verdi), Übernehmen erzeugt genehmigtes Video + Stück/Person, Ablehnen
+  setzt Verworfen, 2. Suche legt Bekanntes **nicht** doppelt an (keine Dubletten). Testdaten belassen (Kunos Wunsch).
 
 ## Empfohlene Reihenfolge
 1. **Performance** ✅ Code (Stream-Rendering + Cache); Railway-Keep-warm bleibt Kunos Infra-Schritt.

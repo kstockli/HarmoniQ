@@ -58,34 +58,30 @@
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-6 pb-10">
             @Body
             @* Platz, damit die fixe Bottom-Navigation den Inhalt auf dem Smartphone nicht überdeckt. *@
-            <MudHidden Breakpoint="Breakpoint.MdAndUp">
-                <div style="height:64px;"></div>
-            </MudHidden>
+            <div class="hq-bottom-spacer"></div>
         </MudContainer>
     </MudMainContent>
 
-    @* ── Bottom-Navigation (nur Smartphone, smartphone-first, UX-Spec §6) ──── *@
-    <MudHidden Breakpoint="Breakpoint.MdAndUp">
-        <div style="position:fixed;bottom:0;left:0;right:0;z-index:1300;display:flex;
-                    background:#12001f;border-top:1px solid #3a1060;">
-            @BottomTab("/", Icons.Material.Filled.Home, "Start")
-            @BottomTab("/konzerte", Icons.Material.Filled.Event, "Konzerte")
-            @* Ohne Tagebuch-Eintrag führt der Tab zu „Bands" (Folgen macht den Feed erst wertvoll, UX-Feedback). *@
-            @if (_hatTagebuch)
-            {
-                @BottomTab("/account/tagebuch", Icons.Material.Filled.MenuBook, "Tagebuch")
-            }
-            else
-            {
-                @BottomTab("/bands", Icons.Material.Filled.Groups, "Bands")
-            }
-            @BottomTab("/videos", Icons.Material.Filled.VideoLibrary, "Videos")
-            <div @onclick="ToggleDrawer" style="@_bottomItemStyle">
-                <MudIcon Icon="@Icons.Material.Filled.Menu" Size="Size.Small" Style="color:#D4AF37;" />
-                <span style="font-size:.68rem;color:#A78FC0;">Mehr</span>
-            </div>
+    @* ── Bottom-Navigation (nur Smartphone, smartphone-first, UX-Spec §6). Sichtbarkeit via CSS-Media-Query
+         (.hq-bottom-nav in MainLayout.razor.css) statt MudHidden – JS-unabhängig, zuverlässig ab erstem Paint. *@
+    <div class="hq-bottom-nav">
+        @BottomTab("/", Icons.Material.Filled.Home, "Start")
+        @BottomTab("/konzerte", Icons.Material.Filled.Event, "Konzerte")
+        @* Ohne Tagebuch-Eintrag führt der Tab zu „Bands" (Folgen macht den Feed erst wertvoll, UX-Feedback). *@
+        @if (_hatTagebuch)
+        {
+            @BottomTab("/account/tagebuch", Icons.Material.Filled.MenuBook, "Tagebuch")
+        }
+        else
+        {
+            @BottomTab("/bands", Icons.Material.Filled.Groups, "Bands")
+        }
+        @BottomTab("/videos", Icons.Material.Filled.VideoLibrary, "Videos")
+        <div @onclick="ToggleDrawer" style="@_bottomItemStyle">
+            <MudIcon Icon="@Icons.Material.Filled.Menu" Size="Size.Small" Style="color:#D4AF37;" />
+            <span style="font-size:.68rem;color:#A78FC0;">Mehr</span>
         </div>
-    </MudHidden>
+    </div>
 </MudLayout>
 
 @code {

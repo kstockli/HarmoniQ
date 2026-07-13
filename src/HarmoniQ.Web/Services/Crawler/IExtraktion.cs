@@ -41,7 +41,15 @@ public interface IExtraktion
     /// Dirigent). Vorspann-Texte, Pausen, Kategorie-Überschriften und Gesprächs-/Moderations-Einträge sind
     /// keine Stücke. Ohne LLM (Stub): leeres Programm.</summary>
     Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default);
+
+    /// <summary>Liest aus dem TITEL eines Blasmusik-YouTube-Videos das gespielte Stück und – falls klar
+    /// genannt – die Komponist:in heraus (nicht raten). Optionaler Bandname hilft, ihn vom Stück zu trennen.
+    /// Ohne LLM (Stub): beides null.</summary>
+    Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default);
 }
+
+/// <summary>Aus einem Videotitel erkanntes Stück + Komponist:in (jeweils null, wenn nicht klar erkennbar).</summary>
+public record VideoAnalyse(string? StueckTitel, string? Komponist);
 
 /// <summary>LLM-Einschätzung zu einem Veranstalter-Event (KKL): passt zum Stil-Kriterium + erkannte Band.</summary>
 public record KklEventInfo(bool Passt, string? Band);

@@ -24,9 +24,20 @@
                StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Bearbeiten(null))">Neu</MudButton>
 </MudStack>
 
-<MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Titel / Stück)" Variant="Variant.Outlined"
-              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
-              Clearable="true" Class="mb-3" Style="max-width:360px;" />
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3" Wrap="Wrap.Wrap">
+    <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Titel / Stück)" Variant="Variant.Outlined"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+                  Clearable="true" Style="max-width:360px;" Margin="Margin.Dense" />
+    <MudAutocomplete T="Band" Label="Band" Value="_bandFilter" ValueChanged="BandGewaehlt" SearchFunc="BandSuche"
+                     ToStringFunc="@(b => b?.Name ?? "")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                     Clearable="true" ResetValueOnEmptyText="true" CoerceText="true" MaxItems="50"
+                     Style="max-width:320px;" Placeholder="Alle Bands" />
+    @if (_bandFilter is not null)
+    {
+        <MudChip T="string" Color="Color.Secondary" Size="Size.Small"
+                 OnClose="@(() => BandGewaehlt(null))">@_bandFilter.Name (@_gefiltert.Count)</MudChip>
+    }
+</MudStack>
 
 <MudDataGrid T="Video" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
     <Columns>
@@ -67,6 +78,9 @@
 </MudDataGrid>
 
 @code {
+    /// <summary>Optionaler Band-Vorwahl-Filter aus der URL (z. B. Knopf „Videos verwalten" auf der Band).</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "band")] public Guid? BandParam { get; set; }
+
     private List<Video> _alle = [];
     private List<Video> _gefiltert = [];
     private bool _zeigeAudit;
@@ -74,6 +88,7 @@
     private List<Band> _bands = [];
     private List<Konzert> _konzerte = [];
     private string _suche = "";
+    private Band? _bandFilter;
 
     protected override async Task OnInitializedAsync() => await Laden();
 
@@ -85,13 +100,33 @@
         _konzerte = await db.Konzerte.OrderByDescending(k => k.Datum).ToListAsync();
         _alle = await db.Videos.Include(v => v.Stueck).Include(v => v.Band)
             .OrderBy(v => v.Stueck.Titel).ToListAsync();
+        // Band-Vorwahl aus der URL übernehmen (einmalig beim Laden).
+        _bandFilter ??= BandParam is { } id ? _bands.FirstOrDefault(b => b.Id == id) : null;
         Filtern();
     }
 
-    private void Filtern() =>
-        _gefiltert = _suche == "" ? _alle
-            : _alle.Where(v => v.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
-                            || (v.Stueck?.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+    private void Filtern()
+    {
+        IEnumerable<Video> q = _alle;
+        if (_bandFilter is not null)
+            q = q.Where(v => v.BandId == _bandFilter.Id);
+        if (_suche != "")
+            q = q.Where(v => v.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
+                          || (v.Stueck?.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase) ?? false));
+        _gefiltert = q.ToList();
+    }
+
+    private Task<IEnumerable<Band>> BandSuche(string? wert, CancellationToken _) =>
+        Task.FromResult<IEnumerable<Band>>(
+            (string.IsNullOrWhiteSpace(wert)
+                ? _bands
+                : _bands.Where(b => b.Name.Contains(wert, StringComparison.OrdinalIgnoreCase))).Take(50));
+
+    private void BandGewaehlt(Band? b)
+    {
+        _bandFilter = b;
+        Filtern();
+    }
 
     private async Task Bearbeiten(Video? v)
     {

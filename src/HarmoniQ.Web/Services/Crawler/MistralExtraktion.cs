@@ -502,6 +502,60 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         catch (Exception ex) { logger.LogWarning(ex, "Komponist-Extraktion fehlgeschlagen für {Titel}", stueckTitel); return null; }
     }
 
+    public async Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoTitel)) return new VideoAnalyse(null, null);
+        var sys = "Du extrahierst aus dem TITEL eines Blasmusik-/Brassband-YouTube-Videos das gespielte " +
+            "Stück und – falls klar genannt – die Komponist:in. Antworte AUSSCHLIESSLICH mit JSON: " +
+            "{\"stueckTitel\":\"|null\",\"komponist\":\"|null\"}.\n" +
+            "Regeln:\n" +
+            "- stueckTitel: der reine Werktitel – OHNE Bandname, OHNE Jahr, OHNE Ort, OHNE Zusätze wie " +
+            "\"live\", \"Jahreskonzert\", \"HD\", Kanal-/Reihennamen. Ist kein Stück erkennbar: null.\n" +
+            "- komponist: \"Vorname Nachname\", NUR wenn im Titel genannt oder eindeutig (z. B. in Klammern/" +
+            "nach \"by\"/\"von\"). Sonst null. NICHT raten, NICHT den Bandnamen oder die Dirigentin nehmen.\n" +
+            "- Bei Bearbeitungen zählt der ursprüngliche Komponist des Werks, nicht der Arrangeur.";
+        var user = string.IsNullOrWhiteSpace(bandName)
+            ? $"Videotitel: \"{videoTitel}\""
+            : $"Videotitel: \"{videoTitel}\"\n(Spielende Band: \"{bandName}\" – das ist NICHT der Stücktitel.)";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[]
+            {
+                new { role = "system", content = sys },
+                new { role = "user", content = user }
+            }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return new VideoAnalyse(null, null);
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(json)) return new VideoAnalyse(null, null);
+            var dto = JsonSerializer.Deserialize<VideoTitelDto>(json, MistralJson);
+            return new VideoAnalyse(Plausibel(dto?.StueckTitel, 2, 160), Plausibel(dto?.Komponist, 3, 60));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "Videotitel-Analyse fehlgeschlagen für {Titel}", videoTitel); return new VideoAnalyse(null, null); }
+    }
+
+    // Nimmt einen Wert nur an, wenn er kein „null"/leer ist und in einer plausiblen Länge liegt.
+    private static string? Plausibel(string? s, int min, int max)
+    {
+        s = s?.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        if (s.Equals("null", StringComparison.OrdinalIgnoreCase) || s.Equals("unbekannt", StringComparison.OrdinalIgnoreCase)) return null;
+        return s.Length >= min && s.Length <= max ? s : null;
+    }
+
+    private record VideoTitelDto(string? StueckTitel, string? Komponist);
+
     // ── Chunking großer Seiten + Zusammenführung der Teil-Antworten ──────────
     private const int ChunkUeberlappung = 1500;
     private const int MaxChunks = 8;

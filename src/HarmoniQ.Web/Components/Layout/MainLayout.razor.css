@@ -76,6 +76,31 @@ main {
     }
 }
 
+/* Bottom-Navigation: nur Smartphone. Bewusst reine CSS-Media-Query statt MudHidden/Breakpoint-Service –
+   die wertet der Browser sofort beim ersten Paint aus (ohne JS/Hydration/Interop), daher zuverlässig auf
+   jedem echten Gerät. md-Breakpoint = 960px (MudBlazor). */
+.hq-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1300;
+    display: flex;
+    background: #12001f;
+    border-top: 1px solid #3a1060;
+}
+
+.hq-bottom-spacer {
+    height: 64px;
+}
+
+@media (min-width: 960px) {
+    .hq-bottom-nav,
+    .hq-bottom-spacer {
+        display: none;
+    }
+}
+
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;
