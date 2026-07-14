@@ -749,7 +749,7 @@ prominent, führt aber in die persönlichen Sog-Features.*
 - **Hero mit Nutzer-Nutzen-Satz** statt „the music database" — z. B. *„Entdecke Blasmusik-Konzerte,
   merke dir, was du besucht hast, und finde die Menschen dahinter."* (→ Block 1 Ein-Satz-Positionierung).
 - Demnächst-Konzerte (Entdeckung) + sehenswerte Videos + Featured Bands/Komponist:innen.
-- **CTA führt mit dem persönlichen Nutzen:** „Führe dein eigenes Konzert-Tagebuch — kostenlos."
+- **CTA führt mit dem persönlichen Nutzen:** „Führe dein eigenes Konzert-Tagebuch." (Ton-Entscheid 2026-07-13: **kein „kostenlos"** – Nutzen-/„mit Konto"-geführt; s. `SpezifikationVideo.md`.)
   (statt „bewerten/Daten beitragen" — das ist sekundär).
 - Statistik-Kacheln bleiben, aber **kleiner/weiter unten** (nett als „Beleg", nicht als Aufmacher).
 
@@ -787,7 +787,7 @@ flach bleibt; Wording der Filter-Chips; Mobile-Stapelung (Block 6 Mobile-Punkt).
   nützlich, CTA = stöbern ohne Konto. Risiko: wirkt wie reiner Veranstaltungskalender, zeigt den
   einzigartigen Wert nicht.
 - **B · Tagebuch („Dein Konzert-Tagebuch"):** führt mit dem **validierten** persönlichen Bedarf
-  (Letterboxd-Logik), CTA = kostenlos starten. Stärkste Differenzierung + Wiederkehr; verlangt früh
+  (Letterboxd-Logik), CTA = Nutzen-geführt („Jetzt mitmachen", kein „kostenlos"). Stärkste Differenzierung + Wiederkehr; verlangt früh
   Commitment.
 - **C · Vernetzung („Die Menschen hinter der Blasmusik" + Such-mich):** stark für aktive
   Musiker:innen („du bist hier schon"); nischiger + datenschutz-sensibler → eher sekundär.

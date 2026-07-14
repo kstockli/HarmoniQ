@@ -166,7 +166,7 @@ entscheidet das System, ob bekannt (→ Passwort) oder neu (→ Registrierung). 
    Anmelden); **neu** = Passwort **+ Wiederholung** inline („Konto erstellen", Kostenlos registrieren).
 3. „ändern" führt zurück zu Schritt 1 (E-Mail bleibt erhalten). Ein Einstieg, kein „Login vs. Registrieren"-Rätsel.
 - Bewährte Flows unverändert dahinter (Bestätigungsmail, 2FA, Lockout, Passwort-vergessen, Passkey).
-  `/Account/Register` **leitet** auf die Maske um (alte Links); App-CTAs („Kostenlos starten", Einladung)
+  `/Account/Register` **leitet** auf die Maske um (alte Links); App-CTAs („Jetzt mitmachen", Einladung)
   zeigen direkt auf `/Account/Login`.
 - **Verifiziert:** Schritt 1 (Social/E-Mail/Passkey), bekannte E-Mail → Anmelden, neue E-Mail → Registrieren,
   „ändern"-Reset, `/Account/Register`-Redirect (ReturnUrl erhalten). Konsolen-„Fehler" nur WebAuthn/Passkey
