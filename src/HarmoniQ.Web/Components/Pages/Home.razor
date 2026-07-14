@@ -153,6 +153,10 @@
             {
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Event" Href="@($"/konzerte/{g.Id}")" Style="color:#F0E6FF;">
                     @g.Titel
+                    @if (g.BandNamen.Count > 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="d-block" Style="color:#1ABC9C;font-weight:600;">@string.Join(", ", g.BandNamen)</MudText>
+                    }
                     <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
                         @KonzertZeitFormat.Kompakt(g.Datum, g.Uhrzeit)@(string.IsNullOrWhiteSpace(g.Ort) ? "" : $" · {g.Ort}")
                     </MudText>
@@ -163,7 +167,8 @@
 }
 
 @* „Für dich" – personalisierter Feed aus deinen UND gefolgten Bands + Freunde-News (UX-Spec 4.2). *@
-@if (_feed is not null && (!_feed.Leer || _hatFreundeNews))
+@if (_feed is not null && (KommendeGefiltert.Count > 0 || _feed.Nachfragen.Count > 0
+                           || _feed.Videos.Count > 0 || NaheGefiltert.Count > 0 || _hatFreundeNews))
 {
     <MudPaper Class="pa-4 mb-8" Elevation="4"
               Style="background:linear-gradient(135deg,#103d36,#1a0030); border:1px solid #1ABC9C;">
@@ -176,10 +181,10 @@
                 Wochenüberblick
             </MudButton>
         </MudStack>
-        @FeedBlock("Kommende Konzerte deiner Bands", Icons.Material.Filled.Event, _feed.Kommende)
+        @FeedBlock("Kommende Konzerte deiner Bands", Icons.Material.Filled.Event, KommendeGefiltert)
         @FeedBlock("Warst du dabei? – ins Tagebuch eintragen", Icons.Material.Filled.MenuBook, _feed.Nachfragen)
         @FeedBlock("Neue Videos deiner Bands", Icons.Material.Filled.PlayCircle, _feed.Videos)
-        @FeedBlock("Konzerte in deiner Nähe", Icons.Material.Filled.Place, _feed.Nahe)
+        @FeedBlock("Konzerte in deiner Nähe", Icons.Material.Filled.Place, NaheGefiltert)
         @if (_freundeNews.Count > 0)
         {
             <MudText Typo="Typo.subtitle2" Class="mt-3" Style="color:#9B59B6;">Von deinen Freund:innen</MudText>
@@ -417,10 +422,17 @@
     private bool _hatFreundeNews;
     private List<FreundZeile> _freundeNews = [];
     private List<GeplantRef> _geplant = [];   // „möchte hingehen": vorgemerkte künftige Konzerte
-    private record GeplantRef(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort)
+    private HashSet<Guid> _geplantIds = [];   // deren Ids – zum Ausblenden im „Für dich"-Feed
+    private record GeplantRef(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, List<string> BandNamen)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }
+
+    // „Für dich" ohne die bereits vorgemerkten Konzerte (die stehen schon unter „Du möchtest hingehen").
+    private List<DigestService.Posten> KommendeGefiltert =>
+        _feed is null ? [] : _feed.Kommende.Where(p => !_geplantIds.Contains(p.EntitaetId)).ToList();
+    private List<DigestService.Posten> NaheGefiltert =>
+        _feed is null ? [] : _feed.Nahe.Where(p => !_geplantIds.Contains(p.EntitaetId)).ToList();
     private MarkupString _qrSvg = QrErzeugen();
 
     private RenderFragment FeedBlock(string titel, string icon, List<DigestService.Posten> posten) => __builder =>
@@ -508,6 +520,7 @@
 
         // Vormerkungen IMMER live (eine schlanke Query) → eine soeben gesetzte „möchte hin" ist sofort da.
         _geplant = await GeplantLadenAsync();
+        _geplantIds = _geplant.Select(g => g.Id).ToHashSet();
         _geladen = true;
 
         // Geladene Daten für den interaktiven Lauf sichern (Prerender→Interaktiv).
@@ -538,6 +551,7 @@
         _folgeAufruf = s.FolgeAufruf; _adminBands = s.AdminBands;
         _teaser = s.Teaser; _feed = s.Feed; _hatFreundeNews = s.HatFreundeNews; _freundeNews = s.FreundeNews;
         _geplant = s.Geplant;
+        _geplantIds = _geplant.Select(g => g.Id).ToHashSet();
         _geladen = true;
     }
 
@@ -662,7 +676,8 @@
             .Where(b => b.BenutzerId == userId && b.Konzert.Datum > heute)
             .OrderBy(b => b.Konzert.Datum)
             .Select(b => new GeplantRef(b.KonzertId, b.Konzert.Datum, b.Konzert.Uhrzeit, b.Konzert.Name,
-                b.Konzert.Lokal != null ? b.Konzert.Lokal.Name : b.Konzert.Ort))
+                b.Konzert.Lokal != null ? b.Konzert.Lokal.Name : b.Konzert.Ort,
+                b.Konzert.Bands.OrderBy(x => x.Band.Name).Select(x => x.Band.Name).ToList()))
             .Take(6)
             .ToListAsync();
     }
