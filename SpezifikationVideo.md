@@ -56,7 +56,7 @@ aktualisierbar** (wichtig, weil sich die UI noch ändert).
 - **Motion-Graphics** (kein Zeichentrick, nur Politur über dem Screencast):
   Callouts (Pfeil/Kreis/Highlight auf Buttons), Kinetic Text (eingeblendete Stichworte), Zoom/Schwenk auf
   den relevanten Ausschnitt, Cursor-Spotlight/Klick-Ripple, Schritt-Titelleisten, animierte Intro/Outro-Karten.
-- **Stimme:** **KI-TTS** (warme, natürliche deutsche Stimme; Anbieter/Stimme einmal festlegen, dann konstant).
+- **Stimme:** **KI-TTS** – Descript-Stimme **„Anneliese"** (native Deutsch, warm; Reserve „Erik"), konstant über alle Tracks (Entscheid 2026-07-15).
   Grund: kein Profi-Sprecher nötig, konsistent, bei Skript-Änderung in Minuten neu generierbar. Eigene Stimme
   oder Untertitel-only bleiben Alternativen (💬).
 - **Untertitel:** Pflicht (Deutsch, CH-Hochdeutsch). Landing-Page-Video läuft **stummgeschaltet mit
@@ -65,7 +65,9 @@ aktualisierbar** (wichtig, weil sich die UI noch ändert).
   oder lizenzfreie Musik), v. a. beim Hero-Video (💬).
 
 **Technische Vorgaben:**
-- 1920×1080, 16:9, ≥ 30 fps. (Optionale 9:16-Kurzschnitte für Social später – 💬.)
+- **Seitenverhältnis je Track (Entscheid 2026-07-15, mobile-first):** Track **A (Besucher) + B (Fans) =
+  9:16 Hochformat, am Handy aufgenommen** (so wird HarmoniQ genutzt; als YouTube-Short + Landing/Social).
+  Track **C (Verwalter) = 16:9 Desktop** (Admins pflegen am Computer). Auflösung 1080×1920 bzw. 1920×1080, ≥ 30 fps.
 - **Branding an die App angelehnt:** dunkler Grund `#0e0018`, Gold `#D4AF37`, Violett `#9B59B6`, Headline-Font
   „Playfair Display"; Logo in Intro/Outro. Dev-Banner („DEV localhost") in Aufnahmen ausblenden (Prod-Optik).
 - **Demo-Daten:** realistische Beispiel-Band/-Konzerte, keine echten personenbezogenen Daten von Dritten.
@@ -160,5 +162,5 @@ Konkrete Funktionen sind an den aktuellen Stand der App geknüpft.
 - **Musik & Rechte:** welche Blasmusik dürfen wir verwenden?
 - **Hosting:** YouTube vs. Infomaniak VOD.
 - **Werkzeug/Wer schneidet:** Selbst (Descript/CapCut) oder Dienstleister?
-- **Social-Kurzschnitte (9:16)** für Instagram/TikTok – ja/nein?
+- A/B sind ohnehin 9:16 → direkt für YouTube-Short/Instagram/TikTok nutzbar (kein separater Schnitt nötig).
 - **Sprachversionen:** vorerst nur Deutsch; FR/IT später (die App ist mehrsprachig angelegt)?

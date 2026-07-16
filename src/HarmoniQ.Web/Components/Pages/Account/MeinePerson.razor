@@ -5,11 +5,13 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using Microsoft.Extensions.Caching.Memory
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Nav
+@inject IMemoryCache Cache
 
 <PageTitle>Meine Person – HarmoniQ</PageTitle>
 
@@ -211,7 +213,15 @@ else
         var (ok, meldung) = await ClaimVorschlagService.ZusammenfuehrenAsync(db, _userId!, v.Id);
         _vorschlagLaeuft = false;
         Snackbar.Add(meldung, ok ? Severity.Success : Severity.Error);
-        if (ok) Nav.NavigateTo("/account/person", forceLoad: true);   // neu laden (Person ist jetzt zusammengeführt)
+        if (ok) { HomeCacheLeeren(); Nav.NavigateTo("/account/person", forceLoad: true); }   // neu laden (Person ist jetzt zusammengeführt)
+    }
+
+    // Der user-spezifische Startseiten-Cache (home:user:{id}) hält u. a. den Onboarding-Status;
+    // nach Anlegen/Zusammenführen der Person muss er weg, sonst zeigt die Startseite veraltet
+    // „Verknüpfe dich mit deiner Person".
+    private void HomeCacheLeeren()
+    {
+        if (!string.IsNullOrEmpty(_userId)) Cache.Remove($"home:user:{_userId}");
     }
 
     protected override async Task OnInitializedAsync()
@@ -417,6 +427,7 @@ else
             await PersonLinkSync.SyncEmailAsync(db, _userId!, _kontoEmail);
             _vorschlag = await ClaimVorschlagService.FindeAsync(db, _userId);
             await LadeBandsAsync(db, person.Id);
+            HomeCacheLeeren();   // Startseite kennt die neue Verknüpfung sofort (kein „Verknüpfe dich" mehr)
             Snackbar.Add("Profil angelegt. Du kannst jetzt Bands beitreten.", Severity.Success);
         }
         else

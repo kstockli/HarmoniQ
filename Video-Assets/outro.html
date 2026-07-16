@@ -1,0 +1,84 @@
+<!--
+  HarmoniQ – OUTRO / End-Karte (wiederverwendbar für alle Videos)
+  9:16 Hochformat, Website-Farben + Original-Logo, animiert (CSS).
+
+  So aufnehmen (einmalig → outro.mp4, dann in JEDEM Video wiederverwenden):
+  1. Datei in Chrome öffnen. Für 9:16: DevTools → Gerätemodus → 1080×1920 (oder Hochformat-Handy).
+  2. Bildschirmaufnahme starten, F5 (Animation von vorn), ~4 s laufen lassen (Animation + Stehenbleiben), stoppen.
+  3. In Descript importieren, ans Ende legen.
+  Farben/Schrift/Texte unten anpassbar.
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap');
+
+  :root{
+    --bg:#0e0018;
+    --gold:#D4AF37;
+    --violet:#9B59B6;
+    --text:#F0E6FF;
+  }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;}
+  body{display:flex;align-items:center;justify-content:center;}
+
+  .stage{
+    position:relative; aspect-ratio:9/16; height:100vh; max-width:100vw;
+    background:radial-gradient(120% 80% at 50% 40%, #1a0030 0%, var(--bg) 70%);
+    container-type:size; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5cqh;
+    font-family:'Playfair Display',Georgia,serif;
+    animation:stageIn .5s ease-out both;
+  }
+
+  .logo{ width:62cqw; opacity:0; transform:translateY(-2cqh) scale(.96);
+         animation:logoIn .8s .2s cubic-bezier(.2,.7,.2,1) forwards;
+         filter:drop-shadow(0 1cqh 3cqh rgba(0,0,0,.5)); }
+  .logo svg{ width:100%; height:auto; display:block; }
+
+  .url{ color:var(--gold); font-weight:700; font-size:6.2cqh; letter-spacing:.01em;
+        opacity:0; animation:fadeUp .7s .7s ease-out forwards; }
+
+  .cta{ font-family:system-ui,Arial,sans-serif; font-weight:700; font-size:4.2cqh;
+        color:#0e0018; background:var(--gold); padding:2.4cqh 6cqw; border-radius:99px;
+        letter-spacing:.02em; opacity:0; transform:scale(.9);
+        box-shadow:0 1.5cqh 4cqh rgba(212,175,55,.25);
+        animation:pop .55s 1.15s cubic-bezier(.2,1.3,.4,1) forwards, pulse 2s 2s ease-in-out infinite; }
+
+  @keyframes stageIn{ from{opacity:0} to{opacity:1} }
+  @keyframes logoIn{ to{opacity:1; transform:translateY(0) scale(1)} }
+  @keyframes fadeUp{ from{opacity:0; transform:translateY(1.8cqh)} to{opacity:1; transform:none} }
+  @keyframes pop{ to{opacity:1; transform:scale(1)} }
+  @keyframes pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+</style>
+
+<div class="stage">
+  <div class="logo">
+    <svg viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HarmoniQ">
+      <rect x="0" y="0" width="780" height="220" rx="16" fill="#0F0A1F"/>
+      <rect x="40" y="45" width="130" height="130" rx="28" fill="#241640"/>
+      <rect x="40" y="45" width="130" height="130" rx="28" fill="none" stroke="#5B21B6" stroke-width="1"/>
+      <line x1="60" y1="85"  x2="150" y2="85"  stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+      <line x1="60" y1="97"  x2="150" y2="97"  stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+      <line x1="60" y1="109" x2="150" y2="109" stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+      <line x1="60" y1="121" x2="150" y2="121" stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+      <line x1="60" y1="133" x2="150" y2="133" stroke="#6D28D9" stroke-width="0.8" opacity="0.45"/>
+      <ellipse cx="75" cy="121" rx="6" ry="4.5" fill="#DDD6FE" transform="rotate(-15,75,121)"/>
+      <line x1="81" y1="121" x2="81" y2="95" stroke="#DDD6FE" stroke-width="2"/>
+      <ellipse cx="97" cy="121" rx="6" ry="4.5" fill="#DDD6FE" transform="rotate(-15,97,121)"/>
+      <line x1="103" y1="121" x2="103" y2="95" stroke="#DDD6FE" stroke-width="2"/>
+      <ellipse cx="119" cy="121" rx="6" ry="4.5" fill="#DDD6FE" transform="rotate(-15,119,121)"/>
+      <line x1="125" y1="121" x2="125" y2="95" stroke="#DDD6FE" stroke-width="2"/>
+      <line x1="81" y1="95" x2="125" y2="95" stroke="#A78BFA" stroke-width="3" stroke-linecap="round"/>
+      <g transform="translate(129,125)">
+        <line x1="0" y1="-2" x2="0" y2="14" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M0 4 Q7 6 7 9 Q7 13 0 13" fill="none" stroke="#A855F7" stroke-width="1.4"/>
+      </g>
+      <ellipse cx="145" cy="133" rx="6" ry="4.5" fill="none" stroke="#A855F7" stroke-width="2" transform="rotate(-15,145,133)"/>
+      <line x1="151" y1="133" x2="151" y2="107" stroke="#A855F7" stroke-width="2" stroke-linecap="round"/>
+      <text x="196" y="138" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="700" letter-spacing="-2"><tspan fill="#D8B4FE">Harmoni</tspan><tspan fill="#A855F7">Q</tspan></text>
+      <text x="200" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" letter-spacing="4" fill="#7C3AED" opacity="0.85">DIE BLASMUSIK-DATENBANK</text>
+    </svg>
+  </div>
+
+  <div class="url">harmoniq.q-no.ch</div>
+  <div class="cta">Jetzt mitmachen</div>
+</div>

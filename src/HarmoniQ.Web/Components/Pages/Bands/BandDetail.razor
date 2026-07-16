@@ -124,7 +124,27 @@ else
         <RichtigstellungMelden Typ="RichtigstellungTyp.Band" Id="_band.Id" />
     </MudStack>
 
-    @* 1. Aufnahmen (Videos) *@
+    @* 1. Konzerte *@
+    @if (_konzerte.Count > 0)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
+            Konzerte (@_konzerte.Count)
+        </MudText>
+        <MudList T="string" Dense="true" Class="mb-6">
+            @foreach (var k in _konzerte)
+            {
+                <MudListItem T="string" Href="@($"/konzerte/{k.Id}")" Icon="@Icons.Material.Filled.Event"
+                             Style="color:#F0E6FF;">
+                    @k.Titel
+                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                        @KonzertZeitFormat.Kompakt(k.Datum, k.Uhrzeit)@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    }
+
+    @* 2. Aufnahmen (Videos) *@
     @if (_videos.Count == 0)
     {
         <MudAlert Severity="Severity.Info" Class="mb-6">Für diese Band sind noch keine Videos erfasst.</MudAlert>
@@ -152,26 +172,6 @@ else
                 </MudItem>
             }
         </MudGrid>
-    }
-
-    @* 2. Konzerte *@
-    @if (_konzerte.Count > 0)
-    {
-        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
-            Konzerte (@_konzerte.Count)
-        </MudText>
-        <MudList T="string" Dense="true" Class="mb-6">
-            @foreach (var k in _konzerte)
-            {
-                <MudListItem T="string" Href="@($"/konzerte/{k.Id}")" Icon="@Icons.Material.Filled.Event"
-                             Style="color:#F0E6FF;">
-                    @k.Titel
-                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                        @KonzertZeitFormat.Kompakt(k.Datum, k.Uhrzeit)@(string.IsNullOrWhiteSpace(k.Ort) ? "" : $" · {k.Ort}")
-                    </MudText>
-                </MudListItem>
-            }
-        </MudList>
     }
 
     @* 3. Gespielte Stücke (Videos ∪ Konzertprogramme) *@
