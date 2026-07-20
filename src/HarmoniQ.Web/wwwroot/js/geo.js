@@ -45,5 +45,36 @@ window.harmoniqUi = {
     set: function (k, v) { try { sessionStorage.setItem(k, v); } catch (e) { } },
     scrollTo: function (sel) {
         try { var el = document.querySelector(sel); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
+    },
+    // Video-Wraps initialisieren: eigene Bedienung (Ton/Vollbild/Klick=Play-Pause) statt nativer Controls.
+    // Startet stumm (Autoplay nur muted erlaubt); der „Ton"-Knopf macht das Entstummen auffindbar.
+    initVideos: function () {
+        try {
+            document.querySelectorAll('.hq-video-wrap').forEach(function (wrap) {
+                var v = wrap.querySelector('video');
+                if (!v || wrap.dataset.hqInit) return;
+                wrap.dataset.hqInit = '1';
+                var sound = wrap.querySelector('.hq-sound');
+                var fs = wrap.querySelector('.hq-fs');
+                function refresh() { if (sound) sound.textContent = v.muted ? '🔊 Ton' : '🔇'; }
+                v.muted = true; v.defaultMuted = true;
+                if (v.dataset.autoplay === '1') { var p = v.play(); if (p && p.catch) p.catch(function () { }); }
+                if (sound) sound.addEventListener('click', function (e) {
+                    e.stopPropagation(); v.muted = !v.muted;
+                    if (!v.muted && v.paused) { var q = v.play(); if (q && q.catch) q.catch(function () { }); }
+                    refresh();
+                });
+                if (fs) fs.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (wrap.requestFullscreen) wrap.requestFullscreen();
+                    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+                });
+                v.addEventListener('click', function () {
+                    if (v.paused) { var q = v.play(); if (q && q.catch) q.catch(function () { }); } else v.pause();
+                });
+                v.addEventListener('volumechange', refresh);
+                refresh();
+            });
+        } catch (e) { }
     }
 };
