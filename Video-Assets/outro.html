@@ -43,6 +43,12 @@
         box-shadow:0 1.5cqh 4cqh rgba(212,175,55,.25);
         animation:pop .55s 1.15s cubic-bezier(.2,1.3,.4,1) forwards, pulse 2s 2s ease-in-out infinite; }
 
+  /* Musik-Credit (herzlich, unten) – reist mit dem wiederverwendeten Outro in jedes Video. */
+  .credit{ position:absolute; left:0; right:0; bottom:4cqh; text-align:center; padding:0 8cqw;
+           font-family:system-ui,Arial,sans-serif; font-size:2.2cqh; line-height:1.6; color:#C4B0D8;
+           opacity:0; animation:fadeUp .7s 1.7s ease-out forwards; }
+  .credit .hl{ color:var(--gold); font-weight:700; }
+
   @keyframes stageIn{ from{opacity:0} to{opacity:1} }
   @keyframes logoIn{ to{opacity:1; transform:translateY(0) scale(1)} }
   @keyframes fadeUp{ from{opacity:0; transform:translateY(1.8cqh)} to{opacity:1; transform:none} }
@@ -81,4 +87,11 @@
 
   <div class="url">harmoniq.q-no.ch</div>
   <div class="cta">Jetzt mitmachen</div>
+
+  <div class="credit">
+    Du hörst „Wine-Dark Sea" von <span class="hl">John Mackey</span> 🎺<br>
+    grandios gespielt vom <br>
+	<span class="hl">JBL Jugendblasorchester Luzern</span><br>
+    Danke für die freundliche Erlaubnis!
+  </div>
 </div>
