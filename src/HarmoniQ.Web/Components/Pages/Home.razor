@@ -144,7 +144,7 @@
     </MudPaper>
 }
 
-@* „Ich möchte hingehen" – vorgemerkte künftige Konzerte (Übersicht, UX-Feedback Punkt 5). *@
+@* „Ich möchte hingehen" – vorgemerkte Konzerte (heute zuoberst mit „Heute"-Markierung, dann künftige). *@
 @if (_geplant.Count > 0)
 {
     <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #1ABC9C;">
@@ -155,7 +155,11 @@
         <MudList T="string" Dense="true">
             @foreach (var g in _geplant)
             {
-                <MudListItem T="string" Icon="@Icons.Material.Filled.Event" Href="@($"/konzerte/{g.Id}")" Style="color:#F0E6FF;">
+                <MudListItem T="string" Icon="@(g.IstHeute ? Icons.Material.Filled.Today : Icons.Material.Filled.Event)" Href="@($"/konzerte/{g.Id}")" Style="color:#F0E6FF;">
+                    @if (g.IstHeute)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mr-2">Heute</MudChip>
+                    }
                     @g.Titel
                     @if (g.BandNamen.Count > 0)
                     {
@@ -428,19 +432,20 @@
             {
                 <MudText Typo="Typo.subtitle2" Align="Align.Center" Class="mb-2" Style="color:#D4AF37;">@titel</MudText>
             }
-            <div style="position:relative;aspect-ratio:9/16;border-radius:14px;overflow:hidden;border:1px solid #3a1060;box-shadow:0 8px 30px rgba(0,0,0,.45);background:#000;">
-                @* Hero (nicht eingeloggt): Autoplay STUMM (Browser erlauben Autoplay nur muted) + Controls zum Entstummen/Vollbild.
-                   Eingeloggt: kein Autoplay, per Klick abspielen (mit Ton). Vollbild via nativen Controls. *@
-                @if (autoplay)
-                {
-                    <video id="hqHeroVideo" src="@HeroVideoUrl" playsinline autoplay muted controls controlsList="nodownload" preload="auto"
-                           style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
-                }
-                else
-                {
-                    <video src="@HeroVideoUrl" playsinline controls controlsList="nodownload" preload="metadata"
-                           style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
-                }
+            <div class="hq-video-wrap"
+                 style="position:relative;aspect-ratio:9/16;border-radius:14px;overflow:hidden;border:1px solid #3a1060;box-shadow:0 8px 30px rgba(0,0,0,.45);background:#000;">
+                @* Eigene, dezente Bedienung OBEN RECHTS statt nativer Controls (die unten die eingebrannten
+                   Untertitel überdeckten). Ton-Knopf macht das Entstummen auffindbar; Klick aufs Video = Play/Pause.
+                   Startet stumm; Autoplay (nur muted) nur im Hero über data-autoplay. Verdrahtet in harmoniqUi.initVideos. *@
+                <video src="@HeroVideoUrl" data-autoplay="@(autoplay ? "1" : "0")" playsinline
+                       preload="@(autoplay ? "auto" : "metadata")"
+                       style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer;"></video>
+                <div style="position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:2;">
+                    <button type="button" class="hq-sound"
+                            style="background:rgba(14,0,24,.6);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:4px 10px;font-size:.8rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);">🔊 Ton</button>
+                    <button type="button" class="hq-fs" aria-label="Vollbild"
+                            style="background:rgba(14,0,24,.6);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:4px 9px;font-size:.9rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);">⛶</button>
+                </div>
             </div>
         </div>
     };
@@ -466,6 +471,7 @@
     private record GeplantRef(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, List<string> BandNamen)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
+        public bool IstHeute => Datum == DateOnly.FromDateTime(DateTime.Today);
     }
 
     // „Für dich" ohne die bereits vorgemerkten Konzerte (die stehen schon unter „Du möchtest hingehen").
@@ -712,8 +718,10 @@
         if (string.IsNullOrEmpty(userId)) return [];
         var heute = DateOnly.FromDateTime(DateTime.Today);
         await using var db = await DbFactory.CreateDbContextAsync();
+        // >= heute: heutige Vormerkungen bleiben hier drin (kommen durch die Sortierung ganz nach oben,
+        // vor die künftigen); vergangene sind bereits im Tagebuch.
         return await db.KonzertBesuche
-            .Where(b => b.BenutzerId == userId && b.Konzert.Datum > heute)
+            .Where(b => b.BenutzerId == userId && b.Konzert.Datum >= heute)
             .OrderBy(b => b.Konzert.Datum)
             .Select(b => new GeplantRef(b.KonzertId, b.Konzert.Datum, b.Konzert.Uhrzeit, b.Konzert.Name,
                 b.Konzert.Lokal != null ? b.Konzert.Lokal.Name : b.Konzert.Ort,
@@ -858,8 +866,8 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        // Hero-Video sicher STUMM autoplayen (Blazor überträgt das muted-Attribut nicht zuverlässig).
-        await JS.InvokeVoidAsync("harmoniqUi.autoplayMuted", "#hqHeroVideo");
+        // Video-Bedienung verdrahten (eigenes Overlay) + Hero stumm autoplayen.
+        await JS.InvokeVoidAsync("harmoniqUi.initVideos");
 
         if (_kalender.All(k => k.Lat is null)) return;
         var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
