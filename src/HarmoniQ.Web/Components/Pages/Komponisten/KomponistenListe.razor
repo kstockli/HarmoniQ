@@ -8,14 +8,25 @@
 
 <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Komponisten</MudText>
 
-@if (_komponisten == null)
+@if (_alle == null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
 else
 {
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Komponist suchen"
+                      Variant="Variant.Outlined" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" />
+        <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Komponisten</MudText>
+    </MudPaper>
+
+    @if (_gefiltert.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Keine Komponisten gefunden.</MudAlert>
+    }
     <MudGrid>
-        @foreach (var k in _komponisten)
+        @foreach (var k in _gefiltert)
         {
             <MudItem xs="12" sm="6" md="4">
                 <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
@@ -51,16 +62,27 @@ else
 }
 
 @code {
-    private List<Zeile>? _komponisten;
+    private List<Zeile>? _alle;
+    private List<Zeile> _gefiltert = [];
+    private string _suche = "";
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _komponisten = await db.Personen
+        _alle = await db.Personen
             .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
             .OrderBy(p => p.Name)
             .Select(p => new Zeile(p.Id, p.Name, p.BildUrl, p.Biografie, p.StueckBeitraege.Count))
             .ToListAsync();
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = (s == ""
+            ? _alle!
+            : _alle!.Where(k => k.Name.Contains(s, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);

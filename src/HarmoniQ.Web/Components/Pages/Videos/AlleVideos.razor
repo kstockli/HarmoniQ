@@ -17,19 +17,18 @@
                           Immediate="true" Clearable="true" />
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudSelect T="Guid?" @bind-Value="_bandFilter" @bind-Value:after="Filtern"
-                       Label="Band" Variant="Variant.Outlined" Clearable="true">
-                @foreach (var b in _bands)
-                {
-                    <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <MudAutocomplete T="string" @bind-Value="_bandText" @bind-Value:after="Filtern"
+                             Label="Band" Variant="Variant.Outlined" Clearable="true"
+                             SearchFunc="SucheBand" CoerceValue="true" ResetValueOnEmptyText="true"
+                             MaxItems="20" Immediate="true"
+                             AdornmentIcon="@Icons.Material.Filled.Search" Adornment="Adornment.Start" />
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudTextField @bind-Value="_komponist" @bind-Value:after="Filtern"
-                          Label="Komponist" Variant="Variant.Outlined"
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person"
-                          Immediate="true" Clearable="true" />
+            <MudAutocomplete T="string" @bind-Value="_komponistText" @bind-Value:after="Filtern"
+                             Label="Komponist" Variant="Variant.Outlined" Clearable="true"
+                             SearchFunc="SucheKomponist" CoerceValue="true" ResetValueOnEmptyText="true"
+                             MaxItems="20" Immediate="true"
+                             AdornmentIcon="@Icons.Material.Filled.Search" Adornment="Adornment.Start" />
         </MudItem>
     </MudGrid>
     <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Videos</MudText>
@@ -85,17 +84,37 @@
 
     private List<Zeile> _alle = [];
     private List<Zeile> _gefiltert = [];
-    private List<Band> _bands = [];
+    private List<string> _bandNamen = [];
+    private List<string> _komponisten = [];
 
     private string _suche = "";
-    private Guid? _bandFilter;
-    private string _komponist = "";
+    private string? _bandText;
+    private string? _komponistText;
+
+    // Einheitliches Filter-Muster (wie /stuecke, /personen): tippen → Vorschläge → wählen,
+    // ODER unvollständigen Text als LIKE stehen lassen (CoerceValue).
+    private Task<IEnumerable<string>> SucheBand(string? wert, CancellationToken ct)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? _bandNamen : _bandNamen.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(20));
+    }
+
+    private Task<IEnumerable<string>> SucheKomponist(string? wert, CancellationToken ct)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? _komponisten : _komponisten.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(20));
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
+        _bandNamen = await db.Bands.OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
+        _komponisten = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
 
         var schnitte = await db.Bewertungen
             .GroupBy(b => b.VideoId)
@@ -120,17 +139,20 @@
             schnitte.TryGetValue(v.Id, out var s2) ? s2.Schnitt : 0
         )).OrderBy(z => z.StueckTitel).ToList();
 
-        _bandFilter = BandQuery;
+        // Vorbelegung aus ?band= (Guid → Name) für den Text-Filter.
+        if (BandQuery is { } bq)
+            _bandText = await db.Bands.Where(b => b.Id == bq).Select(b => b.Name).FirstOrDefaultAsync();
         Filtern();
     }
 
     private void Filtern()
     {
-        var komp = _komponist.Trim().ToLowerInvariant();
         _gefiltert = _alle
             .Where(z =>
-                (_bandFilter == null || z.BandId == _bandFilter) &&
-                (komp == "" || z.KomponistSuche.Contains(komp)) &&
+                (string.IsNullOrWhiteSpace(_bandText)
+                    || z.BandName.Contains(_bandText, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(_komponistText)
+                    || z.KomponistSuche.Contains(_komponistText.ToLowerInvariant())) &&
                 (_suche == "" || z.StueckTitel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
                               || z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)))
             .ToList();
