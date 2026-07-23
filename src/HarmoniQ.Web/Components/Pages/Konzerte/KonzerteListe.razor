@@ -206,6 +206,10 @@ else
             if (pos is { Length: 2 }) { _refLat = pos[0]; _refLng = pos[1]; }
         }
 
+        // Ist ein Umkreis aktiv (aus dem gemerkten Filter), Panel offen zeigen –
+        // sonst filtert er unsichtbar. „Wenn angewählt, muss man ihn sehen."
+        if (_radiusKm is not null) _mehrFilter = true;
+
         _bereit = true;
         Filtern();
         StateHasChanged();

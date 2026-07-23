@@ -190,10 +190,16 @@ else
             {
                 var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
                           ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
-                if (pos is { Length: 2 }) { _refLat = pos[0]; _refLng = pos[1]; _radiusKm ??= 50; }
+                // Standort nur als Bezugspunkt merken (für die Entfernungs-Spalte) – KEINEN Umkreis
+                // still voreinstellen, sonst wird die Liste unbemerkt gefiltert (User-Feedback).
+                if (pos is { Length: 2 }) { _refLat = pos[0]; _refLng = pos[1]; }
             }
             catch { /* Geo nicht verfügbar */ }
         }
+
+        // Ist ein Umkreis aktiv (z. B. aus dem gemerkten Filter), MUSS das Panel offen sein –
+        // sonst filtert der Umkreis unsichtbar. „Wenn angewählt, muss man ihn sehen."
+        if (_radiusKm is not null) _mehrFilter = true;
 
         _bereit = true;
         Filtern();

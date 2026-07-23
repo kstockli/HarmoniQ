@@ -61,7 +61,12 @@
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
-<body>
+@* data-enhance-nav="false": Enhanced Navigation app-weit aus. Grund: Bei globalem InteractiveServer +
+   Prerendering blieb eine interaktiv-gerenderte Seite nach Enhanced-Navigation (v. a. über eine
+   statische Account-Seite oder bei kurz getrenntem Circuit) als totes, prerendertes HTML stehen –
+   Filter u. Ä. reagierten erst nach einem vollen Reload. Ein voller Seitenaufbau je Navigation
+   startet den Circuit zuverlässig frisch. Zum Zurücknehmen: Attribut entfernen. *@
+<body data-enhance-nav="false">
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>

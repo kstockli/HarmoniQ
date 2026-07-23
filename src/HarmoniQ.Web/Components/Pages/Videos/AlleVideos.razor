@@ -26,13 +26,10 @@
             </MudSelect>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudSelect T="Guid?" @bind-Value="_komponistFilter" @bind-Value:after="Filtern"
-                       Label="Komponist" Variant="Variant.Outlined" Clearable="true">
-                @foreach (var k in _komponisten)
-                {
-                    <MudSelectItem T="Guid?" Value="@k.Id">@k.Name</MudSelectItem>
-                }
-            </MudSelect>
+            <MudTextField @bind-Value="_komponist" @bind-Value:after="Filtern"
+                          Label="Komponist" Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person"
+                          Immediate="true" Clearable="true" />
         </MudItem>
     </MudGrid>
     <MudText Typo="Typo.caption" Class="mt-2" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Videos</MudText>
@@ -89,22 +86,16 @@
     private List<Zeile> _alle = [];
     private List<Zeile> _gefiltert = [];
     private List<Band> _bands = [];
-    private List<(Guid Id, string Name)> _komponisten = [];
 
     private string _suche = "";
     private Guid? _bandFilter;
-    private Guid? _komponistFilter;
+    private string _komponist = "";
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
 
         _bands = await db.Bands.OrderBy(b => b.Name).ToListAsync();
-        _komponisten = await db.Personen
-            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
-            .OrderBy(p => p.Name)
-            .Select(p => new ValueTuple<Guid, string>(p.Id, p.Name))
-            .ToListAsync();
 
         var schnitte = await db.Bewertungen
             .GroupBy(b => b.VideoId)
@@ -120,7 +111,10 @@
         _alle = videos.Select(v => new Zeile(
             v.Id, v.Plattform, v.ExternId, v.Titel,
             v.StueckId, v.Stueck.Titel,
-            v.Stueck.Komponisten.Select(p => p.Id).ToHashSet(), v.Stueck.KomponistenText,
+            // Anzeige = Komponisten-Text; Suche = Text + zugeordnete Personen-Namen (Text-Like statt Dropdown).
+            v.Stueck.KomponistenText,
+            string.Join(" ", new[] { v.Stueck.KomponistenText ?? "" }
+                .Concat(v.Stueck.Komponisten.Select(p => p.Name))).ToLowerInvariant(),
             v.BandId, v.Band?.Name ?? "Unbekannt", v.Band?.Land,
             schnitte.TryGetValue(v.Id, out var s) ? s.Anzahl : 0,
             schnitte.TryGetValue(v.Id, out var s2) ? s2.Schnitt : 0
@@ -132,16 +126,17 @@
 
     private void Filtern()
     {
+        var komp = _komponist.Trim().ToLowerInvariant();
         _gefiltert = _alle
             .Where(z =>
                 (_bandFilter == null || z.BandId == _bandFilter) &&
-                (_komponistFilter == null || z.KomponistIds.Contains(_komponistFilter.Value)) &&
+                (komp == "" || z.KomponistSuche.Contains(komp)) &&
                 (_suche == "" || z.StueckTitel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
                               || z.Titel.Contains(_suche, StringComparison.OrdinalIgnoreCase)))
             .ToList();
     }
 
     private record Zeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel,
-        Guid StueckId, string StueckTitel, HashSet<Guid> KomponistIds, string KomponistName,
+        Guid StueckId, string StueckTitel, string? KomponistName, string KomponistSuche,
         Guid? BandId, string BandName, string? BandLand, int Anzahl, double Schnitt);
 }
