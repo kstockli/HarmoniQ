@@ -29,6 +29,14 @@ public class Video : AuditierteEntitaet
     [NotMapped] public string? EmbedUrl => VideoEinbettung.Embed(Plattform, ExternId);
     [NotMapped] public string ThumbnailUrl => VideoEinbettung.Thumbnail(Plattform, ExternId);
 
+    // ─── Effektiver Ort/Anlass: das verknüpfte Konzert ist die Quelle der Wahrheit ───
+    // (Konzert.Lokal.Name → Konzert.Ort → eigener Freitext). Nur wenn kein Konzert verknüpft ist,
+    // gilt der Freitext des Videos. Voraussetzung: Konzert (+ Lokal) sind geladen.
+    /// <summary>Anzuzeigender Aufnahme-Ort (bevorzugt aus dem verknüpften Konzert/Lokal).</summary>
+    [NotMapped] public string? EffektiverOrt => Konzert?.Lokal?.Name ?? Konzert?.Ort ?? Ort;
+    /// <summary>Anzuzeigender Anlass (bevorzugt aus dem verknüpften Konzert).</summary>
+    [NotMapped] public string? EffektiverAnlass => Konzert?.Name ?? Anlass;
+
     public Stueck Stueck { get; set; } = null!;
     public Band? Band { get; set; }
     public Konzert? Konzert { get; set; }

@@ -133,18 +133,31 @@
 
     private async Task Loeschen(Konzert k)
     {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Betroffene Nutzerdaten zählen (gehen per Cascade unwiderruflich verloren).
+        var besuche = await db.KonzertBesuche.CountAsync(b => b.KonzertId == k.Id);
+        var eindruecke = await db.StueckEindruecke.CountAsync(s => s.KonzertStueck.KonzertId == k.Id);
         var hatVideos = k.Videos.Count;
+
+        var verlust = new List<string>();
+        if (besuche > 0) verlust.Add($"{besuche} Tagebuch-Eintrag/-Einträge");
+        if (eindruecke > 0) verlust.Add($"{eindruecke} private Stück-Eindrücke");
+        var warn = verlust.Count > 0
+            ? $" ⚠ {string.Join(" und ", verlust)} von Nutzer:innen gehen dabei UNWIDERRUFLICH verloren."
+            : "";
+        var videoHinweis = hatVideos > 0
+            ? $" Die {hatVideos} zugeordneten Videos bleiben erhalten (Konzert-Bezug wird entfernt)."
+            : "";
+
         var parameters = new DialogParameters<ConfirmDialog>
         {
-            { x => x.Text, hatVideos > 0
-                ? $"Konzert \"{Bez(k)}\" wird gelöscht. Die {hatVideos} zugeordneten Videos bleiben erhalten (Konzert-Bezug wird entfernt)."
-                : $"Konzert \"{Bez(k)}\" löschen?" }
+            { x => x.Text, $"Konzert \"{Bez(k)}\" löschen?{videoHinweis}{warn}" }
         };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
         var result = await dialog.Result;
         if (result is null || result.Canceled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
         var entity = await db.Konzerte.FindAsync(k.Id);
         if (entity != null)
         {

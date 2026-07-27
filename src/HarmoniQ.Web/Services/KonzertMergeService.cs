@@ -37,14 +37,24 @@ public static class KonzertMergeService
             db.KonzertBands.Remove(kb);
         }
 
-        // ── KonzertStueck (unique Konzert+Stück+Band): umhängen, Dublette verwerfen ─
-        var zielProgramm = (await db.KonzertStuecke.Where(ks => ks.KonzertId == zielId)
-            .Select(ks => new { ks.StueckId, ks.BandId }).ToListAsync())
-            .Select(x => (x.StueckId, x.BandId)).ToHashSet();
+        // ── KonzertStueck: umhängen; bei Dublette Programm-Zeile verwerfen, aber private
+        //    StueckEindruck-Einträge auf die Ziel-Zeile RETTEN (nicht per Cascade verlieren). ─
+        var zielRows = await db.KonzertStuecke.Where(ks => ks.KonzertId == zielId).ToListAsync();
+        var zielNachSchluessel = new Dictionary<(Guid, Guid?), Guid>();
+        foreach (var zr in zielRows) zielNachSchluessel.TryAdd((zr.StueckId, zr.BandId), zr.Id);
+
         foreach (var ks in await db.KonzertStuecke.Where(ks => ks.KonzertId == quelleId).ToListAsync())
         {
-            if (zielProgramm.Contains((ks.StueckId, ks.BandId))) db.KonzertStuecke.Remove(ks);
-            else { ks.KonzertId = zielId; zielProgramm.Add((ks.StueckId, ks.BandId)); }
+            if (zielNachSchluessel.TryGetValue((ks.StueckId, ks.BandId), out var zielKsId))
+            {
+                await EindrueckeUmhaengenAsync(db, ks.Id, zielKsId);
+                db.KonzertStuecke.Remove(ks);
+            }
+            else
+            {
+                ks.KonzertId = zielId;
+                zielNachSchluessel[(ks.StueckId, ks.BandId)] = ks.Id;
+            }
         }
 
         // ── KonzertPerson (unique Konzert+Person+Rolle): umhängen, Dublette verwerfen ─
@@ -55,6 +65,16 @@ public static class KonzertMergeService
         {
             if (zielKp.Contains((kp.PersonId, kp.Rolle))) db.KonzertPersonen.Remove(kp);
             else { kp.KonzertId = zielId; zielKp.Add((kp.PersonId, kp.Rolle)); }
+        }
+
+        // ── KonzertBesuch (Tagebuch): auf das Ziel-Konzert umhängen, sonst gingen die Besuche
+        //    beim Löschen des Quell-Konzerts per Cascade verloren. Dedup pro Nutzer:in. ─
+        var zielBesuchUser = (await db.KonzertBesuche.Where(b => b.KonzertId == zielId)
+            .Select(b => b.BenutzerId).ToListAsync()).ToHashSet();
+        foreach (var b in await db.KonzertBesuche.Where(b => b.KonzertId == quelleId).ToListAsync())
+        {
+            if (zielBesuchUser.Add(b.BenutzerId)) b.KonzertId = zielId;
+            else db.KonzertBesuche.Remove(b);   // Nutzer:in hat das Ziel-Konzert bereits eingetragen
         }
 
         // ── Stammdaten-Lücken des Ziels aus der Quelle füllen (Datum bleibt Ziel) ─
@@ -69,4 +89,18 @@ public static class KonzertMergeService
     }
 
     private static string Bez(Konzert k) => k.Name ?? k.Datum.ToString("dd.MM.yyyy");
+
+    /// <summary>Hängt private StueckEindruck-Einträge von einer Programm-Zeile auf eine andere um
+    /// (bei Konzert-Merge). Hat ein:e Nutzer:in auf der Ziel-Zeile bereits einen Eindruck, wird der
+    /// Quell-Eintrag verworfen (Unique-Index BenutzerId+KonzertStueckId).</summary>
+    private static async Task EindrueckeUmhaengenAsync(ApplicationDbContext db, Guid vonKsId, Guid nachKsId)
+    {
+        var zielUser = (await db.StueckEindruecke.Where(s => s.KonzertStueckId == nachKsId)
+            .Select(s => s.BenutzerId).ToListAsync()).ToHashSet();
+        foreach (var s in await db.StueckEindruecke.Where(s => s.KonzertStueckId == vonKsId).ToListAsync())
+        {
+            if (zielUser.Add(s.BenutzerId)) s.KonzertStueckId = nachKsId;
+            else db.StueckEindruecke.Remove(s);
+        }
+    }
 }

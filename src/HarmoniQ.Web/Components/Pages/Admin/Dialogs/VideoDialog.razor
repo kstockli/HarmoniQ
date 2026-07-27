@@ -32,10 +32,19 @@
             <MudText Typo="Typo.caption" Style="color:#e57373;">Nicht erkannt (YouTube-Link/-ID oder http(s)-Datei-URL erwartet).</MudText>
         }
 
-        <MudTextField @bind-Value="_model.Ort" Label="Aufnahme-Ort (optional)" Variant="Variant.Outlined" Class="mt-3"
-                      Placeholder="z. B. KKL Luzern" />
-        <MudTextField @bind-Value="_model.Anlass" Label="Anlass (optional)" Variant="Variant.Outlined" Class="mt-3"
-                      Placeholder="z. B. Jahreskonzert 2024" />
+        @if (_konzert is null && !_neuKonzert)
+        {
+            <MudTextField @bind-Value="_model.Ort" Label="Aufnahme-Ort (optional)" Variant="Variant.Outlined" Class="mt-3"
+                          Placeholder="z. B. KKL Luzern" />
+            <MudTextField @bind-Value="_model.Anlass" Label="Anlass (optional)" Variant="Variant.Outlined" Class="mt-3"
+                          Placeholder="z. B. Jahreskonzert 2024" />
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                Ort und Anlass werden vom verknüpften Konzert übernommen.
+            </MudAlert>
+        }
 
         @* ── Konzert: bestehendes wählen oder neu anlegen ───────────────────────── *@
         <MudSwitch T="bool" @bind-Value="_neuKonzert" Color="Color.Warning" Class="mt-3"
@@ -177,6 +186,9 @@
 
     private void Speichern()
     {
+        // Bei verknüpftem Konzert ist dieses die Ort/Anlass-Quelle → kein doppelter Freitext.
+        if (_konzert is not null || _neuKonzert) { _model.Ort = null; _model.Anlass = null; }
+
         if (_neuKonzert && _neuDatum is not null)
         {
             // Neues Konzert wird vom Aufrufer angelegt; KonzertId hier noch leer.

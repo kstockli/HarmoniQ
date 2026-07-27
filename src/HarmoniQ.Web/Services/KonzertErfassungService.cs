@@ -103,8 +103,10 @@ public static class KonzertErfassungService
         KopfSetzen(konzert, e);
         konzert.LokalId = await LokalService.FindeOderErstelleAsync(db, e.Ort);
 
-        // Programm und Mitwirkende komplett neu aufbauen (Surrogat-PKs → unkritisch).
-        db.KonzertStuecke.RemoveRange(await db.KonzertStuecke.Where(x => x.KonzertId == konzertId).ToListAsync());
+        // Mitwirkende komplett neu aufbauen (keine abhängigen Daten). Das PROGRAMM wird dagegen
+        // DIFFERENZIELL abgeglichen (siehe BefuelleAsync): bestehende KonzertStueck-Zeilen bleiben mit
+        // ihrer Id erhalten, sonst verlieren private StueckEindruck-Einträge (hängen an KonzertStueck.Id,
+        // Cascade-Delete) ihren Bezug. IDs entstehen nur bei Create, nicht bei Update.
         db.KonzertPersonen.RemoveRange(await db.KonzertPersonen.Where(x => x.KonzertId == konzertId).ToListAsync());
 
         var desiredBands = new HashSet<Guid>();
@@ -186,7 +188,12 @@ public static class KonzertErfassungService
             return p;
         }
 
-        // ── Programm ──────────────────────────────────────────────────────────
+        // ── Programm (differenziell: bestehende Zeilen behalten ihre Id) ────────
+        // Bestehende Programm-Zeilen laden (leer bei Create). Match über den fachlichen Schlüssel
+        // (StueckId, BandId): Treffer → Reihenfolge aktualisieren (Id bleibt!); neu → Add; weg → Remove.
+        var bestehendKS = await db.KonzertStuecke.Where(x => x.KonzertId == konzert.Id).ToListAsync();
+        var behalten = new HashSet<Guid>();
+
         foreach (var row in e.Programm)
         {
             var titel = row.StueckTitel.Trim();
@@ -215,12 +222,26 @@ public static class KonzertErfassungService
             }
 
             var band = await BandHolen(row.BandName);
-            if (konzertStuecke.Add((stueck.Id, band?.Id)))
+            if (!konzertStuecke.Add((stueck.Id, band?.Id))) continue;   // Dublette in der Eingabe
+
+            var vorhanden = bestehendKS.FirstOrDefault(x => x.StueckId == stueck.Id && x.BandId == band?.Id);
+            if (vorhanden != null)
+            {
+                vorhanden.Reihenfolge = row.Reihenfolge;   // Update in place → Id + StueckEindruck bleiben
+                behalten.Add(vorhanden.Id);
+            }
+            else
+            {
                 db.KonzertStuecke.Add(new KonzertStueck
                 {
                     Konzert = konzert, Stueck = stueck, BandId = band?.Id, Reihenfolge = row.Reihenfolge
                 });
+            }
         }
+
+        // Nicht mehr gewünschte Programm-Zeilen entfernen (deren StueckEindruck fällt bewusst weg).
+        foreach (var weg in bestehendKS.Where(x => !behalten.Contains(x.Id)))
+            db.KonzertStuecke.Remove(weg);
 
         // ── Mitwirkende ───────────────────────────────────────────────────────
         foreach (var row in e.Mitwirkende)

@@ -178,15 +178,26 @@
 
     private async Task Loeschen(Zeile z)
     {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Betroffene Nutzerdaten zählen (gehen per Cascade unwiderruflich verloren).
+        var eindruecke = await db.StueckEindruecke.CountAsync(s => s.KonzertStueck.StueckId == z.Id);
+        var bewertungen = await db.Bewertungen.CountAsync(b => b.Video.StueckId == z.Id);
+        var verlust = new List<string>();
+        if (bewertungen > 0) verlust.Add($"{bewertungen} Video-Bewertung(en)");
+        if (eindruecke > 0) verlust.Add($"{eindruecke} private Stück-Eindrücke");
+        var warn = verlust.Count > 0
+            ? $" ⚠ {string.Join(" und ", verlust)} von Nutzer:innen gehen dabei UNWIDERRUFLICH verloren."
+            : "";
+
         var parameters = new DialogParameters<ConfirmDialog>
         {
-            { x => x.Text, $"Stück \"{z.Titel}\" inkl. aller zugehörigen Videos und Bewertungen löschen?" }
+            { x => x.Text, $"Stück \"{z.Titel}\" inkl. aller zugehörigen Videos löschen?{warn}" }
         };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
         var result = await dialog.Result;
         if (result is null || result.Canceled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
         var entity = await db.Stuecke.FindAsync(z.Id);
         if (entity != null)
         {

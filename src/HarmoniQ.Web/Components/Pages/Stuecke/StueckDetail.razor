@@ -126,14 +126,14 @@ else
                                 </MudStack>
                             }
 
-                            @if (!string.IsNullOrWhiteSpace(video.Anlass) || !string.IsNullOrWhiteSpace(video.Ort) || video.AufnahmeDatum.HasValue)
+                            @if (!string.IsNullOrWhiteSpace(video.EffektiverAnlass) || !string.IsNullOrWhiteSpace(video.EffektiverOrt) || video.AufnahmeDatum.HasValue)
                             {
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
                                     <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Style="color:#9B59B6;" />
                                     <MudText Typo="Typo.caption" Style="color:#A78FC0;">
                                         @string.Join(" · ", new[] {
-                                            video.Anlass,
-                                            video.Ort,
+                                            video.EffektiverAnlass,
+                                            video.EffektiverOrt,
                                             video.AufnahmeDatum?.ToString("dd.MM.yyyy")
                                         }.Where(x => !string.IsNullOrWhiteSpace(x)))
                                     </MudText>
@@ -258,6 +258,7 @@ else
 
         _videos = await db.Videos
             .Include(v => v.Band)
+            .Include(v => v.Konzert).ThenInclude(k => k!.Lokal)
             .Where(v => v.StueckId == Id && v.Status == VideoStatus.Genehmigt)
             .ToListAsync();
 

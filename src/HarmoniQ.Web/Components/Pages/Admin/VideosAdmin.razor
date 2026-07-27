@@ -206,15 +206,20 @@
 
     private async Task Loeschen(Video v)
     {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var bewertungen = await db.Bewertungen.CountAsync(b => b.VideoId == v.Id);
+        var warn = bewertungen > 0
+            ? $" ⚠ {bewertungen} Bewertung(en) von Nutzer:innen gehen dabei UNWIDERRUFLICH verloren."
+            : "";
+
         var parameters = new DialogParameters<ConfirmDialog>
         {
-            { x => x.Text, $"Video \"{v.Titel}\" inkl. aller Bewertungen löschen?" }
+            { x => x.Text, $"Video \"{v.Titel}\" löschen?{warn}" }
         };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Löschen bestätigen", parameters);
         var result = await dialog.Result;
         if (result is null || result.Canceled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
         var entity = await db.Videos.FindAsync(v.Id);
         if (entity != null)
         {
