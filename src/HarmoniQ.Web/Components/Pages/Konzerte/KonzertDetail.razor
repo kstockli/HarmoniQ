@@ -10,6 +10,7 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>@(_konzert?.Titel ?? "Konzert") – HarmoniQ</PageTitle>
 
@@ -70,6 +71,13 @@ else
                 <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
                            StartIcon="@Icons.Material.Filled.Groups" OnClick="IchWarDabei">Ich habe mitgewirkt</MudButton>
             }
+        }
+        @if (_videos.Count > 0)
+        {
+            <MudButton Variant="Variant.Filled" Style="background:#9B59B6; color:#fff;"
+                       StartIcon="@Icons.Material.Filled.PlayCircle" OnClick="ZuDenVideos">
+                Zu den Videos (@_videos.Count)
+            </MudButton>
         }
         <RichtigstellungMelden Typ="RichtigstellungTyp.Konzert" Id="_konzert.Id" />
     </MudStack>
@@ -191,6 +199,7 @@ else
             </MudSimpleTable>
         }
 
+        <div id="videos"></div>
         @foreach (var band in _bands)
         {
             // Bei Wettbewerben sind alle Bands schon in der Rangliste – pro Band nur zeigen, wenn es Videos gibt.
@@ -554,6 +563,8 @@ else
         PersonRolleTyp.Zuhoerer => "Zuhörer:in",
         _ => r.ToString()
     };
+
+    private async Task ZuDenVideos() => await JS.InvokeVoidAsync("harmoniqScroll", "videos");
 
     private IEnumerable<VideoZeile> VideosVon(Guid bandId) => _videos.Where(v => v.BandId == bandId);
 

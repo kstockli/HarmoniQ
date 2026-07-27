@@ -78,3 +78,9 @@ window.harmoniqUi = {
         } catch (e) { }
     }
 };
+
+// Scrollt ein Element (per id) sanft in den sichtbaren Bereich (z. B. „Zu den Videos").
+window.harmoniqScroll = function (id) {
+    var el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};

@@ -16,6 +16,8 @@ public static class KonzertErfassungService
     public record ProgrammEingabe(string StueckTitel, string? KomponistName, string? BandName, int? Reihenfolge,
         string? ArrangeurName = null);
     public record MitwirkendeEingabe(string PersonName, PersonRolleTyp Rolle, string? BandName);
+    /// <summary>Wettbewerbs-Ergebnis einer teilnehmenden Band (optional, z. B. SBBW-Rangliste).</summary>
+    public record BandRangEingabe(string BandName, int? Rang, int? Punkte);
 
     public record Eingabe(
         DateOnly Datum,
@@ -26,7 +28,8 @@ public static class KonzertErfassungService
         string? BildUrl,
         IReadOnlyList<ProgrammEingabe> Programm,
         IReadOnlyList<MitwirkendeEingabe> Mitwirkende,
-        Guid? PflichtBandId = null);   // wird IMMER als teilnehmende Band verknüpft (z. B. eigene Band beim Erfassen)
+        Guid? PflichtBandId = null,     // wird IMMER als teilnehmende Band verknüpft (z. B. eigene Band beim Erfassen)
+        IReadOnlyList<BandRangEingabe>? BandWerte = null);   // Rang/Punkte je Band (optional)
 
     /// <summary>Speichert ein neues Konzert und gibt dessen Id zurück.</summary>
     public static async Task<Guid> ErfasseAsync(ApplicationDbContext db, Eingabe e)
@@ -39,8 +42,14 @@ public static class KonzertErfassungService
         var desiredBands = new HashSet<Guid>();
         await BefuelleAsync(db, konzert, e, desiredBands);
         if (e.PflichtBandId is Guid pb) desiredBands.Add(pb);   // garantiert: Konzert ist mit dieser Band verknüpft
+        var kbByBand = new Dictionary<Guid, KonzertBand>();
         foreach (var bid in desiredBands)
-            db.KonzertBands.Add(new KonzertBand { Konzert = konzert, BandId = bid });
+        {
+            var kb = new KonzertBand { Konzert = konzert, BandId = bid };
+            db.KonzertBands.Add(kb);
+            kbByBand[bid] = kb;
+        }
+        await RangPunkteAnwendenAsync(db, kbByBand, e.BandWerte);
 
         await db.SaveChangesAsync();
         return konzert.Id;
@@ -122,8 +131,14 @@ public static class KonzertErfassungService
         var bestehend = await db.KonzertBands.Where(kb => kb.KonzertId == konzertId).ToListAsync();
         foreach (var weg in bestehend.Where(kb => !desiredBands.Contains(kb.BandId)))
             db.KonzertBands.Remove(weg);
-        foreach (var neu in desiredBands.Where(id => bestehend.All(kb => kb.BandId != id)))
-            db.KonzertBands.Add(new KonzertBand { KonzertId = konzertId, BandId = neu });
+        var kbByBand = bestehend.Where(kb => desiredBands.Contains(kb.BandId)).ToDictionary(kb => kb.BandId);
+        foreach (var neu in desiredBands.Where(id => !kbByBand.ContainsKey(id)))
+        {
+            var kb = new KonzertBand { KonzertId = konzertId, BandId = neu };
+            db.KonzertBands.Add(kb);
+            kbByBand[neu] = kb;
+        }
+        await RangPunkteAnwendenAsync(db, kbByBand, e.BandWerte);
 
         await db.SaveChangesAsync();
     }
@@ -254,6 +269,26 @@ public static class KonzertErfassungService
                 {
                     Konzert = konzert, Person = person, Rolle = row.Rolle, BandId = band?.Id
                 });
+        }
+    }
+
+    /// <summary>Setzt Rang/Punkte auf den KonzertBand-Zeilen anhand des Bandnamens (Wettbewerbs-Ergebnis).</summary>
+    private static async Task RangPunkteAnwendenAsync(
+        ApplicationDbContext db, Dictionary<Guid, KonzertBand> kbByBand, IReadOnlyList<BandRangEingabe>? werte)
+    {
+        if (werte == null || werte.Count == 0) return;
+        foreach (var w in werte)
+        {
+            var name = w.BandName?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var band = await db.Bands.FirstOrDefaultAsync(x => x.Name == name)
+                ?? await db.Bands.FirstOrDefaultAsync(x => x.Aliase.Any(a => a.Name == name))
+                ?? db.Bands.Local.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (band != null && kbByBand.TryGetValue(band.Id, out var kb))
+            {
+                kb.Rang = w.Rang;
+                kb.Punkte = w.Punkte;
+            }
         }
     }
 

@@ -145,6 +145,31 @@
     }
 </MudPaper>
 
+@* ── 4. Rang & Punkte (Wettbewerb, optional) ─────────────────────────────── *@
+@if (TeilnehmendeBands().Any())
+{
+    <MudPaper Class="pa-4 mb-4" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="color:#D4AF37;">4. Rang &amp; Punkte (Wettbewerb, optional)</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2" Style="color:#A78FC0;">
+            Für Wettbewerbe: Rang und Punkte je teilnehmender Band. Die Bands ergeben sich aus dem Programm oben.
+        </MudText>
+        @foreach (var name in TeilnehmendeBands())
+        {
+            <MudGrid Class="mb-1" AlignItems="AlignItems.Center">
+                <MudItem xs="12" sm="6"><MudText Style="color:#F0E6FF;">@name</MudText></MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int?" Label="Rang" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="500"
+                                     Value="@Wert(name).Rang" ValueChanged="@(v => Wert(name).Rang = v)" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int?" Label="Punkte" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="500"
+                                     Value="@Wert(name).Punkte" ValueChanged="@(v => Wert(name).Punkte = v)" />
+                </MudItem>
+            </MudGrid>
+        }
+    </MudPaper>
+}
+
 <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mb-8">
     <MudButton Variant="Variant.Text" Href="@_zurueck"
                StartIcon="@Icons.Material.Filled.ArrowBack">Abbrechen</MudButton>
@@ -182,6 +207,21 @@
     private bool _speichert;
 
     private readonly List<ProgrammRow> _programm = [];
+    // Rang/Punkte je teilnehmender Band (Wettbewerb). Schlüssel = Bandname (aus dem Programm).
+    private sealed class BandWert { public int? Rang { get; set; } public int? Punkte { get; set; } }
+    private readonly Dictionary<string, BandWert> _bandWerte = new(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> TeilnehmendeBands() =>
+        _programm.Select(p => p.BandName?.Trim())
+            .Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n);
+
+    private BandWert Wert(string name)
+    {
+        if (!_bandWerte.TryGetValue(name, out var w)) { w = new BandWert(); _bandWerte[name] = w; }
+        return w;
+    }
     private readonly List<MitwirkendeRow> _mitwirkende = [];
 
     private List<string> _stueckNamen = [];
@@ -294,6 +334,14 @@
             .ToListAsync();
         foreach (var m in mitwirkende)
             _mitwirkende.Add(new MitwirkendeRow { PersonName = m.Name, Rolle = m.Rolle, BandName = m.BandName });
+
+        // Vorhandene Rang/Punkte je Band vorbelegen.
+        var werte = await db.KonzertBands
+            .Where(kb => kb.KonzertId == kid && (kb.Rang != null || kb.Punkte != null))
+            .Select(kb => new { Name = kb.Band.Name, kb.Rang, kb.Punkte })
+            .ToListAsync();
+        foreach (var w in werte)
+            _bandWerte[w.Name] = new BandWert { Rang = w.Rang, Punkte = w.Punkte };
     }
 
     private static Task<IEnumerable<string>> Suche(List<string> alle, string? wert)
@@ -348,6 +396,14 @@
             // Beim Erfassen mit vorgegebener Band (Band-Admin/Direktlink): Band IMMER verknüpfen,
             // damit das Konzert der Band nicht „verloren geht", auch ohne passende Programmzeile.
             if (!IstBearbeiten && Band is Guid vb) eingabe = eingabe with { PflichtBandId = vb };
+
+            // Rang/Punkte je teilnehmender Band mitgeben (Wettbewerb).
+            eingabe = eingabe with
+            {
+                BandWerte = TeilnehmendeBands()
+                    .Select(n => new KonzertErfassungService.BandRangEingabe(n, Wert(n).Rang, Wert(n).Punkte))
+                    .ToList()
+            };
 
             await using var db = await DbFactory.CreateDbContextAsync();
             if (Id is Guid kid)
