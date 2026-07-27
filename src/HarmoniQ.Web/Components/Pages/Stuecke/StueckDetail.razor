@@ -92,14 +92,23 @@ else
                 var eigene = _eigene.GetValueOrDefault(video.Id);
                 <MudItem xs="12" md="6">
                     <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
-                        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;">
-                            <iframe
-                                src="@video.EmbedUrl"
-                                style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowfullscreen
-                                title="@video.Titel">
-                            </iframe>
+                        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;background:#000;">
+                            @if (VideoEinbettung.IstDatei(video.Plattform))
+                            {
+                                <video src="@video.EmbedUrl" controls preload="metadata"
+                                       style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000;"
+                                       title="@video.Titel"></video>
+                            }
+                            else
+                            {
+                                <iframe
+                                    src="@video.EmbedUrl"
+                                    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowfullscreen
+                                    title="@video.Titel">
+                                </iframe>
+                            }
                         </div>
                         <MudCardContent>
                             <MudLink Href="@($"/videos/{video.Id}")" Typo="Typo.subtitle1"

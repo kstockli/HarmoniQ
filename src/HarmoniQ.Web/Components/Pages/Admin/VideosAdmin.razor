@@ -156,9 +156,12 @@
             return;
         }
 
-        // Titel automatisch aus dem YouTube-Video übernehmen, falls leer gelassen.
+        // Titel automatisch übernehmen, falls leer gelassen: YouTube → oEmbed-Titel;
+        // direkte Datei-URL → Dateiname; sonst Platzhalter.
         if (string.IsNullOrWhiteSpace(model.Titel))
-            model.Titel = await YouTube.HoleTitelAsync(model.ExternId) ?? "(ohne Titel)";
+            model.Titel = model.Plattform == VideoPlattform.Datei
+                ? (HarmoniQ.Web.Services.VideoQuelle.TitelAusDateiUrl(model.ExternId) ?? "(ohne Titel)")
+                : (await YouTube.HoleTitelAsync(model.ExternId) ?? "(ohne Titel)");
 
         // Neues Konzert (aus dem Dialog) anlegen und verknüpfen.
         if (data.NeuesKonzert is { } nk)

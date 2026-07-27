@@ -13,8 +13,12 @@ public static class VideoEinbettung
             VideoPlattform.YouTube => $"https://www.youtube.com/embed/{externId}",
             VideoPlattform.InfomaniakVod => $"https://player.vod2.infomaniak.com/embed/{externId}",
             VideoPlattform.Vimeo => $"https://player.vimeo.com/video/{externId}",
+            VideoPlattform.Datei => externId,   // direkte Datei-URL → als <video src> genutzt
             _ => null
         };
+
+    /// <summary>True, wenn die Quelle eine direkte Datei-URL ist (per HTML5-&lt;video&gt; statt iframe).</summary>
+    public static bool IstDatei(VideoPlattform plattform) => plattform == VideoPlattform.Datei;
 
     /// <summary>Vorschaubild. YouTube liefert echte Thumbnails; andere Plattformen einen neutralen
     /// Platzhalter (damit Listen-Markup unverändert mit einem &lt;img&gt; funktioniert).</summary>

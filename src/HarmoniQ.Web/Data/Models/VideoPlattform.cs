@@ -8,5 +8,8 @@ public enum VideoPlattform
     /// <summary>Infomaniak VOD (z. B. SBBW): <c>player.vod2.infomaniak.com/embed/&lt;id&gt;</c>.</summary>
     InfomaniakVod = 1,
     Vimeo = 2,
-    Andere = 3
+    Andere = 3,
+    /// <summary>Direkte Video-Datei-URL (mp4/webm/mov …) auf eigenem Webspace; wird per
+    /// HTML5-&lt;video&gt; abgespielt. In <c>ExternId</c> steht die vollständige URL.</summary>
+    Datei = 4
 }

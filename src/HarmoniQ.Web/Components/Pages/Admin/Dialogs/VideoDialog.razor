@@ -11,20 +11,25 @@
                          SearchFunc="SucheStueck" ToStringFunc="@(s => s?.Titel ?? "")"
                          MaxItems="20" ResetValueOnEmptyText="false" CoerceText="true" />
 
-        <MudSelect T="Guid?" @bind-Value="_model.BandId" Label="Band (optional)" Variant="Variant.Outlined"
-                   Clearable="true" Class="mb-3">
-            @foreach (var b in Bands)
-            {
-                <MudSelectItem T="Guid?" Value="@b.Id">@b.Name</MudSelectItem>
-            }
-        </MudSelect>
+        <MudAutocomplete T="Band" Label="Band (optional)" Variant="Variant.Outlined" Class="mb-3"
+                         Value="_band" ValueChanged="OnBandChanged"
+                         SearchFunc="SucheBand" ToStringFunc="@(b => b?.Name ?? "")"
+                         Clearable="true" MaxItems="20" ResetValueOnEmptyText="true" CoerceText="true" />
 
         <MudTextField @bind-Value="_youTubeEingabe" @bind-Value:after="ExtrahiereId"
-                      Label="YouTube-Link oder Video-ID" Variant="Variant.Outlined" Class="mb-1"
-                      Placeholder="https://youtu.be/… oder 11-stellige ID" />
+                      Label="Video-Link / -ID / Datei-URL" Variant="Variant.Outlined" Class="mb-1"
+                      Placeholder="YouTube-Link, 11-stellige ID oder direkte Datei-URL (…/video.mp4)" />
         @if (!string.IsNullOrWhiteSpace(_model.ExternId))
         {
-            <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkannte Video-ID: <b>@_model.ExternId</b></MudText>
+            <MudText Typo="Typo.caption" Style="color:#A78FC0;">
+                @(_model.Plattform == VideoPlattform.Datei
+                    ? "Direkte Datei-URL erkannt (wird als Video-Player eingebettet)."
+                    : $"Erkannte Video-ID: {_model.ExternId}")
+            </MudText>
+        }
+        else if (!string.IsNullOrWhiteSpace(_youTubeEingabe))
+        {
+            <MudText Typo="Typo.caption" Style="color:#e57373;">Nicht erkannt (YouTube-Link/-ID oder http(s)-Datei-URL erwartet).</MudText>
         }
 
         <MudTextField @bind-Value="_model.Ort" Label="Aufnahme-Ort (optional)" Variant="Variant.Outlined" Class="mt-3"
@@ -74,6 +79,7 @@
 
     private Video _model = new() { Status = VideoStatus.Genehmigt };
     private Stueck? _stueck;
+    private Band? _band;
     private Konzert? _konzert;
     private string _youTubeEingabe = "";
 
@@ -107,6 +113,7 @@
                 VorgeschlagenVonId = Vorhanden.VorgeschlagenVonId
             };
             _stueck = Stuecke.FirstOrDefault(s => s.Id == Vorhanden.StueckId);
+            _band = Bands.FirstOrDefault(b => b.Id == Vorhanden.BandId);
             _konzert = Konzerte.FirstOrDefault(k => k.Id == Vorhanden.KonzertId);
             _youTubeEingabe = Vorhanden.ExternId;
         }
@@ -147,7 +154,26 @@
         _model.StueckId = s?.Id ?? Guid.Empty;
     }
 
-    private void ExtrahiereId() => _model.ExternId = YouTubeId.Extrahiere(_youTubeEingabe);
+    private Task<IEnumerable<Band>> SucheBand(string? value, CancellationToken ct)
+    {
+        IEnumerable<Band> result = string.IsNullOrWhiteSpace(value)
+            ? Bands
+            : Bands.Where(b => b.Name.Contains(value, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(result.OrderBy(b => b.Name).Take(20));
+    }
+
+    private void OnBandChanged(Band? b)
+    {
+        _band = b;
+        _model.BandId = b?.Id;
+    }
+
+    private void ExtrahiereId()
+    {
+        var q = VideoQuelle.Parse(_youTubeEingabe);
+        if (q is { } quelle) { _model.Plattform = quelle.Plattform; _model.ExternId = quelle.ExternId; }
+        else _model.ExternId = "";
+    }
 
     private void Speichern()
     {
