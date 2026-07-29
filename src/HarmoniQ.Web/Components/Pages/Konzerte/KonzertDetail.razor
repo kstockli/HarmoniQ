@@ -46,7 +46,7 @@ else
     }
     @if (!string.IsNullOrWhiteSpace(_konzert.Beschreibung))
     {
-        <MudText Typo="Typo.body1" Class="mb-4" Style="color:#F0E6FF;">@_konzert.Beschreibung</MudText>
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color:#F0E6FF; white-space:pre-line;">@_konzert.Beschreibung</MudText>
     }
 
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
