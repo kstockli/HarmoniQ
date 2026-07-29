@@ -67,7 +67,7 @@ Du warst an einem Blasmusik-Konzert – und fragst dich nachher: Wer hat da gesp
 
 HarmoniQ ist die offene Datenbank der Schweizer Blasmusik. Stöbern kannst du ganz ohne Konto.
 
-Such ein Stück – und sieh sofort, wer es komponiert hat und welche Vereine es spielen. Die Aufnahmen laufen direkt nebeneinander.
+Suche ein Stück – und sieh sofort, wer es komponiert hat und welche Vereine es spielen. Die Aufnahmen laufen direkt nebeneinander.
 
 Blättere durch Vereine und Konzerte aus der ganzen Schweiz.
 
@@ -143,7 +143,9 @@ Aufgenommen wird **am Handy** (mobile-first), Hochformat.
 - **Fallback:** gemeinfreies Stück (nur Aufnahme-Erlaubnis der Band nötig) oder lizenzfreie Musik.
 
 ## Offene Punkte
-- JBL-Erlaubnis (Aufnahme) + Osti-Music-OK (Komposition) einholen.
+- "Die Aufnahmen laufen direkt nebeneinander." Satz entfernen. Macht inhaltlich nicht so sinn. 
+
 
 ## Erledigt
 - Stimme „Anneliese" gewählt; Aussprache „HarmoniQ" klingt gut (kein phonetischer Fix nötig).
+- JBL-Erlaubnis (Aufnahme) + Osti-Music-OK (Komposition) einholen.

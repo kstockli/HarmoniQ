@@ -56,6 +56,16 @@ window.harmoniqUi = {
                 wrap.dataset.hqInit = '1';
                 var sound = wrap.querySelector('.hq-sound');
                 var fs = wrap.querySelector('.hq-fs');
+                var speed = wrap.querySelector('.hq-speed');
+                // Abspielgeschwindigkeit durchschalten (Video ist etwas schnell). Oben rechts, damit die
+                // eingebrannten Untertitel unten frei bleiben.
+                var stufen = [1, 0.75, 0.5], si = 0;
+                if (speed) speed.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    si = (si + 1) % stufen.length;
+                    v.playbackRate = stufen[si];
+                    speed.textContent = stufen[si] + '×';
+                });
                 function refresh() { if (sound) sound.textContent = v.muted ? '🔊 Ton' : '🔇'; }
                 v.muted = true; v.defaultMuted = true;
                 if (v.dataset.autoplay === '1') { var p = v.play(); if (p && p.catch) p.catch(function () { }); }
