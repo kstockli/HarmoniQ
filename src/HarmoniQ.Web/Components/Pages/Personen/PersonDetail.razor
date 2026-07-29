@@ -70,12 +70,13 @@ else
         <MudText Typo="Typo.body1" Class="mb-4" Style="color:#C4B0D8;">@_person.Biografie</MudText>
     }
 
-    @* Links (Telefon, E-Mail, Social Media …) – nur sichtbar, wenn du die Person voll siehst
-       (öffentlich, gemeinsame Band oder befreundet); analog zur Namens-Sichtbarkeit. *@
-    @if (_eff == Sichtbarkeit.Oeffentlich && _person.Links.Count > 0)
+    @* Links: Social-/Web-Links sind bei öffentlichen Personen sichtbar. KONTAKTDATEN (E-Mail, Telefon)
+       werden NIE öffentlich gezeigt – nur, wenn du die Person wirklich kennst (eigene Person,
+       gemeinsame Band oder bestätigte Freundschaft = _darfKontakt). *@
+    @if (_person.Links.Any(SichtbarerLink))
     {
         <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
-            @foreach (var l in _person.Links)
+            @foreach (var l in _person.Links.Where(SichtbarerLink))
             {
                 <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@LinkHref(l)"
                            Target="@(LinkExtern(l.Typ) ? "_blank" : null)" StartIcon="@LinkIcon(l.Typ)">@LinkLabel(l)</MudButton>
@@ -213,6 +214,11 @@ else
     private bool _ichHabeSchonPerson; // mein Konto ist bereits mit (irgend)einer Person verknüpft
     private bool _istAdmin;
     private Sichtbarkeit _eff = Sichtbarkeit.Oeffentlich;  // effektive Sichtbarkeit für DICH
+    private bool _darfKontakt;   // darf E-Mail/Telefon sehen (eigene Person / Band / Freundschaft)
+
+    // Kontaktdaten (E-Mail/Telefon) nur bei echter Beziehung; übrige Links bei öffentlicher Person.
+    private bool SichtbarerLink(PersonLink l) =>
+        (l.Typ is LinkTyp.EMail or LinkTyp.Mobile) ? _darfKontakt : _eff == Sichtbarkeit.Oeffentlich;
     private MarkupString _jsonLd;
 
     // Schema.org Person (JSON-LD) – NUR für öffentlich sichtbare Personen (Block 2), ohne
@@ -297,6 +303,9 @@ else
 
         var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, _userId);
         _eff = PersonenSicht.Effektiv(_person.Id, _person.Sichtbarkeit, vollSichtbar);
+        // Kontaktdaten (E-Mail/Telefon) nur für echte Beziehung (eigene Person / Band / Freundschaft),
+        // NIE öffentlich – auch nicht bei öffentlich sichtbaren Personen.
+        _darfKontakt = vollSichtbar.Contains(_person.Id);
         _jsonLd = BauePersonJsonLd();
 
         // Freundschafts-Status (nur wenn eingeloggt + eigene Person + nicht ich selbst).
