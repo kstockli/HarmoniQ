@@ -14,6 +14,8 @@ public static class VideoEinbettung
             VideoPlattform.InfomaniakVod => $"https://player.vod2.infomaniak.com/embed/{externId}",
             VideoPlattform.Vimeo => $"https://player.vimeo.com/video/{externId}",
             VideoPlattform.Datei => externId,   // direkte Datei-URL → als <video src> genutzt
+            // SRG-Play: ExternId = volle URN (urn:rtr:video:…). Offizieller Embed-Player.
+            VideoPlattform.SrgPlay => $"https://www.rtr.ch/play/embed?urn={Uri.EscapeDataString(externId)}",
             _ => null
         };
 

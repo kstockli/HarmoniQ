@@ -230,3 +230,103 @@ End-to-end verifiziert (inkl. Anlegen Stück + Komponist).
 4. **Bottom-Nav** (Punkt 4) – klein.
 5. **Konzert „möchte hingehen"** (Punkt 5) – Feature mit Datenmodell-Änderung.
 6. **Erklär-Video + Anwendungsfälle** (Punkt 6) – am Schluss.
+
+---
+---
+
+# Feedback aus User-Tests (Runde 2 – weiterer User)
+
+Feedback eines weiteren Users. **Noch nicht abgeschlossen – es folgt mehr.** Erst sammeln & einschätzen,
+dann mit Kuno priorisieren. Gleiche Status-Legende (✅ umgesetzt · 🔜 geplant · 💬 Diskussion).
+
+---
+
+## 11. 💬 Zweck der Seite auch als lesbarer Fliesstext (nicht nur im Video)
+**Feedback:** „Der Text des Zwecks der Webseite gemäss dem Video auf der Startseite sollte auch als
+Fliesstext lesbar zur Verfügung gestellt werden (siehe auch Rechtsgutachten in Beilage)."
+
+**Kunos Einschätzung:** Noch abzuklären. Eigentlich wollen die Leute nicht ewig lesen – es sollte viel
+selbsterklärend sein. Aber auf einer **separaten Seite** könnte man das „Wozu" dieser Seite ergänzen.
+
+**Zusatz-Einschätzung (Claude):**
+- Zwei mögliche Treiber im Rechtsgutachten: (a) **Barrierefreiheit** – Videoinhalt braucht eine
+  gleichwertige **Text-Alternative** (WCAG); (b) **Transparenz/Impressum** – klarer, nachlesbarer
+  Zweck der Plattform und der Datenverarbeitung.
+- **Kein Konflikt mit „selbsterklärend":** Die Oberfläche bleibt schlank; der Fliesstext lebt auf einer
+  **eigenen Seite** (z. B. `/ueber` „Über HarmoniQ / Wozu diese Seite"), verlinkt aus Footer und dezent
+  beim Video („Lieber lesen? →").
+- **Aufwand gering:** eine statische Seite mit demselben Inhalt wie das Video-Skript als Prosa.
+- **Offen für Kuno:** Rechtsgutachten sichten (was genau verlangt es?), dann Text finalisieren.
+  → Tendenz: **umsetzen als separate `/ueber`-Seite**, sobald der geforderte Inhalt klar ist.
+
+---
+
+## 12. 🔜 Konzert: Link zur Vereins-Ankündigung (Billette)
+**Feedback:** „Im Verzeichnis der Konzerte wäre ein Link zur Ankündigung des Vereins hilfreich, z. B.
+damit man die Billette findet."
+
+**Kunos Einschätzung:** Gute Idee – auf dem Einzelkonzert gut darstellbar, in der Liste müsste es knapp
+Platz finden. **Sollten wir umsetzen.**
+
+**Zusatz-Einschätzung / Plan (Claude), noch nicht umgesetzt:**
+- **Datenmodell:** optionales Feld `AnkuendigungUrl` (o. Ä.) an `Konzert` (nullable). → Beim Umsetzen
+  **Spec nachführen** (`Spezifikation.md`); falls der Crawler die URL künftig mitliefert, auch
+  `Spezifikation-Crawler.md`.
+- **Einzelkonzert:** klarer Knopf, z. B. „Zur Ankündigung / Billette" (öffnet extern, `target=_blank`,
+  `rel=noopener`).
+- **Liste:** kompaktes Icon-Link (Ticket/Extern-Symbol) je Zeile, nur wenn eine URL hinterlegt ist –
+  spart Platz.
+- **Pflege:** manuell im Konzert-Admin/-Erfassen; optional später automatisch aus EventFrog/Vereinsseite.
+- **Sicherheit:** URL validieren (nur http/https), als externen Link kennzeichnen.
+
+---
+
+## 13. 💬 Instrumenten-Namen inkonsistent (Es-Klarinette vs. Klarinette)
+**Feedback:** „Beim Benutzerprofil kann man «Es-Klarinette» wählen, etwas später sieht man «Klarinette».
+Das ist systematisch inkonsistent. Ich spiele B-Klarinette und empfehle, die beiden zu ersetzen mit
+«Klarinette in Es» und «Klarinette in B», oder mit «Klarinette» (ohne Details), oder «B-Klarinette»."
+
+**Kunos Einschätzung:** Unsicher, eher langfristige Liste. Kommt auch **vom Crawler** her – je nach
+gescannter Webseite kommt A oder B heraus. **Idee:** Instrumente um **„Alternative Namen"** ergänzen
+(wie bei den Bands) → man wählt „Klarinette", angezeigt wird die kanonische Form (z. B. „B-Klarinette").
+
+**Zusatz-Einschätzung (Claude), noch nicht umgesetzt:**
+- Genau das Alias-Muster der Bands: ein **kanonischer Name** + Liste **alternativer Schreibweisen**.
+  Der Crawler mappt Fundstücke („Es-Klarinette", „Klarinette in Es", „Eb Clarinet") auf den kanonischen
+  Eintrag statt neue Dubletten anzulegen → löst Inkonsistenz **und** Crawler-Varianten in einem.
+- **Datenmodell:** `Instrument` bekommt Aliasse (analog Band-Aliasse). → Beim Umsetzen **Spec nachführen**
+  (`Spezifikation.md`) und Crawler-Normalisierung in `Spezifikation-Crawler.md`.
+- **Migration/Bereinigung:** bestehende Dubletten (Es-Klarinette ↔ Klarinette) einmalig zusammenführen
+  (Merge, wie bei Personen/Bands).
+- Passt zu Kunos „langfristige Liste" – kein Sofort-Fix, aber der Alias-Ansatz ist der saubere Weg.
+
+---
+
+## 14. 🔜 (Bug) + 💬 „Konzerte in deiner Nähe": mehrere Orte & Umkreis-Wahl
+**Feedback:** „Unter «Konzerte in deiner Nähe» wollte ich Bachenbülach **und** Menznau eingeben, das
+System erlaubte nur **1 Ort**. Empfehlung: **5–10 Orte** zulassen. Zudem sollte man wie auf
+immoscout24.ch den **Umkreis** wählen können (0 / 5 / 25 km; 6122 +/- 25 km = auch Sempach)."
+
+**Kunos Einschätzung:** Grundsatz **„Mobile first"** (Smartphone). Man erlaubt der Seite den **eigenen
+Standort**; bei ausgeklappten Filtern wählt man den **km-Umkreis**. Mehrere Orte sind damit eher
+zweitrangig. **Aber ein Bug:** Gibt man eine **PLZ** ein, wird der **eigene Standort nicht ignoriert** –
+das muss korrigiert werden.
+
+**Aufgeteilt:**
+- **14a ✅ BUG – PLZ überschreibt Standort nicht:** Erwartung: sobald man eine PLZ (oder „Mein Standort")
+  einträgt, gilt dieser Punkt als Bezugspunkt, nicht mehr die GPS-Position. Ursache: der stille
+  Standort-Autoload (`harmoniqGeo.autoStandort`) gewann beim (Neu-)Laden gegenüber der manuell gesetzten
+  PLZ. **Umgesetzt** in `KonzerteListe` + `BandsListe`: neues Flag `_refManuell` (true bei PLZ/„Mein
+  Standort"); der Bezugspunkt wird explizit im Filter-State (sessionStorage) gemerkt und beim Laden
+  wiederhergestellt; der GPS-Autoload läuft **nur noch, wenn der User keinen eigenen Punkt gesetzt hat**
+  (`if (!_refManuell && _refLat is null)`). „Zurücksetzen" macht wieder GPS-Default. Build grün, keine
+  Laufzeitfehler. **Auf echtem Browser zu verifizieren** (PLZ setzen → neu laden → PLZ bleibt Zentrum,
+  nicht GPS), da Standort/Interaktivität in der Vorschau nicht zuverlässig testbar ist.
+- **14b 💬 Umkreis-Wahl:** ist bereits vorhanden (Umkreis 10/25/50/100 km hinter „Mehr Filter"). Evtl.
+  feinere Stufen (0/5 km) ergänzen. Sichtbarkeit wurde kürzlich schon verbessert (aktiver Umkreis
+  klappt „Mehr Filter" jetzt auf; Standort setzt nicht mehr still einen 50-km-Umkreis).
+- **14c 💬 Mehrere Bezugsorte (5–10):** widerspricht dem schlanken Mobile-first-Ansatz (1 Standort +
+  Umkreis). Kunos Tendenz: **nicht** umsetzen; ein Umkreis um einen Punkt deckt „Bachenbülach + Menznau"
+  in der Praxis nur, wenn sie nah beieinander liegen – tun sie nicht (ZH-Unterland vs. LU). Falls doch
+  gewünscht, wäre die einfachste Form: mehrere PLZ als Bezugspunkte (ODER-Verknüpfung der Umkreise).
+  Vorerst **zurückgestellt**.
