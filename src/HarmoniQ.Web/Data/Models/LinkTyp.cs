@@ -11,5 +11,7 @@ public enum LinkTyp
     EMail = 5,
     Mobile = 6,
     Wikipedia = 7,
+    /// <summary>Image-/Vorstellungsfilm (YouTube- oder direkte Datei-URL); wird eingebettet abgespielt.</summary>
+    Imagefilm = 8,
     Sonstige = 99
 }

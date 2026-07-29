@@ -41,6 +41,7 @@ public class Band : AuditierteEntitaet
     [NotMapped] public string? Instagram { get => LinkUrl(LinkTyp.Instagram); set => SetzeLink(LinkTyp.Instagram, value); }
     [NotMapped] public string? X { get => LinkUrl(LinkTyp.X); set => SetzeLink(LinkTyp.X, value); }
     [NotMapped] public string? YouTube { get => LinkUrl(LinkTyp.YouTube); set => SetzeLink(LinkTyp.YouTube, value); }
+    [NotMapped] public string? Imagefilm { get => LinkUrl(LinkTyp.Imagefilm); set => SetzeLink(LinkTyp.Imagefilm, value); }
     [NotMapped] public string? Facebook { get => LinkUrl(LinkTyp.Facebook); set => SetzeLink(LinkTyp.Facebook, value); }
     [NotMapped] public string? Wikipedia { get => LinkUrl(LinkTyp.Wikipedia); set => SetzeLink(LinkTyp.Wikipedia, value); }
     [NotMapped] public string? EMail { get => LinkUrl(LinkTyp.EMail); set => SetzeLink(LinkTyp.EMail, value); }

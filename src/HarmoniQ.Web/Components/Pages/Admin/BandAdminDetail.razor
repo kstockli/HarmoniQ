@@ -82,6 +82,8 @@ else
                                  HelperText="Ortschaft genügt – dient „Bands in der Nähe“ (Koordinaten werden ermittelt)." />
             </MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_youtube" Label="YouTube-Kanal" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_imagefilm" Label="Imagefilm (YouTube- oder Datei-URL)" Variant="Variant.Outlined"
+                          Placeholder="https://youtu.be/… oder …/film.mp4" HelperText="Wird oben auf der Band-Seite eingebettet." /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_instagram" Label="Instagram" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_facebook" Label="Facebook" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="6"><MudTextField @bind-Value="_x" Label="X" Variant="Variant.Outlined" /></MudItem>
@@ -371,7 +373,7 @@ else
     private Band? _band;
     private string _name = "", _land = "", _webseite = "", _bildUrl = "";
     private string _geschichte = "", _youtube = "", _instagram = "", _x = "", _email = "";
-    private string _facebook = "", _wikipedia = "", _mobile = "";
+    private string _facebook = "", _wikipedia = "", _mobile = "", _imagefilm = "";
     private BandKategorie? _kategorie;
     private Staerkeklasse? _klasse;
     private int? _gruendung;
@@ -479,6 +481,7 @@ else
         _kategorie = _band.Kategorie; _klasse = _band.Staerkeklasse; _gruendung = _band.Gruendungsjahr;
         _youtube = _band.YouTube ?? ""; _instagram = _band.Instagram ?? ""; _x = _band.X ?? ""; _email = _band.EMail ?? "";
         _facebook = _band.Facebook ?? ""; _wikipedia = _band.Wikipedia ?? ""; _mobile = _band.Mobile ?? "";
+        _imagefilm = _band.Imagefilm ?? "";
 
         _aliase = await db.BandAliase.Where(a => a.BandId == BandId).OrderBy(a => a.Name)
             .Select(a => new AliasZeile(a.Id, a.Name)).ToListAsync();
@@ -534,6 +537,7 @@ else
         band.Staerkeklasse = _klasse;
         band.Gruendungsjahr = _gruendung;
         band.YouTube = _youtube;       // Komfort-Setter pflegen die BandLink-Tabelle
+        band.Imagefilm = _imagefilm;
         band.Instagram = _instagram;
         band.X = _x;
         band.EMail = _email;

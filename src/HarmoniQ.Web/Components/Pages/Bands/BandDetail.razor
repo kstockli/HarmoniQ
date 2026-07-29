@@ -124,6 +124,26 @@ else
         <RichtigstellungMelden Typ="RichtigstellungTyp.Band" Id="_band.Id" />
     </MudStack>
 
+    @* Imagefilm der Band (YouTube oder direkte Datei) – prominent, eingebettet. *@
+    @if (_imagefilmUrl != null)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">Imagefilm</MudText>
+        <div style="max-width:820px;position:relative;aspect-ratio:16/9;overflow:hidden;border-radius:10px;border:1px solid #3a1060;background:#000;" class="mb-6">
+            @if (_imagefilmDatei)
+            {
+                <video src="@_imagefilmUrl" controls preload="metadata"
+                       style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;" title="Imagefilm"></video>
+            }
+            else
+            {
+                <iframe src="@_imagefilmUrl"
+                        style="position:absolute;inset:0;width:100%;height:100%;border:0;"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen title="Imagefilm"></iframe>
+            }
+        </div>
+    }
+
     @* 1. Konzerte *@
     @if (_konzerte.Count > 0)
     {
@@ -244,6 +264,8 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private Band? _band;
+    private string? _imagefilmUrl;   // Embed-/Datei-URL des Imagefilms (null = keiner)
+    private bool _imagefilmDatei;    // true = direkte Datei (<video>), false = iframe
     private Guid? _personId;
     private bool _folgt;
     private bool _istMitglied;
@@ -294,6 +316,13 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
 
         _band = await db.Bands.Include(b => b.Links).FirstOrDefaultAsync(b => b.Id == Id);
+        // Imagefilm-URL (YouTube oder Datei) in eine einbettbare Form auflösen.
+        _imagefilmUrl = null; _imagefilmDatei = false;
+        if (_band != null && VideoQuelle.Parse(_band.Imagefilm) is { } iq)
+        {
+            _imagefilmUrl = VideoEinbettung.Embed(iq.Plattform, iq.ExternId);
+            _imagefilmDatei = VideoEinbettung.IstDatei(iq.Plattform);
+        }
         if (_band == null) { Nav.NavigateTo("/bands"); return; }
 
         _aliase = await db.BandAliase.Where(a => a.BandId == Id).OrderBy(a => a.Name)
