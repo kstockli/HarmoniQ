@@ -143,6 +143,7 @@ else
 
     // Distanz-Filter: Bezugspunkt (Standort/PLZ) + Radius; nicht serverseitig gespeichert.
     private double? _refLat, _refLng;
+    private bool _refManuell;   // true = vom User explizit gesetzt (PLZ/„Mein Standort") → hat Vorrang vor GPS-Autoload
     private int? _radiusKm;
     private string _plz = "";
     private bool _standortLaeuft;
@@ -151,7 +152,8 @@ else
     private bool _bereit;   // true nach erstem Render → JS-Interop (Filter merken) erlaubt
 
     private const string FilterKey = "konzerte.filter";
-    private record FilterState(string? Q, int Zeitraum, string? Plz, int? Km, bool Mehr);
+    private record FilterState(string? Q, int Zeitraum, string? Plz, int? Km, bool Mehr,
+        double? RefLat = null, double? RefLng = null, bool RefManuell = false);
 
     private enum Zeitraum { Zeitnah, Kommende, Vergangene, Alle }
 
@@ -192,14 +194,19 @@ else
                 {
                     _suche = s.Q ?? ""; _zeitraum = (Zeitraum)s.Zeitraum;
                     _plz = s.Plz ?? ""; _radiusKm = s.Km; _mehrFilter = s.Mehr;
+                    // Explizit gesetzten Bezugspunkt (PLZ/„Mein Standort") wiederherstellen – hat Vorrang.
+                    _refManuell = s.RefManuell;
+                    if (_refManuell && s.RefLat is double rla && s.RefLng is double rln)
+                    { _refLat = rla; _refLng = rln; }
                 }
             }
         }
         catch { /* sessionStorage nicht verfügbar */ }
 
-        // (2) Bezugspunkt: bei erteilter Berechtigung still den AKTUELLEN Standort (kein Prompt),
-        // sonst den zuletzt gespeicherten. So muss man „Mein Standort" nicht neu klicken.
-        if (_refLat is null)
+        // (2) Bezugspunkt: NUR wenn der User keinen eigenen gesetzt hat (14a) still den AKTUELLEN
+        // Standort (kein Prompt), sonst den zuletzt gespeicherten. Eine manuell gewählte PLZ darf der
+        // GPS-Autoload NICHT überschreiben.
+        if (!_refManuell && _refLat is null)
         {
             var pos = await JS.InvokeAsync<double[]?>("harmoniqGeo.autoStandort")
                       ?? await JS.InvokeAsync<double[]?>("harmoniqGeo.load");
@@ -231,7 +238,8 @@ else
     {
         if (!_bereit) return;
         var json = System.Text.Json.JsonSerializer.Serialize(
-            new FilterState(_suche, (int)_zeitraum, _plz, _radiusKm, _mehrFilter));
+            new FilterState(_suche, (int)_zeitraum, _plz, _radiusKm, _mehrFilter,
+                _refManuell ? _refLat : null, _refManuell ? _refLng : null, _refManuell));
         try { await JS.InvokeVoidAsync("harmoniqUi.set", FilterKey, json); } catch { }
     }
 
@@ -338,6 +346,7 @@ else
     {
         _refLat = lat;
         _refLng = lng;
+        _refManuell = true;   // explizit gesetzt (PLZ/„Mein Standort") → gewinnt gegen GPS-Autoload (14a)
         _radiusKm ??= 50;   // sinnvoller Default beim ersten Setzen
         await JS.InvokeVoidAsync("harmoniqGeo.save", lat, lng);
         Filtern();
@@ -347,6 +356,7 @@ else
     private async Task StandortZuruecksetzen()
     {
         _refLat = _refLng = null;
+        _refManuell = false;
         _radiusKm = null;
         _ausgeblendet = 0;
         await JS.InvokeVoidAsync("harmoniqGeo.clear");

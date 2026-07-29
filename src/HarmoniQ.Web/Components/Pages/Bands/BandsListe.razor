@@ -122,6 +122,7 @@ else
     private BandKategorie? _kategorie;
     private Staerkeklasse? _klasse;
     private double? _refLat, _refLng;   // Bezugspunkt (Standort/PLZ)
+    private bool _refManuell;   // true = vom User explizit gesetzt (PLZ/„Mein Standort") → Vorrang vor GPS-Autoload
     private int? _radiusKm;
     private string _plz = "";
     private bool _standortLaeuft;
@@ -136,7 +137,8 @@ else
     private const string FilterKey = "bands.filter";
     private string LoginHref => $"/Account/Login?ReturnUrl={Uri.EscapeDataString("/bands")}";
 
-    private record FilterState(string? Q, BandKategorie? Kat, Staerkeklasse? Klasse, string? Plz, int? Km, bool Mehr);
+    private record FilterState(string? Q, BandKategorie? Kat, Staerkeklasse? Klasse, string? Plz, int? Km, bool Mehr,
+        double? RefLat = null, double? RefLng = null, bool RefManuell = false);
 
     protected override async Task OnInitializedAsync()
     {
@@ -178,13 +180,18 @@ else
                 {
                     _suche = s.Q ?? ""; _kategorie = s.Kat; _klasse = s.Klasse;
                     _plz = s.Plz ?? ""; _radiusKm = s.Km; _mehrFilter = s.Mehr;
+                    // Explizit gesetzten Bezugspunkt (PLZ/„Mein Standort") wiederherstellen – hat Vorrang.
+                    _refManuell = s.RefManuell;
+                    if (_refManuell && s.RefLat is double rla && s.RefLng is double rln)
+                    { _refLat = rla; _refLng = rln; }
                 }
             }
         }
         catch { /* sessionStorage nicht verfügbar */ }
 
-        // (2) Standort (falls schon freigegeben) für „in der Nähe".
-        if (_refLat is null)
+        // (2) Standort (falls schon freigegeben) für „in der Nähe" – aber NUR, wenn der User keinen
+        // eigenen Bezugspunkt gesetzt hat (14a: manuelle PLZ darf GPS-Autoload nicht weichen).
+        if (!_refManuell && _refLat is null)
         {
             try
             {
@@ -222,7 +229,8 @@ else
     {
         if (!_bereit) return;
         var json = System.Text.Json.JsonSerializer.Serialize(
-            new FilterState(_suche, _kategorie, _klasse, _plz, _radiusKm, _mehrFilter));
+            new FilterState(_suche, _kategorie, _klasse, _plz, _radiusKm, _mehrFilter,
+                _refManuell ? _refLat : null, _refManuell ? _refLng : null, _refManuell));
         try { await JS.InvokeVoidAsync("harmoniqUi.set", FilterKey, json); } catch { }
     }
 
@@ -309,6 +317,7 @@ else
     private async Task RefSetzen(double lat, double lng, bool speichern = true)
     {
         _refLat = lat; _refLng = lng;
+        _refManuell = true;   // explizit gesetzt → gewinnt gegen GPS-Autoload (14a)
         _radiusKm ??= 50;
         if (speichern) await JS.InvokeVoidAsync("harmoniqGeo.save", lat, lng);
         Filtern();
@@ -318,6 +327,7 @@ else
     private async Task StandortZuruecksetzen()
     {
         _refLat = _refLng = null;
+        _refManuell = false;
         _radiusKm = null;
         await JS.InvokeVoidAsync("harmoniqGeo.clear");
         Filtern();
