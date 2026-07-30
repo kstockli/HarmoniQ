@@ -26,8 +26,8 @@ else
             <MudItem xs="12" md="6">
                 <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                     <MudStack Row="true">
-                        <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId, "mqdefault")"
-                             style="width:160px;flex-shrink:0;" alt="" />
+                        <VideoVorschau Plattform="@v.Plattform" ExternId="@v.ExternId" Groesse="mqdefault"
+                                       Style="width:160px;flex-shrink:0;" Alt="" />
                         <MudCardContent>
                             <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@v.Titel</MudText>
                             <MudText Typo="Typo.body2" Style="color:#A78FC0;">Stück: @v.Stueck?.Titel</MudText>

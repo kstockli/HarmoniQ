@@ -41,8 +41,8 @@
             <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                 <MudLink Href="@($"/videos/{v.Id}")">
                     <div style="position:relative;">
-                        <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
-                             style="width:100%;display:block;" alt="@v.Titel" />
+                        <VideoVorschau Plattform="@v.Plattform" ExternId="@v.ExternId" BildUrl="@v.BildUrl"
+                                       Style="width:100%;display:block;" Alt="@v.Titel" />
                         <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
                                  Style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;opacity:0.85;"
                                  Size="Size.Large" />
@@ -128,7 +128,7 @@
             .ToListAsync();
 
         _alle = videos.Select(v => new Zeile(
-            v.Id, v.Plattform, v.ExternId, v.Titel,
+            v.Id, v.Plattform, v.ExternId, v.Titel, v.BildUrl,
             v.StueckId, v.Stueck.Titel,
             // Anzeige = Komponisten-Text; Suche = Text + zugeordnete Personen-Namen (Text-Like statt Dropdown).
             v.Stueck.KomponistenText,
@@ -158,7 +158,7 @@
             .ToList();
     }
 
-    private record Zeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel,
+    private record Zeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel, string? BildUrl,
         Guid StueckId, string StueckTitel, string? KomponistName, string KomponistSuche,
         Guid? BandId, string BandName, string? BandLand, int Anzahl, double Schnitt);
 }

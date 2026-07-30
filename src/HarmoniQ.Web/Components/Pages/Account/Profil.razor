@@ -66,8 +66,8 @@ else
                     <MudCardContent>
                         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
                             <MudLink Href="@($"/stuecke/{z.StueckId}")" Style="flex-shrink:0;">
-                                <img src="@VideoEinbettung.Thumbnail(z.Plattform, z.ExternId, "mqdefault")"
-                                     style="width:120px;border-radius:8px;display:block;" alt="@z.StueckTitel" />
+                                <VideoVorschau Plattform="@z.Plattform" ExternId="@z.ExternId" BildUrl="@z.BildUrl" Groesse="mqdefault"
+                                               Style="width:120px;border-radius:8px;display:block;" Alt="@z.StueckTitel" />
                             </MudLink>
                             <div style="flex:1;min-width:0;">
                                 <MudLink Href="@($"/stuecke/{z.StueckId}")" Style="color:#F0E6FF;font-weight:600;"
@@ -158,13 +158,14 @@ else
                 b.Video.Stueck.Titel,
                 b.Video.Plattform,
                 b.Video.ExternId,
+                b.Video.BildUrl,
                 b.Video.Band != null ? b.Video.Band.Name : "Unbekannte Band",
                 b.GesamtEindruck, b.Praezision, b.Musikalitaet,
                 b.AkustischeQualitaet, b.VideoQualitaet, b.Kommentar, b.ErstelltAm))
             .ToListAsync();
     }
 
-    private record Zeile(Guid StueckId, string StueckTitel, VideoPlattform Plattform, string ExternId, string BandName,
+    private record Zeile(Guid StueckId, string StueckTitel, VideoPlattform Plattform, string ExternId, string? BildUrl, string BandName,
         int GesamtEindruck, int Praezision, int Musikalitaet,
         int AkustischeQualitaet, int VideoQualitaet, string? Kommentar, DateTime ErstelltAm);
 

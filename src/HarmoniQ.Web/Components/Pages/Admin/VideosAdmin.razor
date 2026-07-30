@@ -43,8 +43,8 @@
     <Columns>
         <TemplateColumn Title="" Sortable="false">
             <CellTemplate>
-                <img src="@VideoEinbettung.Thumbnail(context.Item.Plattform, context.Item.ExternId, "default")"
-                     style="width:64px;border-radius:4px;" alt="" />
+                <VideoVorschau Plattform="@context.Item.Plattform" ExternId="@context.Item.ExternId" BildUrl="@context.Item.BildUrl"
+                               Groesse="default" Style="width:64px;border-radius:4px;" Alt="" />
             </CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="v => v.Titel" Title="Titel" />
@@ -185,6 +185,7 @@
             entity.KonzertId = model.KonzertId;
             entity.Plattform = model.Plattform;
             entity.ExternId = model.ExternId;
+            entity.BildUrl = model.BildUrl;
             entity.Ort = model.Ort;
             entity.Anlass = model.Anlass;
             entity.Status = model.Status;

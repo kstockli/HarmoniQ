@@ -141,8 +141,15 @@ public class EmfImportService(
                 var stueckId = (ks.FirstOrDefault(x => x.BandId == bandId && x.Stueck.Titel == titel)
                                 ?? ks.FirstOrDefault(x => x.Stueck.Titel == titel))?.StueckId;
                 if (stueckId is null) continue;
-                if (await db.Videos.AnyAsync(x => x.KonzertId == konzertId && x.Plattform == VideoPlattform.SrgPlay && x.ExternId == a.Urn, ct))
+                var vorhandenes = await db.Videos.FirstOrDefaultAsync(
+                    x => x.KonzertId == konzertId && x.Plattform == VideoPlattform.SrgPlay && x.ExternId == a.Urn, ct);
+                if (vorhandenes is not null)
+                {
+                    // Bestehendes Video: fehlendes Vorschaubild nachtragen (Backfill bei Re-Import).
+                    if (string.IsNullOrWhiteSpace(vorhandenes.BildUrl) && !string.IsNullOrWhiteSpace(a.BildUrl))
+                        vorhandenes.BildUrl = a.BildUrl;
                     continue;
+                }
                 db.Videos.Add(new Video
                 {
                     Plattform = VideoPlattform.SrgPlay,
@@ -151,6 +158,7 @@ public class EmfImportService(
                     StueckId = stueckId.Value,
                     BandId = bandId,
                     Titel = a.Titel,
+                    BildUrl = a.BildUrl,
                     Status = VideoStatus.Genehmigt
                 });
                 videos++;

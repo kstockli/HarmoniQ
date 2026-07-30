@@ -267,8 +267,8 @@
                 <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                     <MudLink Href="@($"/videos/{v.Id}")">
                         <div style="position:relative;">
-                            <img src="@VideoEinbettung.Thumbnail(v.Plattform, v.ExternId)"
-                                 style="width:100%;display:block;" alt="@v.StueckTitel" />
+                            <VideoVorschau Plattform="@v.Plattform" ExternId="@v.ExternId" BildUrl="@v.BildUrl"
+                                           Style="width:100%;display:block;" Alt="@v.StueckTitel" />
                             <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
                                      Style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;opacity:0.85;"
                                      Size="Size.Large" />
@@ -658,7 +658,7 @@
             .Where(v => v.Status == VideoStatus.Genehmigt)
             .OrderByDescending(v => v.ErstelltAm)
             .Select(v => new VideoZeile(v.Id, v.Plattform, v.ExternId, v.Stueck.Titel,
-                v.Band != null ? v.Band.Name : null))
+                v.Band != null ? v.Band.Name : null, v.BildUrl))
             .Take(4)
             .ToListAsync();
     }
@@ -917,7 +917,7 @@
 
     private record Zeile(Guid Id, string Name, string? BildUrl, string? Biografie, int AnzahlWerke);
     private record BandZeile(Guid Id, string Name, string? Land, int MitgliederCount, int VideosCount);
-    private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string StueckTitel, string? BandName);
+    private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string StueckTitel, string? BandName, string? BildUrl);
     private record KalenderZeile(Guid Id, DateOnly Datum, string? Name, string? Ort,
         string RelativLabel, bool IstHeute, bool IstVergangen)
     {

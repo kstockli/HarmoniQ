@@ -22,10 +22,12 @@ public static class VideoEinbettung
     /// <summary>True, wenn die Quelle eine direkte Datei-URL ist (per HTML5-&lt;video&gt; statt iframe).</summary>
     public static bool IstDatei(VideoPlattform plattform) => plattform == VideoPlattform.Datei;
 
-    /// <summary>Vorschaubild. YouTube liefert echte Thumbnails; andere Plattformen einen neutralen
-    /// Platzhalter (damit Listen-Markup unverändert mit einem &lt;img&gt; funktioniert).</summary>
-    public static string Thumbnail(VideoPlattform plattform, string? externId, string groesse = "hqdefault") =>
-        string.IsNullOrWhiteSpace(externId) ? Platzhalter : plattform switch
+    /// <summary>Vorschaubild. Ein explizit gespeichertes <paramref name="bildUrl"/> (z. B. SRG/RTR-Play, wo das
+    /// Thumbnail NICHT aus der ID ableitbar ist) hat Vorrang. Sonst: YouTube/Infomaniak aus der ID berechnet,
+    /// alle übrigen ein neutraler Platzhalter (damit Listen-Markup unverändert mit einem &lt;img&gt; funktioniert).</summary>
+    public static string Thumbnail(VideoPlattform plattform, string? externId, string groesse = "hqdefault", string? bildUrl = null) =>
+        !string.IsNullOrWhiteSpace(bildUrl) ? bildUrl!
+        : string.IsNullOrWhiteSpace(externId) ? Platzhalter : plattform switch
         {
             VideoPlattform.YouTube => $"https://i.ytimg.com/vi/{externId}/{groesse}.jpg",
             // Infomaniak VOD: das Poster/Standbild ist aus der Embed-ID ableitbar (= <video poster>).

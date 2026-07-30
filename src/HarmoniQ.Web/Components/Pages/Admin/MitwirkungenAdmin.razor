@@ -26,8 +26,8 @@ else
             <MudItem xs="12" md="6">
                 <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
                     <MudStack Row="true">
-                        <img src="@VideoEinbettung.Thumbnail(m.Plattform, m.ExternId, "mqdefault")"
-                             style="width:140px;flex-shrink:0;" alt="" />
+                        <VideoVorschau Plattform="@m.Plattform" ExternId="@m.ExternId" BildUrl="@m.BildUrl" Groesse="mqdefault"
+                                       Style="width:140px;flex-shrink:0;" Alt="" />
                         <MudCardContent>
                             <MudText Typo="Typo.subtitle1" Style="color:#F0E6FF;">@m.PersonName</MudText>
                             <MudText Typo="Typo.body2" Style="color:#A78FC0;">
@@ -71,7 +71,7 @@ else
             .Where(m => m.Status == VideoStatus.Ausstehend)
             .OrderBy(m => m.Video.Stueck.Titel)
             .Select(m => new Zeile(
-                m.Id, m.Video.Plattform, m.Video.ExternId, m.Video.Stueck.Titel, m.Person.Name, m.Rolle,
+                m.Id, m.Video.Plattform, m.Video.ExternId, m.Video.BildUrl, m.Video.Stueck.Titel, m.Person.Name, m.Rolle,
                 m.Instrument != null ? m.Instrument.Name : null,
                 m.Stimme != null ? m.Stimme.Bezeichnung : null,
                 m.Anmerkung,
@@ -93,6 +93,6 @@ else
         await Laden();
     }
 
-    private record Zeile(Guid Id, VideoPlattform Plattform, string ExternId, string StueckTitel, string PersonName,
+    private record Zeile(Guid Id, VideoPlattform Plattform, string ExternId, string? BildUrl, string StueckTitel, string PersonName,
         MitwirkungRolle Rolle, string? Instrument, string? Stimme, string? Anmerkung, string? VonEmail);
 }

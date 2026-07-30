@@ -1,0 +1,16 @@
+@* Einheitliches Video-Vorschaubild (eine Implementierung für alle Listen: Startseite, Konzert, Band,
+   öffentliche Videos, Admin …). Bevorzugt eine explizit gespeicherte BildUrl (z. B. SRG/RTR-Play),
+   sonst das aus der ExternId berechnete Thumbnail (YouTube/Infomaniak), sonst Platzhalter. Lazy-geladen. *@
+<img src="@VideoEinbettung.Thumbnail(Plattform, ExternId, Groesse, BildUrl)"
+     alt="@Alt" style="@Style" class="@Class" loading="lazy" />
+
+@code {
+    [Parameter, EditorRequired] public VideoPlattform Plattform { get; set; }
+    [Parameter] public string? ExternId { get; set; }
+    /// <summary>Explizite Vorschaubild-URL (hat Vorrang; nötig für Plattformen ohne ableitbares Thumbnail).</summary>
+    [Parameter] public string? BildUrl { get; set; }
+    [Parameter] public string Groesse { get; set; } = "hqdefault";
+    [Parameter] public string? Alt { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

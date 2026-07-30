@@ -28,7 +28,7 @@ public static class EmfImporter
         $"{BasisUrl}/play/v3/api/rtr/production/media-section?sectionId={sectionId}&preview=false&next=";
 
     public record Section(string SectionId, DateOnly Datum, string Strasse, string Titel);
-    public record Video(string Urn, string Titel, string? Band, string? Stueck, DateOnly? Datum);
+    public record Video(string Urn, string Titel, string? Band, string? Stueck, DateOnly? Datum, string? BildUrl);
 
     // ── Sections (Tag + Strasse) aus der show-page ────────────────────────────
     public static IReadOnlyList<Section> ParseSections(string showPageJson)
@@ -65,7 +65,8 @@ public static class EmfImporter
             if (!gesehen.Add(urn)) continue;
             var titel = Str(o, "title") ?? "";
             var (band, stueck) = TitelZerlegen(titel);
-            result.Add(new Video(urn, titel, band, stueck, DatumAus(Str(o, "date"))));
+            // Per-Video-Standbild (imageUrl am Video-Objekt, mit Frame-Suffix „…-588s48ms.png").
+            result.Add(new Video(urn, titel, band, stueck, DatumAus(Str(o, "date")), Str(o, "imageUrl")));
         }
         return result;
     }

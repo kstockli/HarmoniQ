@@ -425,6 +425,31 @@ wirklich neue Treffer; einmal übernommene/abgelehnte Videos tauchen nicht wiede
 `ExternKey`-Dedup der übrigen Quellen (§7), hier über die dedizierte Sichtungstabelle statt `CrawlFund`,
 weil die Funde **standalone Band-Videos** ohne Konzert-/Lauf-Bezug sind.
 
+### 4.6 Einmalige Sonder-Importe (abgeschlossene Grossanlässe)
+
+Für einmalige, abgeschlossene Anlässe kein wiederkehrender Crawler, sondern ein **dedizierter Admin-Import mit
+Dry-run** (eigene Seite, ausserhalb der `CrawlQuelle`/`CrawlLauf`-Pipeline). Beide Quellen sind serverseitig
+gerendert → reines `HttpClient` + Parsing, kein Browser. Ablauf: „Daten sammeln (Vorschau)" (schreibt nichts) →
+Tabelle prüfen → einzeln/alle übernehmen. Idempotent via `KonzertErfassungService.ErfasseOderAktualisiereAsync`
+(kein Doppel-Konzert) und URN-/ID-Dedup (kein Doppel-Video). Läuft gegen die aktuelle DB (lokal Dev, Railway Prod).
+
+**WMC 2026** (`WmcImportService`, `/admin/wmc-import`): World Music Contest Kerkrade. HTML der Running-Order-Liste
++ je Teilnehmer die Detailseite (HtmlAgilityPack). **Ein Konzert pro (Datum, Ort)**; je Band Programm
+(Stück + Komponist:in, zwei Komponisten-Formate) + Dirigent:in. Datumsköpfe **inhaltsbasiert** (EN + NL, Ordinal),
+Venue kanonisiert. Division → `Staerkeklasse` (Concert→Höchstklasse, 1st→Elite, 2nd→Klasse2, 3rd→Klasse3,
+Youth→Oberstufe), Kategorie → `BandKategorie` (inkl. neu `Perkussion`). Band-Stammdaten (Bio/Kategorie/Klasse/Land)
+**nur bei neu angelegten** Bands – bestehende, kuratierte Vereine bleiben unangetastet.
+
+**EMF 2026 Parademusik** (`EmfImportService`/`EmfImporter`, `/admin/emf-import`): Marschmusik-Videos des Eidg.
+Musikfests Biel/Bienne von RTR/SRG „Play". Öffentliche JSON-API (kein Auth): `…/play/v3/api/rtr/production/
+show-page?showUrn=…` liefert **Sections** (Titel „TT.MM.JJJJ: Strasse", Titel liegt in `representation.title`);
+`…/media-section?sectionId=…` die **Videos** der Section (Titel-Schema „<i>Band</i> – <i>Stück</i>  I EMF26 …").
+**Ein Konzert pro Section (Tag + Marschstrecke)**; je auftretende Band ein Stück mit **eingebettetem Video** über
+den offiziellen SRG-Player (`VideoPlattform.SrgPlay`, Embed `rtr.ch/play/embed?urn=<urn>` — **kein Download**;
+rechtlich: offizieller Teilen/Embed-Player, Anfrage an SRG empfohlen). Bands per Find-or-create; die
+**Video→Band-Zuordnung löst per Name ODER Alias auf** (bestehende Vereine unter abweichendem Namen werden
+wiederverwendet — sonst fehlen deren Videos). Verifiziert: 7 Konzerte, 430 Stücke/430 Videos.
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```

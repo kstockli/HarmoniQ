@@ -146,6 +146,21 @@ Schritt 3: Speichern
   → Protokoll: was wurde importiert, was übersprungen
 ```
 
+#### Einmalige Importe (Admin, Dry-run → Übernehmen) — *umgesetzt*
+Für abgeschlossene Grossanlässe (kein wiederkehrender Crawler nötig) gibt es dedizierte, einmalige Admin-Importe.
+Ablauf jeweils: **„Daten sammeln (Vorschau)"** (liest die Quelle, schreibt nichts) → Tabelle prüfen → **einzeln
+oder alle übernehmen**. Läuft gegen die aktuelle DB (lokal = Dev, Railway = Prod), idempotent (Find-or-create,
+kein Doppel-Konzert/-Video). Quellen sind serverseitig gerendert → reines HTTP + Parsing (kein Browser).
+
+- **WMC 2026** (`/admin/wmc-import`): World Music Contest Kerkrade. Ein Konzert pro (Tag, Ort), je Band Programm
+  (Stück + Komponist:in) + Dirigent:in; Division → Stärkeklasse, Kategorie → `BandKategorie`; Band-Stammdaten
+  (Bio/Kategorie/Stärkeklasse/Land) **nur bei neu angelegten** Bands. Details: `Spezifikation-Crawler.md`.
+- **EMF 2026 Parademusik** (`/admin/emf-import`): Marschmusik-Videos des Eidg. Musikfests Biel/Bienne von RTR/SRG
+  „Play" (JSON-API `rtr.ch/play/v3/api/…`). **Ein Konzert pro (Tag, Marschstrecke)**; je auftretende Band ein
+  Stück (aus dem Video-Titel „Band – Stück") mit **eingebettetem Video** über den offiziellen SRG-Player
+  (`VideoPlattform.SrgPlay`, kein Download). Band-Auflösung per Name **oder Alias** (bestehende Vereine werden
+  wiederverwendet). Details: `Spezifikation-Crawler.md`.
+
 #### Review-Queue (`/admin/vorschlaege`) — *umgesetzt*
 - Eingehende Video-Vorschläge (Status *Ausstehend*) mit Thumbnail + Vorschlagendem anzeigen
 - **Genehmigen** (→ Status *Genehmigt*, wird öffentlich sichtbar) oder **Ablehnen** (→ *Abgelehnt*)
@@ -383,10 +398,15 @@ Video
 ├── StückId (FK)
 ├── BandId (FK?)                   ← nullable, falls Band unbekannt
 ├── KonzertId (FK?)               ← NEU, nullable: optionaler Verweis auf das Konzert/den Auftritt
-├── Plattform (enum: YouTube / InfomaniakVod / Vimeo / Andere)  ← NEU: Video-Quelle (Default YouTube)
+├── Plattform (enum: YouTube / InfomaniakVod / Vimeo / Andere / Datei / SrgPlay)  ← NEU: Video-Quelle (Default YouTube)
 ├── ExternId (string)              ← plattform-spez. ID; ersetzt YouTubeVideoId (YouTube: 11-stellig;
-│                                     InfomaniakVod: Embed-ID aus player.vod2.infomaniak.com/embed/<id>)
+│                                     InfomaniakVod: Embed-ID; Datei: vollständige Datei-URL;
+│                                     SrgPlay: volle URN urn:rtr:video:<id>, Embed rtr.ch/play/embed?urn=…)
 ├── EmbedUrl [NotMapped]           ← berechnete Einbett-URL je Plattform (für den Player-Iframe)
+├── BildUrl (string?)              ← NEU, optional: explizite Vorschaubild-URL. Nötig, wenn das Thumbnail
+│                                     NICHT aus der ExternId ableitbar ist (SRG/RTR-Play → CDN-Bild mit eigener
+│                                     ID). Hat Vorrang vor der berechneten ThumbnailUrl (YouTube/Infomaniak).
+├── ThumbnailUrl [NotMapped]       ← Vorschaubild: BildUrl (falls gesetzt) sonst plattform-berechnet
 ├── Titel (string)                 ← optional bei Eingabe; bei YouTube autom. via oEmbed
 ├── AufnahmeDatum (DateOnly?)
 ├── Ort (string?)                  ← optional, Aufnahme-Ort (z. B. "KKL Luzern")

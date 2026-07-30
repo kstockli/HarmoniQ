@@ -32,6 +32,16 @@
             <MudText Typo="Typo.caption" Style="color:#e57373;">Nicht erkannt (YouTube-Link/-ID oder http(s)-Datei-URL erwartet).</MudText>
         }
 
+        <MudTextField @bind-Value="_model.BildUrl" Label="Vorschaubild-URL (optional)" Variant="Variant.Outlined" Class="mt-3"
+                      HelperText="Nur nötig, wenn kein automatisches Thumbnail existiert (z. B. SRG/RTR-Play). Leer = automatisch." />
+        @if (!string.IsNullOrWhiteSpace(_model.ExternId) || !string.IsNullOrWhiteSpace(_model.BildUrl))
+        {
+            <div class="mt-2">
+                <VideoVorschau Plattform="@_model.Plattform" ExternId="@_model.ExternId" BildUrl="@_model.BildUrl"
+                               Groesse="mqdefault" Style="max-width:220px;border-radius:6px;display:block;" Alt="Vorschau" />
+            </div>
+        }
+
         @if (_konzert is null && !_neuKonzert)
         {
             <MudTextField @bind-Value="_model.Ort" Label="Aufnahme-Ort (optional)" Variant="Variant.Outlined" Class="mt-3"
@@ -113,6 +123,7 @@
                 BandId = Vorhanden.BandId,
                 Plattform = Vorhanden.Plattform,
                 ExternId = Vorhanden.ExternId,
+                BildUrl = Vorhanden.BildUrl,
                 Titel = Vorhanden.Titel,
                 AufnahmeDatum = Vorhanden.AufnahmeDatum,
                 Ort = Vorhanden.Ort,
