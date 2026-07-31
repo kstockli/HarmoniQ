@@ -27,6 +27,10 @@ public class StubExtraktion : IExtraktion
     public Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default) =>
         Task.FromResult<string?>(null);
 
+    // Ohne LLM keine Paraphrase → Original behalten.
+    public Task<string?> ParaphrasiereAsync(string text, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
+
     // Ohne LLM kein Stil-Filter (alles durchlassen) und keine Band-Erkennung.
     public Task<KklEventInfo> KklEventAsync(string titel, string? beschreibung, string? stilKriterium, CancellationToken ct = default) =>
         Task.FromResult(new KklEventInfo(true, null));

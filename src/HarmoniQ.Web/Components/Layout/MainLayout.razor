@@ -57,6 +57,17 @@
     <MudMainContent Style="background: #0e0018; min-height: 100vh;">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-6 pb-10">
             @Body
+
+            @* ── Footer: rechtliche Pflichtlinks (von jeder Seite 1 Klick erreichbar, UWG/revDSG). ── *@
+            <footer style="margin-top:3rem;padding-top:1.25rem;border-top:1px solid #2a1a44;
+                           display:flex;flex-wrap:wrap;gap:.4rem 1.25rem;align-items:center;justify-content:center;">
+                <span style="color:#6f5a86;font-size:.8rem;">© @DateTime.Now.Year HarmoniQ</span>
+                <MudLink Href="/impressum" Style="color:#A78FC0;font-size:.8rem;" Underline="Underline.Hover">Impressum</MudLink>
+                <MudLink Href="/datenschutz" Style="color:#A78FC0;font-size:.8rem;" Underline="Underline.Hover">Datenschutz</MudLink>
+                <MudLink Href="/nutzungsbedingungen" Style="color:#A78FC0;font-size:.8rem;" Underline="Underline.Hover">Nutzungsbedingungen</MudLink>
+                <span style="color:#6f5a86;font-size:.8rem;">Nicht-kommerzielles Freizeitprojekt</span>
+            </footer>
+
             @* Platz, damit die fixe Bottom-Navigation den Inhalt auf dem Smartphone nicht überdeckt. *@
             <div class="hq-bottom-spacer"></div>
         </MudContainer>

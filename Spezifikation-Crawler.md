@@ -450,6 +450,21 @@ rechtlich: offizieller Teilen/Embed-Player, Anfrage an SRG empfohlen). Bands per
 **Video→Band-Zuordnung löst per Name ODER Alias auf** (bestehende Vereine unter abweichendem Namen werden
 wiederverwendet — sonst fehlen deren Videos). Verifiziert: 7 Konzerte, 430 Stücke/430 Videos.
 
+### 4.7 Urheberrecht beim Import (Fremdtexte & Bilder)
+
+Rechtliche Leitplanken für alle Import-/Crawl-Quellen (Details in `Spezifikation.md` §11):
+- **Medien nur einbetten, nie hosten** (offizielle Player Dritter) → keine SUISA/Swissperform-Lizenz.
+- **Fremde Beschreibungstexte in eigenen Worten neu formulieren** (nicht bloss kürzen):
+  `IExtraktion.ParaphrasiereAsync` (Mistral) – KKL-Beschreibung beim Import; Band-Bios (WMC, EN→DE) und Bestand
+  via Admin-Tool `/admin/text-bereinigung` (`TextBereinigungService`, Dry-run → Übernehmen).
+- **BandDomain-Crawl (Vereinsseiten):** Der Extraktions-Prompt (`MistralExtraktion.ExtrahiereAsync`) erzeugt die
+  Vereins-`geschichte` bereits **in eigenen Worten** (Anweisung: Website-Formulierungen nie wörtlich übernehmen) –
+  kein separater Paraphrase-Durchgang nötig. Altbestand deutscher Bios wird von der EN→DE-Heuristik der
+  Text-Bereinigung nicht erfasst (nur bei Bedarf gezielt nachbereinigen).
+- **Wikipedia-Anreicherung (`WikipediaService`, `CrawlFundTyp.Komponist`):** Text = CC BY-SA → mit Quellenangabe
+  anzeigen; Commons-**Bild** je-Bild-lizenziert → Urheber/Lizenz via Commons-API (`extmetadata`) in
+  `Person.BildAttribution`; Nachtrag bestehender Bilder über den Button „Bild-Quellen nachtragen" im Crawler-Admin.
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```

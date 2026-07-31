@@ -109,7 +109,8 @@ public record KomponistFundDaten(
     string? BildUrl = null,
     int? Geburtsjahr = null,
     string? WikipediaUrl = null,
-    string? Notiz = null);
+    string? Notiz = null,
+    string? BildAttribution = null);
 
 /// <summary>
 /// Band-/Vereins-Fund (Typ <see cref="CrawlFundTyp.Band"/>): Stammdaten eines Vereins, meist von dessen

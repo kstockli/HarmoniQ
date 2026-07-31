@@ -254,8 +254,9 @@ Person                              (ersetzt „Komponist")
 ├── Name (string)
 ├── Sichtbarkeit (enum)            ← Datenschutz-Stufe der Personendaten, siehe unten
 │                                    Default: Öffentlich (Komponist/Dirigent), NurInitialen (Musikant/Zuhörer)
-├── Biografie (string?)
+├── Biografie (string?)             ← bei Wikipedia-Herkunft mit Quellenangabe (CC BY-SA) anzeigen
 ├── BildUrl (string?)
+├── BildAttribution (string?)      ← NEU: Quellen-/Lizenzangabe zum Bild (Pflicht bei Wikimedia-Commons)
 ├── Geburtsjahr (int?)
 ├── BenutzerId (FK → User?, UNIQUE) ← optional: „das bin ich"-Verknüpfung zum eingeloggten Konto
 ├── Rollen [n] → PersonRolle        ← Komponist / Dirigent / Musikant / Zuhörer
@@ -1217,3 +1218,52 @@ C:\Entw\Music\
 > abgelegt, sondern lokal via `dotnet user-secrets` (bzw. Umgebungsvariablen in Produktion).
 > Konfigurationsschlüssel: `Authentication:Google:ClientId/ClientSecret`,
 > `Email:Host/Port/User/Password/From`, `Admin:Emails`.
+
+## 11. Rechtliches & Compliance (CH: revDSG / UWG / URG)
+
+HarmoniQ ist ein **nicht-kommerzielles, privates Projekt** (Betreiber: Kuno Stöckli, Sempach). Grundlage: zwei
+rechtliche Ersteinschätzungen (Juli 2026) + Umsetzung. Gesamtrisiko gering–mittel, wenn die folgenden Punkte
+eingehalten werden. *(Kein anwaltliches Gutachten; Texte wurden vom Betreiber gegengelesen.)*
+
+### 11.1 Pflichtseiten & Transparenz (UWG Art. 3 lit. s, revDSG Art. 19)
+- **Impressum** (`/impressum`), **Datenschutzerklärung** (`/datenschutz`), **Nutzungsbedingungen**
+  (`/nutzungsbedingungen`) – öffentlich, per **Footer** von jeder Seite 1 Klick erreichbar (`MainLayout.razor`).
+- **Consent** bei Registrierung: Pflicht-Checkbox „Datenschutz + Nutzungsbedingungen akzeptiert" (`Account/Pages/Login.razor`,
+  `InputModel.AcceptTerms`).
+
+### 11.2 Datenschutz (revDSG, in Kraft seit 1.9.2023)
+- **Verantwortlich:** Betreiber (siehe Impressum). **Datenkategorien:** Kontodaten (E-Mail, Passwort-Hash,
+  Anzeigename), Nutzungsdaten (Bewertungen, Konzerttagebuch, Favoriten, Vorschläge), Server-Logs/IP, Local Storage.
+- **Personendaten Dritter:** Namen von Dirigent:innen/Komponist:innen/Musiker:innen aus öffentlichen Quellen →
+  `Person.Sichtbarkeit` (nicht-öffentlich = nur Initialen); **Kontaktdaten (E-Mail/Telefon) nie öffentlich**.
+- **Betroffenenrechte:** Auskunft/Berichtigung/Löschung. Konto-Selbstlöschung (`Manage/DeletePersonalData`);
+  für genannte Dritte Berichtigungs-/Meldeweg.
+- **Auftragsbearbeiter / Ausland:** Hosting **Railway (EU-West/Amsterdam)**; Statistik **Umami** (self-hosted,
+  cookielos, **EU/Amsterdam**); Medien-Embeds YouTube/Google (US), SRG/RTR (CH), Vimeo, Infomaniak; Import-LLM
+  **Mistral (EU)** + Google Programmable Search (US) – nur öffentliche Namen/Titel, keine Kontodaten. In der
+  Datenschutzerklärung genannt.
+
+### 11.3 Urheberrecht – Medien (Embedding, kein Hosting)
+- **Nur Einbettung** über offizielle Player Dritter (YouTube/`VideoPlattform.SrgPlay`/Infomaniak/Vimeo); **es werden
+  keine Mediendateien auf HarmoniQ gehostet** → keine SUISA/Swissperform-Lizenz nötig (Framing-Doktrin, Svensson).
+  Hinweistext in Impressum/Nutzungsbedingungen. Bei Eigen-Datei (`VideoPlattform.Datei`) trägt der/die Einreichende
+  die Rechte (Freistellung, s. u.).
+
+### 11.4 Urheberrecht – fremde Texte & Bilder
+- **Grundsatz: Kürzen genügt nicht – fremde Beschreibungstexte werden in eigenen Worten neu formuliert**
+  (`IExtraktion.ParaphrasiereAsync`, Mistral): KKL-Beschreibungen beim Import; Band-Bios (WMC, EN→DE) und Bestand
+  über das Admin-Tool **`/admin/text-bereinigung`**.
+- **Wikipedia (Komponist:innen):** Text ist **CC BY-SA** → mit **Quellenangabe** anzeigen („Text: Wikipedia (CC BY-SA)").
+  Bilder (Wikimedia Commons) sind **je Bild lizenziert** → Urheber/Lizenz via Commons-API in **`Person.BildAttribution`**
+  gespeichert und angezeigt („Bild: … via Wikimedia Commons"); Nachtrag-Button im Crawler-Admin.
+
+### 11.5 Nutzerinhalte (UGC) – Haftungsprivilegierung
+- **Nutzungsbedingungen** verpflichten zu sachlichen, rechtskonformen Beiträgen (keine Schmähkritik/Persönlichkeits-
+  verletzung), enthalten eine **Freistellungsklausel** (Nutzer:in stellt Betreiber von Ansprüchen Dritter frei).
+- **Notice-and-Take-Down:** öffentlicher Meldeweg (E-Mail me@q-no.ch, im Impressum/Nutzungsbed.) + Button
+  „Fehler melden / Richtigstellung" (`RichtigstellungMelden`, eingeloggt) → begründete Meldungen werden zügig geprüft/entfernt.
+
+### 11.6 Name / Marke
+- **„HarmoniQ"** geprüft (2026-07): Swissreg **keine** Marke; Zefix „Harmoniq Sommer" = andere Branche
+  (Strategieberatung) → **keine Verwechslungsgefahr**. Klarstellungssatz im Impressum („nicht-kommerzielles
+  Freizeitprojekt, keine Verbindung zu gleichnamigen Handelsregister-Einträgen"). Optional: Wortmarke Klasse 41 hinterlegen.

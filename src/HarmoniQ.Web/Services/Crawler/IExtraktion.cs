@@ -29,6 +29,11 @@ public interface IExtraktion
     /// (nur wenn klar belegt, sonst null – nicht raten). Ohne LLM (Stub): null.</summary>
     Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default);
 
+    /// <summary>Formuliert einen fremden Beschreibungstext in <b>eigenen deutschen Worten</b> neu und knapp
+    /// (Urheberrecht: keine Formulierungen übernehmen; nur belegte Fakten). Für importierte Band-Bios / Konzert-
+    /// Beschreibungen (z. B. WMC-Bios EN→DE, KKL-Beschreibungen). Ohne LLM (Stub): null (Original behalten).</summary>
+    Task<string?> ParaphrasiereAsync(string text, CancellationToken ct = default);
+
     /// <summary>Veranstalter-Event (KKL §4.3): klassifiziert anhand Titel/Beschreibung, ob das Event zum
     /// Stil-Kriterium passt (z. B. „Blasmusik/Brassband"), und liest die auftretende Band/Ensemble heraus.
     /// Ohne LLM (Stub): passt=true (kein Filter), Band=null. Wird nur als Fallback gebraucht, wenn der

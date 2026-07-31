@@ -1,0 +1,58 @@
+@page "/impressum"
+
+<PageTitle>Impressum – HarmoniQ</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="px-0">
+    <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Impressum</MudText>
+    <MudText Typo="Typo.caption" Class="mb-6 d-block" Style="color:#6f5a86;">Stand: @DateTime.Now.ToString("MMMM yyyy")</MudText>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">Betreiber &amp; Verantwortlicher</MudText>
+        <MudText Style="color:#F0E6FF;">
+            Kuno Stöckli<br />
+            Seesatz 8<br />
+            6204 Sempach<br />
+            Schweiz
+        </MudText>
+        <MudText Class="mt-3" Style="color:#F0E6FF;">
+            E-Mail: <MudLink Href="mailto:me@q-no.ch" Style="color:#D4AF37;">me@q-no.ch</MudLink>
+        </MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">Charakter des Angebots</MudText>
+        <MudText Style="color:#F0E6FF;">
+            HarmoniQ ist ein <strong>nicht-kommerzielles, privates Freizeitprojekt</strong> rund um die Schweizer
+            Blasmusik. Es werden keine Waren oder Dienstleistungen verkauft und keine Werbeeinnahmen erzielt.
+            HarmoniQ steht in keiner geschäftlichen oder rechtlichen Verbindung zu im Handelsregister
+            eingetragenen Unternehmen gleichen oder ähnlichen Namens.
+        </MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">Haftung für Inhalte &amp; Links</MudText>
+        <MudText Style="color:#F0E6FF;">
+            Die Inhalte werden mit Sorgfalt erstellt, jedoch ohne Gewähr für Richtigkeit, Vollständigkeit und
+            Aktualität. Für Inhalte externer Links sind ausschliesslich deren Betreiber verantwortlich; wir machen
+            uns diese nicht zu eigen. Video- und Audio-Aufnahmen werden ausschliesslich über die offiziellen
+            Player Dritter (z. B. YouTube, SRG/RTR Play) eingebunden – auf HarmoniQ werden keine Mediendateien
+            gespeichert.
+        </MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">Inhalt melden / Rechte verletzt?</MudText>
+        <MudText Style="color:#F0E6FF;">
+            Wenn ein Inhalt Ihre Rechte verletzt (Urheberrecht, Persönlichkeitsrecht) oder falsch ist, melden Sie
+            das bitte an <MudLink Href="mailto:me@q-no.ch?subject=HarmoniQ%20%E2%80%93%20Inhalt%20melden" Style="color:#D4AF37;">me@q-no.ch</MudLink>
+            (bitte mit Link zur betreffenden Seite und kurzer Begründung). Wir prüfen jede Meldung zeitnah und
+            entfernen oder korrigieren betroffene Inhalte, sofern die Meldung begründet ist. Angemeldete Nutzer:innen
+            können zusätzlich den Button „Fehler melden / Richtigstellung" auf den jeweiligen Seiten verwenden.
+        </MudText>
+    </MudPaper>
+
+    <MudText Typo="Typo.caption" Style="color:#6f5a86;">
+        Siehe auch: <MudLink Href="/datenschutz" Style="color:#A78FC0;">Datenschutzerklärung</MudLink> und
+        <MudLink Href="/nutzungsbedingungen" Style="color:#A78FC0;">Nutzungsbedingungen</MudLink>.
+    </MudText>
+</MudContainer>

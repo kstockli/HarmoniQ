@@ -82,7 +82,9 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "- verein: NUR ausfüllen, wenn die Seite die EIGENE Seite eines Vereins ist (Vereins-Domain). Dann " +
         "die Daten DIESES Vereins: offizieller name, alternative Namen als aliase[], land, webseite, " +
         "gruendungsjahr, kategorie (Besetzungsart), staerkeklasse, kurze geschichte/Beschreibung, " +
-        "Social-Media-Links. Bei Fest-/Ranglisten-/Fremdseiten verein WEGLASSEN (null).\n" +
+        "Social-Media-Links. WICHTIG (Urheberrecht): die geschichte in EIGENEN Worten neu formulieren " +
+        "(2-3 Saetze, nur die Fakten aus dem Text) - Formulierungen der Website NIE woertlich uebernehmen. " +
+        "Bei Fest-/Ranglisten-/Fremdseiten verein WEGLASSEN (null).\n" +
         "- funktionaere: NUR ausfüllen, wenn die Anweisung Vorstand und/oder Musikkommission (Muko) verlangt. " +
         "Vorstand = Präsident/Vizepräsident/Kassier:in/Aktuar:in/Beisitzer:in usw. (gremium=\"Vorstand\"); " +
         "Muko = Musikkommission (gremium=\"Muko\"). funktion = die konkrete Rolle, email/instrument nur falls " +
@@ -513,6 +515,36 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record KklProgrammAntwort(List<KklStueckAntwort>? Stuecke, List<string>? Bands, string? Dirigent);
     private record KklStueckAntwort(string? Titel, string? Komponist);
+
+    public async Task<string?> ParaphrasiereAsync(string text, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var sys = "Du formulierst einen fremden Beschreibungstext in EIGENEN deutschen Worten neu (Grund: " +
+            "Urheberrecht - es duerfen keine Formulierungen woertlich uebernommen werden). Regeln: gib NUR die " +
+            "deutsche Neufassung zurueck (kein Vorspann, keine Anfuehrungszeichen); sachlich und knapp (2-3 Saetze); " +
+            "nur Fakten, die im Ausgangstext stehen (nichts erfinden); falls der Ausgangstext englisch ist, ins " +
+            "Deutsche uebersetzen und dabei umschreiben. Entferne Ticketing-/Werbe-Floskeln.";
+        var eingabe = text.Length > 4000 ? text[..4000] : text;
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.3,
+            messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = eingabe } }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+            return string.IsNullOrWhiteSpace(inhalt) ? null : inhalt.Trim('"', ' ', '\n', '\r');
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "Paraphrase fehlgeschlagen."); return null; }
+    }
 
     public async Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default)
     {

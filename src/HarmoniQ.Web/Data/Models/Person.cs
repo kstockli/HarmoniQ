@@ -16,6 +16,9 @@ public class Person : AuditierteEntitaet
 
     public string? Biografie { get; set; }
     public string? BildUrl { get; set; }
+    /// <summary>Quellen-/Lizenzangabe zum Bild (Pflicht bei Wikimedia-Commons-Bildern: Urheber + Lizenz),
+    /// anzeigefertig, z. B. „Foto: A. Muster · CC BY-SA 4.0, via Wikimedia Commons".</summary>
+    public string? BildAttribution { get; set; }
     public int? Geburtsjahr { get; set; }
 
     /// <summary>Optionale, eindeutige „das bin ich"-Verknüpfung zum eingeloggten Konto.</summary>

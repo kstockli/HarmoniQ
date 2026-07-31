@@ -67,7 +67,22 @@ else
 
     @if (!string.IsNullOrWhiteSpace(_person.Biografie))
     {
-        <MudText Typo="Typo.body1" Class="mb-4" Style="color:#C4B0D8;">@_person.Biografie</MudText>
+        <MudText Typo="Typo.body1" Class="mb-1" Style="color:#C4B0D8;">@_person.Biografie</MudText>
+    }
+    @* Quellen-/Lizenzangaben (Urheberrecht): Wikipedia-Text ist CC BY-SA, Commons-Bilder je-Bild-lizenziert. *@
+    @if (BildAnzeige != null && !string.IsNullOrWhiteSpace(_person.BildAttribution))
+    {
+        <MudText Typo="Typo.caption" Class="d-block" Style="color:#6f5a86;">Bild: @_person.BildAttribution</MudText>
+    }
+    @if (!string.IsNullOrWhiteSpace(_person.Biografie) && !string.IsNullOrWhiteSpace(_person.Wikipedia))
+    {
+        <MudText Typo="Typo.caption" Class="d-block mb-4" Style="color:#6f5a86;">
+            Text: <MudLink Href="@_person.Wikipedia" Target="_blank" Style="color:#8f7aa8;">Wikipedia</MudLink> (CC BY-SA)
+        </MudText>
+    }
+    else if (!string.IsNullOrWhiteSpace(_person.Biografie))
+    {
+        <div class="mb-4"></div>
     }
 
     @* Links: Social-/Web-Links sind bei öffentlichen Personen sichtbar. KONTAKTDATEN (E-Mail, Telefon)

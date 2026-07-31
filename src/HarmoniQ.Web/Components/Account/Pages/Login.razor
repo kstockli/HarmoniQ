@@ -100,6 +100,11 @@
                         <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="auth-input"
                                    autocomplete="new-password" aria-required="true" placeholder="Passwort nochmals eingeben" />
                     </div>
+                    <label class="auth-check" style="display:flex;gap:.5rem;align-items:flex-start;font-size:.85rem;margin:.25rem 0 1rem;">
+                        <InputCheckbox @bind-Value="Input.AcceptTerms" />
+                        <span>Ich habe die <a href="/datenschutz" target="_blank">Datenschutzerklärung</a> und die
+                              <a href="/nutzungsbedingungen" target="_blank">Nutzungsbedingungen</a> gelesen und akzeptiere sie.</span>
+                    </label>
                     <button type="submit" class="auth-btn">Konto erstellen</button>
                 }
             }
@@ -199,6 +204,11 @@
         }
 
         // register
+        if (!Input.AcceptTerms)
+        {
+            errorMessage = "Bitte akzeptiere die Datenschutzerklärung und die Nutzungsbedingungen.";
+            return;
+        }
         if (Input.Password.Length < 6)
         {
             errorMessage = "Das Passwort muss mindestens 6 Zeichen lang sein.";
@@ -305,6 +315,8 @@
         public string Password { get; set; } = "";
         public string ConfirmPassword { get; set; } = "";
         public bool RememberMe { get; set; }
+        /// <summary>Zustimmung zu Datenschutz + Nutzungsbedingungen (Pflicht bei Registrierung).</summary>
+        public bool AcceptTerms { get; set; }
 
         // Ablaufsteuerung der einen Maske: email → login | register.
         public string Phase { get; set; } = "email";

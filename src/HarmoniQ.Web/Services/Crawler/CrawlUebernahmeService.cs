@@ -454,7 +454,10 @@ public static class CrawlUebernahmeService
         if (string.IsNullOrWhiteSpace(person.Biografie) && !string.IsNullOrWhiteSpace(d.Biografie))
             person.Biografie = d.Biografie.Trim();
         if (string.IsNullOrWhiteSpace(person.BildUrl) && !string.IsNullOrWhiteSpace(d.BildUrl))
+        {
             person.BildUrl = d.BildUrl.Trim();
+            person.BildAttribution = Leer(d.BildAttribution); // Quellen-/Lizenzangabe zum Bild mitübernehmen
+        }
         if (person.Geburtsjahr is null && d.Geburtsjahr is { } gj)
             person.Geburtsjahr = gj;
         if (person.Wikipedia is null && !string.IsNullOrWhiteSpace(d.WikipediaUrl))

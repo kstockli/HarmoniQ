@@ -23,6 +23,9 @@
     <MudButton Variant="Variant.Text" Style="color:#9B59B6;" StartIcon="@Icons.Material.Filled.AutoStories"
                OnClick="KomponistenAnreichern" Disabled="_anreicherungLaeuft">
         @(_anreicherungLaeuft ? "Lädt …" : "Wikipedia-Anreicherung")</MudButton>
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" StartIcon="@Icons.Material.Filled.Copyright"
+               OnClick="BildQuellenNachtragen" Disabled="_anreicherungLaeuft">
+        @(_anreicherungLaeuft ? "Lädt …" : "Bild-Quellen nachtragen")</MudButton>
     <MudIconButton Icon="@Icons.Material.Filled.Refresh" Style="color:#D4AF37;" OnClick="Laden" title="Aktualisieren" />
 </MudStack>
 
@@ -425,7 +428,7 @@ else
             foreach (var (p, e) in treffer)
             {
                 if (e is null) continue;
-                var daten = new KomponistFundDaten(p.Name, e.Biografie, e.BildUrl, e.Geburtsjahr, e.Url);
+                var daten = new KomponistFundDaten(p.Name, e.Biografie, e.BildUrl, e.Geburtsjahr, e.Url, null, e.BildAttribution);
                 db.CrawlFunde.Add(new CrawlFund
                 {
                     Typ = CrawlFundTyp.Komponist,
@@ -441,6 +444,38 @@ else
             Snackbar.Add($"{neu} Wikipedia-Vorschläge erstellt (von {komponisten.Count} geprüft) → Funde, Typ \"Komponist\".",
                 neu > 0 ? Severity.Success : Severity.Info);
         }
+        finally { _anreicherungLaeuft = false; }
+    }
+
+    /// <summary>Trägt für bereits importierte Wikimedia-Commons-Bilder (Personen) die fehlende Urheber-/
+    /// Lizenzangabe nach (Urheberrecht) – holt sie von der Commons-API und speichert sie direkt.</summary>
+    private async Task BildQuellenNachtragen()
+    {
+        _anreicherungLaeuft = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var offen = await db.Personen
+                .Where(p => p.BildUrl != null && p.BildAttribution == null
+                            && (p.BildUrl.Contains("wikimedia") || p.BildUrl.Contains("wikipedia")))
+                .ToListAsync();
+            if (offen.Count == 0) { Snackbar.Add("Keine Bilder ohne Quellenangabe gefunden.", Severity.Info); return; }
+
+            var drossel = new SemaphoreSlim(5);
+            var attrs = await Task.WhenAll(offen.Select(async p =>
+            {
+                await drossel.WaitAsync();
+                try { return (p, Attr: await Wiki.BildAttributionAsync(p.BildUrl!)); }
+                finally { drossel.Release(); }
+            }));
+            var n = 0;
+            foreach (var (p, attr) in attrs)
+                if (!string.IsNullOrWhiteSpace(attr)) { p.BildAttribution = attr; n++; }
+            await db.SaveChangesAsync();
+            Snackbar.Add($"{n} Bild-Quellen nachgetragen (von {offen.Count} geprüft).",
+                n > 0 ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
         finally { _anreicherungLaeuft = false; }
     }
 

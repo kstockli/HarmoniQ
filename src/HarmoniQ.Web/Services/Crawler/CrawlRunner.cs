@@ -712,12 +712,17 @@ public class CrawlRunner(
             var raenge = bands.Count == 0 ? null
                 : bands.Select(b => new RangZeileDaten(b, Dirigent: einzelBand != null ? Leer2(prog.Dirigent) : null)).ToList();
 
+            // Beschreibung in eigenen Worten neu formulieren (Urheberrecht: kein Kopieren fremder Texte;
+            // entfernt zugleich Ticketing-Floskeln). Fallback: Original, falls kein LLM/leer.
+            var beschreibung = string.IsNullOrWhiteSpace(ev.Beschreibung) ? null
+                : (await extraktion.ParaphrasiereAsync(ev.Beschreibung!, ct) ?? ev.Beschreibung);
+
             var daten = new KonzertFundDaten(
                 Datum: ev.Datum,
                 Uhrzeit: ev.Uhrzeit,
                 Name: ev.Name,
                 Ort: ev.Saal != null ? $"KKL Luzern, {ev.Saal}" : "KKL Luzern",
-                Beschreibung: ev.Beschreibung,
+                Beschreibung: beschreibung,
                 Programm: programm,
                 Raenge: raenge,
                 BildUrl: ev.Bild);

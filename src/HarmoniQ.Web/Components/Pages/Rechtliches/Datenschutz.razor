@@ -1,0 +1,111 @@
+@page "/datenschutz"
+
+<PageTitle>Datenschutzerklärung – HarmoniQ</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="px-0 hq-legal">
+    <MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Datenschutzerklärung</MudText>
+    <MudText Typo="Typo.caption" Class="mb-4 d-block" Style="color:#6f5a86;">
+        Stand: @DateTime.Now.ToString("MMMM yyyy") · nach dem revidierten Datenschutzgesetz (revDSG)
+    </MudText>
+
+    <MudText Class="mb-6" Style="color:#C4B0D8;">
+        Diese Erklärung informiert darüber, welche Personendaten HarmoniQ bearbeitet, zu welchem Zweck und
+        welche Rechte Ihnen zustehen. HarmoniQ ist ein nicht-kommerzielles Freizeitprojekt.
+    </MudText>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">1. Verantwortliche Person</MudText>
+        <div class="hq-body">
+            Kuno Stöckli, Seesatz 8, 6204 Sempach, Schweiz –
+            <MudLink Href="mailto:me@q-no.ch" Style="color:#D4AF37;">me@q-no.ch</MudLink>.
+            Diese Person entscheidet über Zweck und Mittel der Datenbearbeitung.
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">2. Welche Daten wir bearbeiten</MudText>
+        <ul class="hq-ul">
+            <li><strong>Kontodaten</strong> (bei Registrierung): E-Mail-Adresse, Passwort (nur als Hash gespeichert),
+                Anzeigename.</li>
+            <li><strong>Nutzungsdaten</strong>: Ihre Bewertungen, Konzerttagebuch-Einträge, gefolgte Bands/Favoriten
+                sowie eingereichte Vorschläge (Videos, Korrekturen).</li>
+            <li><strong>Technische Daten</strong>: Beim Aufruf fallen beim Hosting-Anbieter Server-Protokolle an
+                (IP-Adresse, Zeitpunkt, aufgerufene Seite, Browser-Typ). Im Browser wird lokaler Speicher
+                (Local Storage) für den App-Zustand genutzt – keine Werbe-Cookies.</li>
+            <li><strong>Personendaten Dritter</strong>: HarmoniQ nennt Namen öffentlich auftretender Personen
+                (Dirigent:innen, Komponist:innen, Musiker:innen) aus öffentlich zugänglichen Quellen. Nicht als
+                öffentlich markierte Personen werden nur mit Initialen angezeigt; Kontaktdaten (E-Mail, Telefon)
+                werden nie öffentlich dargestellt.</li>
+        </ul>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">3. Zwecke und Rechtsgrundlagen</MudText>
+        <div class="hq-body">
+            Wir bearbeiten diese Daten, um den Dienst bereitzustellen (Konto, Bewertungen, Konzerttagebuch,
+            personalisierter Feed), um Missbrauch abzuwehren und um das Angebot zu betreiben und zu verbessern.
+            Grundlage ist die Erfüllung des Nutzungsverhältnisses, Ihre Einwilligung (z. B. bei der Registrierung)
+            sowie unser überwiegendes, nicht-kommerzielles Interesse an einer funktionierenden Blasmusik-Datenbank.
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">4. Dritte, Auftragsbearbeiter &amp; Ausland</MudText>
+        <div class="hq-body mb-2">Zum Betrieb setzen wir sorgfältig ausgewählte Dienstleister ein:</div>
+        <ul class="hq-ul">
+            <li><strong>Hosting</strong>: Railway (Betrieb in der EU – Region West/Amsterdam, Niederlande).</li>
+            <li><strong>Statistik</strong>: Umami (selbst gehostete, cookielose Reichweitenmessung ohne
+                personenbezogene Profile).</li>
+            <li><strong>Eingebettete Medien</strong>: Beim Abspielen eines Videos/Audios werden Daten (u. a. Ihre
+                IP-Adresse) an den jeweiligen Anbieter übermittelt: YouTube/Google LLC (USA), SRG SSR / RTR (Schweiz),
+                Vimeo (USA), Infomaniak (Schweiz). Es gelten deren Datenschutzbestimmungen.</li>
+            <li><strong>Datenanreicherung beim Import</strong>: Für die automatische Aufbereitung öffentlicher
+                Veranstaltungs-/Werkdaten nutzen wir Mistral AI (EU/Frankreich) und die Google-Programmable-Search-API
+                (USA). Dabei werden nur öffentlich zugängliche Namen/Titel verarbeitet, keine Kontodaten.</li>
+        </ul>
+        <div class="hq-body mt-2">
+            Erfolgt eine Bekanntgabe in ein Land ohne gleichwertigen Datenschutz (z. B. USA), stützen wir uns auf
+            geeignete Garantien bzw. gesetzliche Ausnahmen. Wir verkaufen keine Personendaten.
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">5. Speicherdauer</MudText>
+        <div class="hq-body">
+            Kontodaten und Nutzungsinhalte speichern wir, solange Ihr Konto besteht bzw. solange es für den Zweck
+            nötig ist. Server-Protokolle werden nur kurz aufbewahrt. Nach Löschung des Kontos werden Ihre
+            personenbezogenen Daten entfernt oder anonymisiert.
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">6. Ihre Rechte</MudText>
+        <div class="hq-body">
+            Sie haben das Recht auf Auskunft, Berichtigung, Löschung und Datenherausgabe sowie das Recht, eine
+            Einwilligung zu widerrufen. Ihr Konto können Sie in den Konto-Einstellungen unter „Persönliche Daten"
+            selbst löschen. Für Personen, die in der Datenbank genannt werden, besteht ein Berichtigungs-/Löschweg
+            über die Meldefunktion bzw. per E-Mail. Anliegen richten Sie an
+            <MudLink Href="mailto:me@q-no.ch" Style="color:#D4AF37;">me@q-no.ch</MudLink>. Zudem können Sie sich beim
+            Eidg. Datenschutz- und Öffentlichkeitsbeauftragten (EDÖB) beschweren.
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-5 mb-4" Elevation="1" Style="background:#1a0030;border:1px solid #3a1060;">
+        <MudText Typo="Typo.h6" Style="color:#D4AF37;" GutterBottom="true">7. Externe Links</MudText>
+        <div class="hq-body">
+            HarmoniQ enthält Links zu externen Websites. Auf deren Datenbearbeitung haben wir keinen Einfluss; es
+            gelten die dortigen Datenschutzerklärungen.
+        </div>
+    </MudPaper>
+
+    <MudText Typo="Typo.caption" Class="mt-2" Style="color:#6f5a86;">
+        Siehe auch: <MudLink Href="/impressum" Style="color:#A78FC0;">Impressum</MudLink> und
+        <MudLink Href="/nutzungsbedingungen" Style="color:#A78FC0;">Nutzungsbedingungen</MudLink>.
+    </MudText>
+</MudContainer>
+
+<style>
+    .hq-legal .hq-body { color:#F0E6FF; line-height:1.6; }
+    .hq-legal .hq-ul { color:#F0E6FF; line-height:1.6; margin:.25rem 0 0 1.1rem; }
+    .hq-legal .hq-ul li { margin-bottom:.45rem; }
+</style>
