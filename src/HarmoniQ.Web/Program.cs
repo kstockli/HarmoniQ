@@ -15,7 +15,15 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(options =>
-        options.DetailedErrors = builder.Environment.IsDevelopment());
+    {
+        options.DetailedErrors = builder.Environment.IsDevelopment();
+        // Lange Stücke (bis ~40 min): sperrt das Handy während des Konzerts, fällt die SignalR-Verbindung weg.
+        // Die getrennte Blazor-Session wird jetzt bis zu 1 h serverseitig behalten (Default nur 3 min), damit der
+        // Reconnect beim Zurückkommen die GLEICHE Session trifft → Scroll-Position + getippter Kommentar bleiben,
+        // kein Reload/Kontextverlust. Speicherkosten sind bei wenigen gleichzeitigen Nutzer:innen gering.
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromHours(1);
+        options.DisconnectedCircuitMaxRetained = 200;
+    });
 
 builder.Services.AddMudServices();
 

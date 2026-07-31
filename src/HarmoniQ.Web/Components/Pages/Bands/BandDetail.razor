@@ -73,6 +73,18 @@ else
         </MudChip>
     }
 
+    @* Band-Foto (nur verlinkt, nicht gehostet) + Quellenangabe (Urheberrecht). *@
+    @if (!string.IsNullOrWhiteSpace(_band.FotoUrl))
+    {
+        <img src="@_band.FotoUrl" loading="lazy" alt="@_band.Name"
+             style="width:100%;max-width:720px;max-height:420px;object-fit:cover;border-radius:10px;display:block;" class="mb-1" />
+        @if (!string.IsNullOrWhiteSpace(_band.FotoAttribution))
+        {
+            <MudText Typo="Typo.caption" Class="d-block mb-4" Style="color:#6f5a86;">@_band.FotoAttribution</MudText>
+        }
+        else { <div class="mb-4"></div> }
+    }
+
     @if (!string.IsNullOrWhiteSpace(_band.Geschichte))
     {
         <MudText Typo="Typo.body1" Class="mb-4" Style="color:#C4B0D8;">@_band.Geschichte</MudText>

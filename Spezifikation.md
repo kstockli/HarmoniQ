@@ -322,7 +322,9 @@ Band
 ├── Name (string)                   ← Hauptname
 ├── Land (string?)
 ├── Webseite (string?)              ← Haupt-Homepage (weitere Links siehe BandLink)
-├── BildUrl (string?)               ← Band-Logo/Foto
+├── BildUrl (string?)               ← Band-Logo (kleines Zeichen)
+├── FotoUrl (string?)               ← NEU: Band-Foto (grösseres Gruppenbild; nur verlinkt, nicht gehostet)
+├── FotoAttribution (string?)       ← NEU: Quellen-/Fotograf:in-Angabe zum Foto (Urheberrecht)
 ├── Kategorie (enum?: Harmonie / Brassband / Fanfare / Unterhaltung / Jugendmusik Harmonie /
 │             Jugendmusik Brassband / Bläserensemble / Perkussion / Sonstige)   — NEU
 ├── Staerkeklasse (enum?: Höchstklasse / Elite / 1.–4. Klasse / Ober-/Mittel-/Unterstufe)  — NEU
@@ -1256,6 +1258,10 @@ eingehalten werden. *(Kein anwaltliches Gutachten; Texte wurden vom Betreiber ge
 - **Wikipedia (Komponist:innen):** Text ist **CC BY-SA** → mit **Quellenangabe** anzeigen („Text: Wikipedia (CC BY-SA)").
   Bilder (Wikimedia Commons) sind **je Bild lizenziert** → Urheber/Lizenz via Commons-API in **`Person.BildAttribution`**
   gespeichert und angezeigt („Bild: … via Wikimedia Commons"); Nachtrag-Button im Crawler-Admin.
+- **Bilder generell nur verlinken, nie selbst hosten** (Link-/Framing-Doktrin). Fremde Bilder (Band-Foto,
+  Komponist:innen-Bild) mit **Quellen-/Fotograf:in-Angabe** (`Band.FotoAttribution` / `Person.BildAttribution`).
+  Bei Fotos mit erkennbaren Personen zusätzlich das **Recht am eigenen Bild** beachten (bevorzugt offizielle
+  Promo-/Gruppenbilder der Band).
 
 ### 11.5 Nutzerinhalte (UGC) – Haftungsprivilegierung
 - **Nutzungsbedingungen** verpflichten zu sachlichen, rechtskonformen Beiträgen (keine Schmähkritik/Persönlichkeits-

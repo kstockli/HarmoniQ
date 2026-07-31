@@ -9,8 +9,13 @@ public class Band : AuditierteEntitaet
     public string? Land { get; set; }
     /// <summary>Haupt-Homepage der Band (weitere Links siehe <see cref="Links"/>).</summary>
     public string? Webseite { get; set; }
-    /// <summary>Optionales Band-Logo/Foto.</summary>
+    /// <summary>Optionales Band-Logo (kleines Marken-/Vereinszeichen).</summary>
     public string? BildUrl { get; set; }
+    /// <summary>Optionales Band-Foto (grösseres Gruppen-/Promobild). Nur verlinkt (nicht selbst gehostet).</summary>
+    public string? FotoUrl { get; set; }
+    /// <summary>Quellen-/Fotograf:in-Angabe zum Band-Foto (Urheberrecht) – anzeigefertig, z. B.
+    /// „Foto: Verein XY / Fotograf:in".</summary>
+    public string? FotoAttribution { get; set; }
 
     public BandKategorie? Kategorie { get; set; }
     public Staerkeklasse? Staerkeklasse { get; set; }

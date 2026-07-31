@@ -73,7 +73,15 @@ else
                 <MudTextField @bind-Value="_webseite" Label="Webseite (Homepage)" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_bildUrl" Label="Bild-URL (Logo/Foto)" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_bildUrl" Label="Logo-URL" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_fotoUrl" Label="Foto-URL (Bandbild)" Variant="Variant.Outlined"
+                              HelperText="Nur verlinken (nicht hochladen); am besten ein offizielles Bild der Band." />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_fotoAttribution" Label="Foto-Quelle / Fotograf:in" Variant="Variant.Outlined"
+                              HelperText="Pflicht bei fremdem Bild – wird als Quellenangabe angezeigt." />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudAutocomplete T="string" @bind-Value="_heimatLokal" Label="Heimatort / Probelokal" Variant="Variant.Outlined"
@@ -371,7 +379,7 @@ else
     [Parameter] public Guid BandId { get; set; }
 
     private Band? _band;
-    private string _name = "", _land = "", _webseite = "", _bildUrl = "";
+    private string _name = "", _land = "", _webseite = "", _bildUrl = "", _fotoUrl = "", _fotoAttribution = "";
     private string _geschichte = "", _youtube = "", _instagram = "", _x = "", _email = "";
     private string _facebook = "", _wikipedia = "", _mobile = "", _imagefilm = "";
     private BandKategorie? _kategorie;
@@ -473,6 +481,7 @@ else
         }
 
         _name = _band.Name; _land = _band.Land ?? ""; _webseite = _band.Webseite ?? ""; _bildUrl = _band.BildUrl ?? "";
+        _fotoUrl = _band.FotoUrl ?? ""; _fotoAttribution = _band.FotoAttribution ?? "";
         _geschichte = _band.Geschichte ?? "";
         _heimatLokal = _band.HeimatLokal?.Name ?? "";
         _lokalNamen = (await db.Lokale.Select(l => l.Name).ToListAsync())
@@ -532,6 +541,8 @@ else
         band.Land = Leer(_land);
         band.Webseite = Leer(_webseite);
         band.BildUrl = Leer(_bildUrl);
+        band.FotoUrl = Leer(_fotoUrl);
+        band.FotoAttribution = Leer(_fotoAttribution);
         band.Geschichte = Leer(_geschichte);
         band.Kategorie = _kategorie;
         band.Staerkeklasse = _klasse;
