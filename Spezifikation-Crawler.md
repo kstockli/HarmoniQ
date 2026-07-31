@@ -437,22 +437,23 @@ gerendert → reines `HttpClient` + Parsing, kein Browser. Ablauf: „Daten samm
 Tabelle prüfen → einzeln/alle übernehmen. Idempotent via `KonzertErfassungService.ErfasseOderAktualisiereAsync`
 (kein Doppel-Konzert) und URN-/ID-Dedup (kein Doppel-Video). Läuft gegen die aktuelle DB (lokal Dev, Railway Prod).
 
-**WMC 2026** (`WmcImportService`, `/admin/wmc-import`): World Music Contest Kerkrade. HTML der Running-Order-Liste
-+ je Teilnehmer die Detailseite (HtmlAgilityPack). **Ein Konzert pro (Datum, Ort)**; je Band Programm
-(Stück + Komponist:in, zwei Komponisten-Formate) + Dirigent:in. Datumsköpfe **inhaltsbasiert** (EN + NL, Ordinal),
-Venue kanonisiert. Division → `Staerkeklasse` (Concert→Höchstklasse, 1st→Elite, 2nd→Klasse2, 3rd→Klasse3,
-Youth→Oberstufe), Kategorie → `BandKategorie` (inkl. neu `Perkussion`). Band-Stammdaten (Bio/Kategorie/Klasse/Land)
-**nur bei neu angelegten** Bands – bestehende, kuratierte Vereine bleiben unangetastet.
+**LKBV-Import** (`LkbvImportService`/`LkbvImporter`, `/admin/lkbv-import`): Luzerner Blasmusikvereine von
+`lkbv.ch/fotogalerien/` (WPBakery, serverseitig, HtmlAgilityPack). Galerie = je Verein `<a href="/vereine/slug/">`
+mit `<img>` (Foto) + folgender `<h2>` (Name); Detailseite = „Gründung JJJJ", „Klasse `<Stärke>`/`<Kat>`" (z. B.
+„3/BB" → `Staerkeklasse.Klasse3` + `BandKategorie.Brassband`; HA→Harmonie, FA→Fanfare), „Internet `<Homepage>`".
+**Bestehende Bands anreichern** (nur leere Felder: `FotoUrl`+`FotoAttribution`, `Webseite`, `Gruendungsjahr`,
+`Kategorie`, `Staerkeklasse`), **fehlende neu anlegen**. Abgleich order-/diakritik-unabhängig über
+`LkbvImporter.WortSchluessel` (sortierte, normalisierte Wörter) gegen Name **und** Aliase – matcht „Feldmusik
+Adligenswil" mit „Adligenswil Feldmusik". Foto nur verlinkt (Quelle: LKBV). **Zusätzlich** legt der Import für
+jeden Verein mit Homepage einen **BandDomain-`CrawlQuelle`-Eintrag** an (Aktiv, `BandId` gesetzt), sofern für die
+Domain noch keiner existiert (Dedup über Host ohne „www") → die Vereine werden so für den wiederkehrenden
+Band-Crawler erfasst.
 
-**EMF 2026 Parademusik** (`EmfImportService`/`EmfImporter`, `/admin/emf-import`): Marschmusik-Videos des Eidg.
-Musikfests Biel/Bienne von RTR/SRG „Play". Öffentliche JSON-API (kein Auth): `…/play/v3/api/rtr/production/
-show-page?showUrn=…` liefert **Sections** (Titel „TT.MM.JJJJ: Strasse", Titel liegt in `representation.title`);
-`…/media-section?sectionId=…` die **Videos** der Section (Titel-Schema „<i>Band</i> – <i>Stück</i>  I EMF26 …").
-**Ein Konzert pro Section (Tag + Marschstrecke)**; je auftretende Band ein Stück mit **eingebettetem Video** über
-den offiziellen SRG-Player (`VideoPlattform.SrgPlay`, Embed `rtr.ch/play/embed?urn=<urn>` — **kein Download**;
-rechtlich: offizieller Teilen/Embed-Player, Anfrage an SRG empfohlen). Bands per Find-or-create; die
-**Video→Band-Zuordnung löst per Name ODER Alias auf** (bestehende Vereine unter abweichendem Namen werden
-wiederverwendet — sonst fehlen deren Videos). Verifiziert: 7 Konzerte, 430 Stücke/430 Videos.
+**Erledigt & zurückgebaut (2026-08):** Die einmaligen Importer **WMC 2026** (`WmcImportService`) und
+**EMF 2026 Parademusik** (`EmfImportService`, RTR/SRG-Play-Videos) wurden nach Gebrauch entfernt. Die importierten
+Daten (Konzerte/Bands/Videos, `BandKategorie.Perkussion`, `VideoPlattform.SrgPlay` inkl. Embed-Anzeige) bleiben
+bestehen. *(Nicht zu verwechseln mit `EmfVereinImporter` in §4.1/§4.5 – das ist der wiederkehrende
+emf26.ch/vereine-Crawler und bleibt aktiv.)*
 
 ### 4.7 Urheberrecht beim Import (Fremdtexte & Bilder)
 

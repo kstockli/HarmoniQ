@@ -152,14 +152,13 @@ Ablauf jeweils: **„Daten sammeln (Vorschau)"** (liest die Quelle, schreibt nic
 oder alle übernehmen**. Läuft gegen die aktuelle DB (lokal = Dev, Railway = Prod), idempotent (Find-or-create,
 kein Doppel-Konzert/-Video). Quellen sind serverseitig gerendert → reines HTTP + Parsing (kein Browser).
 
-- **WMC 2026** (`/admin/wmc-import`): World Music Contest Kerkrade. Ein Konzert pro (Tag, Ort), je Band Programm
-  (Stück + Komponist:in) + Dirigent:in; Division → Stärkeklasse, Kategorie → `BandKategorie`; Band-Stammdaten
-  (Bio/Kategorie/Stärkeklasse/Land) **nur bei neu angelegten** Bands. Details: `Spezifikation-Crawler.md`.
-- **EMF 2026 Parademusik** (`/admin/emf-import`): Marschmusik-Videos des Eidg. Musikfests Biel/Bienne von RTR/SRG
-  „Play" (JSON-API `rtr.ch/play/v3/api/…`). **Ein Konzert pro (Tag, Marschstrecke)**; je auftretende Band ein
-  Stück (aus dem Video-Titel „Band – Stück") mit **eingebettetem Video** über den offiziellen SRG-Player
-  (`VideoPlattform.SrgPlay`, kein Download). Band-Auflösung per Name **oder Alias** (bestehende Vereine werden
-  wiederverwendet). Details: `Spezifikation-Crawler.md`.
+- **LKBV-Import** (`/admin/lkbv-import`): Luzerner Blasmusikvereine von lkbv.ch (Fotogalerie + je Verein eine
+  Detailseite). Reichert **bestehende** Bands an (nur leere Felder: Foto+Quelle, Homepage, Gründungsjahr,
+  Kategorie, Stärkeklasse) und legt **fehlende** neu an. Abgleich order-/diakritik-unabhängig über einen
+  Wortschlüssel (Name + Aliase). Fotos nur verlinkt (mit `FotoAttribution`). Details: `Spezifikation-Crawler.md` §4.6.
+- **Erledigt & Code entfernt (2026-08):** WMC 2026 (Kerkrade) und EMF 2026 Parademusik (RTR/SRG-Play-Videos,
+  `VideoPlattform.SrgPlay`) wurden einmalig eingespielt; die **Importer wurden nach Gebrauch zurückgebaut** – die
+  importierten Daten (Konzerte/Bands/Videos, Enum-Werte, Anzeige des SRG-Players) bleiben bestehen.
 
 #### Review-Queue (`/admin/vorschlaege`) — *umgesetzt*
 - Eingehende Video-Vorschläge (Status *Ausstehend*) mit Thumbnail + Vorschlagendem anzeigen

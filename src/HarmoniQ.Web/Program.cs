@@ -84,14 +84,8 @@ else
 // Komponist-Suche (Web + LLM) für fehlende Selbstwahlstück-Komponist:innen (SBBW §4.2).
 builder.Services.AddHttpClient<KomponistSuche>(c => c.Timeout = TimeSpan.FromSeconds(20));
 
-// Einmaliger WMC-2026-Import (Admin-Seite /admin/wmc-import, Dry-run → Übernehmen).
-builder.Services.AddHttpClient<HarmoniQ.Web.Services.Wmc.WmcImportService>(c => c.Timeout = TimeSpan.FromSeconds(40));
-
-// Einmalige Text-Bereinigung importierter Fremdtexte (Band-Bios/KKL-Beschreibungen → eigene Worte, DE).
-builder.Services.AddScoped<HarmoniQ.Web.Services.TextBereinigungService>();
-
-// Einmaliger EMF-2026-Parademusik-Video-Import von RTR/SRG Play (Admin-Seite /admin/emf-import).
-builder.Services.AddHttpClient<HarmoniQ.Web.Services.Emf.EmfImportService>(c => c.Timeout = TimeSpan.FromSeconds(40));
+// Einmaliger LKBV-Import (Admin-Seite /admin/lkbv-import): Luzerner Blasmusikvereine anreichern/anlegen.
+builder.Services.AddHttpClient<HarmoniQ.Web.Services.Lkbv.LkbvImportService>(c => c.Timeout = TimeSpan.FromSeconds(40));
 
 // Orchestrator: In-Memory-Queue (Singleton) + Hintergrund-Dienst, der Läufe sequenziell abarbeitet.
 builder.Services.AddSingleton<CrawlLaufQueue>();
