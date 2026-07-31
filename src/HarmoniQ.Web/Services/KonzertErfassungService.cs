@@ -29,7 +29,8 @@ public static class KonzertErfassungService
         IReadOnlyList<ProgrammEingabe> Programm,
         IReadOnlyList<MitwirkendeEingabe> Mitwirkende,
         Guid? PflichtBandId = null,     // wird IMMER als teilnehmende Band verknüpft (z. B. eigene Band beim Erfassen)
-        IReadOnlyList<BandRangEingabe>? BandWerte = null);   // Rang/Punkte je Band (optional)
+        IReadOnlyList<BandRangEingabe>? BandWerte = null,   // Rang/Punkte je Band (optional)
+        string? Webseite = null);       // offizielle Event-/Ticket-Seite
 
     /// <summary>Speichert ein neues Konzert und gibt dessen Id zurück.</summary>
     public static async Task<Guid> ErfasseAsync(ApplicationDbContext db, Eingabe e)
@@ -150,6 +151,7 @@ public static class KonzertErfassungService
         k.Name = Leer(e.Name);
         k.Ort = Leer(e.Ort);
         k.Beschreibung = Leer(e.Beschreibung);
+        k.Webseite = Leer(e.Webseite);
         k.BildUrl = Leer(e.BildUrl);
     }
 

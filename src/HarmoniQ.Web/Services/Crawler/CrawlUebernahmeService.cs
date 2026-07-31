@@ -97,7 +97,9 @@ public static class CrawlUebernahmeService
             Beschreibung: d.Beschreibung,
             BildUrl: d.BildUrl,
             Programm: programm,
-            Mitwirkende: []);
+            Mitwirkende: [],
+            // Offizielle Event-/Ticket-Seite: aus den Funddaten, sonst die Quell-URL des Funds (z. B. KKL-Detailseite).
+            Webseite: Leer(d.Webseite) ?? Leer(fund.QuellUrl));
 
         // Find-or-create: derselbe (Datum,Name) wird aktualisiert statt verdoppelt (idempotenter Re-Import).
         var konzertId = await KonzertErfassungService.ErfasseOderAktualisiereAsync(db, eingabe);

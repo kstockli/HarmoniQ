@@ -127,6 +127,10 @@ nichts wird automatisch publiziert.
   sind personenbezogen** (DSG/DSGVO) und vorerst ausgeklammert.
 - **Provenienz:** Jeder Fund speichert seine **Quell-URL** und den Abrufzeitpunkt → Nachvollziehbarkeit,
   Richtigstellung und Löschung bleiben möglich.
+- **Offizielle Event-Seite (`Konzert.Webseite`):** Konzert-Funde tragen einen Link auf die Original-Event-/
+  Ticketseite. Die LLM-Extraktion liest `webseite` (falls auf der Seite verlinkt); sonst nutzt die Übernahme
+  die **Quell-URL des Funds** als Fallback (z. B. KKL-Detailseite). Auf der Konzertseite als Button „Offizielle
+  Event-Seite" (nicht nur Tickets – Original hat oft Zusatz-Infos/Programm).
 - **Sichtbarkeit:** Übernommene Personen erhalten konsistent die Default-Sichtbarkeit des Hauptmodells
   (Dirigent:in → Öffentlich; alles Übrige eher `NurInitialen`).
 

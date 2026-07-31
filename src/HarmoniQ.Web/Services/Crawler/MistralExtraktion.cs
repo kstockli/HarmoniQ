@@ -42,6 +42,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "komponistName = die genannte Person). Antworte AUSSCHLIESSLICH mit gültigem JSON in genau " +
         "diesem Schema (leere Arrays wenn nichts gefunden):\n" +
         "{\"konzerte\":[{\"datum\":\"YYYY-MM-DD|null\",\"uhrzeit\":\"HH:MM|null\",\"name\":\"|null\",\"ort\":\"|null\"," +
+        "\"webseite\":\"|null\"," +
         "\"programm\":[{\"stueckTitel\":\"\",\"komponistName\":\"|null\",\"arrangeurName\":\"|null\"," +
         "\"bandName\":\"|null\",\"reihenfolge\":null}]}]," +
         "\"leitungen\":[{\"personName\":\"\",\"bandName\":\"|null\",\"funktion\":\"Dirigent\"," +
@@ -74,6 +75,8 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "Nullen auffüllen – fehlende Teile weglassen (also \"2024\" oder \"2024-06\", nicht \"2024-00-00\").\n" +
         "- uhrzeit: Startzeit des Konzerts als \"HH:MM\" (24h, z. B. \"19:30\", \"20:00\"), NUR wenn im Text " +
         "ausdrücklich genannt. Nicht raten – ist keine Zeit angegeben, null.\n" +
+        "- webseite: absolute URL zur offiziellen Konzert-/Event- bzw. Ticketseite, wenn im Text/als Link " +
+        "vorhanden (z. B. Detailseite des Konzerts, Ticketanbieter). Sonst null. Keine URL erfinden.\n" +
         "- Enthält die Admin-Anweisung eine EINSCHRÄNKUNG – z. B. nur ab einem Jahr, nur ein Ort/Lokal, " +
         "nur ein Land, nur eine Stärkeklasse (z. B. Höchstklasse/Elite/1. Klasse), nur eine Kategorie/" +
         "Besetzung (Harmonie/Brassband/Fanfare …), nur mit Stück-Angaben – dann gib AUSSCHLIESSLICH " +
@@ -700,7 +703,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                 .ToList();
             // Nur sinnvolle Konzert-Funde (Datum oder Programm vorhanden).
             if (k.Datum is null && programm.Count == 0) continue;
-            var daten = new KonzertFundDaten(k.Datum, k.Uhrzeit, Leer(k.Name), Leer(k.Ort), null, programm);
+            var daten = new KonzertFundDaten(k.Datum, k.Uhrzeit, Leer(k.Name), Leer(k.Ort), null, programm, Webseite: Leer(k.Webseite));
             yield return new ExtrahierterFund(CrawlFundTyp.Konzert, CrawlDaten.Serialisiere(daten));
         }
 
@@ -804,7 +807,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         string? Kategorie, string? Staerkeklasse, string? Geschichte,
         string? Instagram, string? Facebook, string? YouTube, string? X, string? Wikipedia,
         string? EMail, string? Mobile);
-    private record KonzertDto(DateOnly? Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, List<ProgrammDto>? Programm);
+    private record KonzertDto(DateOnly? Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, string? Webseite, List<ProgrammDto>? Programm);
     private record ProgrammDto(string? StueckTitel, string? KomponistName, string? BandName, int? Reihenfolge, string? ArrangeurName);
     private record LeitungDto(string? PersonName, string? BandName, string? Funktion, int? VonJahr, int? BisJahr);
     private record StueckDto(string? Titel, string? KomponistName, int? Jahr);

@@ -53,6 +53,8 @@
         </MudItem>
         <MudItem xs="12" sm="6">
             <MudTextField @bind-Value="_bildUrl" Label="Bild-URL (optional)" Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="_webseite" Label="Offizielle Event-Seite (optional)" Variant="Variant.Outlined"
+                          Placeholder="https://… (Original-Event: Infos, Programm, ggf. Tickets)" />
         </MudItem>
         <MudItem xs="12">
             <MudTextField @bind-Value="_beschreibung" Label="Beschreibung (optional)" Variant="Variant.Outlined" Lines="2" />
@@ -203,7 +205,7 @@
         get => _uhrzeit is TimeOnly t ? t.ToTimeSpan() : null;
         set => _uhrzeit = value is TimeSpan s ? TimeOnly.FromTimeSpan(s) : null;
     }
-    private string? _name, _ort, _beschreibung, _bildUrl;
+    private string? _name, _ort, _beschreibung, _bildUrl, _webseite;
     private bool _speichert;
 
     private readonly List<ProgrammRow> _programm = [];
@@ -318,6 +320,7 @@
         _ort = k.Lokal?.Name ?? k.Ort;
         _beschreibung = k.Beschreibung;
         _bildUrl = k.BildUrl;
+        _webseite = k.Webseite;
 
         var programm = await db.KonzertStuecke
             .Where(ks => ks.KonzertId == kid)
@@ -391,7 +394,8 @@
                 _programm.Where(p => !string.IsNullOrWhiteSpace(p.StueckTitel))
                     .Select(p => new KonzertErfassungService.ProgrammEingabe(p.StueckTitel!, p.KomponistName, p.BandName, p.Reihenfolge)).ToList(),
                 _mitwirkende.Where(m => !string.IsNullOrWhiteSpace(m.PersonName))
-                    .Select(m => new KonzertErfassungService.MitwirkendeEingabe(m.PersonName!, m.Rolle, m.BandName)).ToList());
+                    .Select(m => new KonzertErfassungService.MitwirkendeEingabe(m.PersonName!, m.Rolle, m.BandName)).ToList(),
+                Webseite: _webseite);
 
             // Beim Erfassen mit vorgegebener Band (Band-Admin/Direktlink): Band IMMER verknüpfen,
             // damit das Konzert der Band nicht „verloren geht", auch ohne passende Programmzeile.

@@ -561,6 +561,7 @@ Konzert                             (NEU – ein Auftritt/Event, an dem eine ode
 ├── LokalId (FK? → Lokal)          ← NEU: Veranstaltungsort als Referenz (find-or-create)
 ├── Ort (string?)                  ← Alt/Fallback-Freitext; neue Konzerte nutzen Lokal. Anzeige = Lokal.Name ?? Ort
 ├── Beschreibung (string?)         ← optional
+├── Webseite (string?)             ← NEU: Link auf die offizielle Event-Seite (Infos/Programm/Tickets)
 ├── BildUrl (string?)              ← NEU: Plakat/Foto des Konzerts (optional)
 ├── Bands [n:m] → KonzertBand      ← teilnehmende Bands (eine bis mehrere)
 ├── Programm [1:n] → KonzertStueck ← gespielte Stücke (welche Band welches Stück) — NEU

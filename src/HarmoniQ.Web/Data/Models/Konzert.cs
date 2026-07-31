@@ -27,6 +27,9 @@ public class Konzert : AuditierteEntitaet
 
     public string? Beschreibung { get; set; }
 
+    /// <summary>Optionaler Link auf die offizielle Event-/Ticket-Seite (Programm, Tickets beim Veranstalter).</summary>
+    public string? Webseite { get; set; }
+
     /// <summary>Optionales Plakat/Foto des Konzerts.</summary>
     public string? BildUrl { get; set; }
 

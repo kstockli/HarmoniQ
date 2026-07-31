@@ -49,7 +49,8 @@ public record KonzertFundDaten(
     string? Notiz = null,
     IReadOnlyList<RangZeileDaten>? Raenge = null,
     IReadOnlyList<KonzertVideoDaten>? Videos = null,
-    string? BildUrl = null);
+    string? BildUrl = null,
+    string? Webseite = null);
 
 /// <summary>Eine Rangliste-Zeile eines Wettbewerbs-Konzerts (SBBW §4.2): Band + Platzierung/Punkte
 /// + Dirigent:in. Mappt beim Übernehmen auf <c>KonzertBand.Rang/Punkte</c> + <c>KonzertPerson</c> (Dirigent).</summary>

@@ -56,6 +56,12 @@ else
                        Href="@($"/admin/konzerte/{_konzert.Id}/bearbeiten")"
                        StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         }
+        @if (!string.IsNullOrWhiteSpace(_konzert.Webseite))
+        {
+            <MudButton Variant="Variant.Filled" Style="background:#1ABC9C; color:#0e0018;"
+                       Href="@_konzert.Webseite" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.OpenInNew">Offizielle Event-Seite</MudButton>
+        }
         @* „Mitgewirkt" nur für Bühnen-Beteiligte (Dirigent/Musikant/Komponist); Publikum nutzt das Tagebuch unten. *@
         @if (_eigenePersonId is not null && _kannMitwirken)
         {
@@ -315,7 +321,7 @@ else
 
         var k = await db.Konzerte.Include(x => x.Lokal).FirstOrDefaultAsync(x => x.Id == Id);
         if (k == null) { Nav.NavigateTo("/konzerte"); return; }
-        _konzert = new KonzertKopf(k.Id, k.Datum, k.Uhrzeit, k.Name, k.Lokal?.Name ?? k.Ort, k.Beschreibung, k.BildUrl);
+        _konzert = new KonzertKopf(k.Id, k.Datum, k.Uhrzeit, k.Name, k.Lokal?.Name ?? k.Ort, k.Beschreibung, k.BildUrl, k.Webseite);
 
         // Koordinaten für die Karte (nur wenn beide gesetzt).
         _lokalLat = _lokalLng = null;
@@ -600,7 +606,7 @@ else
         }
     </span>;
 
-    private record KonzertKopf(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, string? Beschreibung, string? BildUrl)
+    private record KonzertKopf(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort, string? Beschreibung, string? BildUrl, string? Webseite)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");
     }
