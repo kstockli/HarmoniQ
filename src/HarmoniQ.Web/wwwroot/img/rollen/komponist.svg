@@ -1,0 +1,9 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Komponist:in">
+  <g fill="none" stroke="#D4AF37" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 52 H30"/>
+    <path d="M23 49 V24"/>
+    <path d="M55 11 L37 33"/>
+  </g>
+  <ellipse cx="17" cy="49" rx="6.5" ry="5" fill="#D4AF37"/>
+  <path d="M37 33 L34 41 L41 38 Z" fill="#D4AF37"/>
+</svg>

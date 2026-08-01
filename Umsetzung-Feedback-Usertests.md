@@ -281,7 +281,7 @@ Platz finden. **Sollten wir umsetzen.**
 
 ---
 
-## 13. 💬 Instrumenten-Namen inkonsistent (Es-Klarinette vs. Klarinette)
+## 13. ✅ Instrumenten-Namen inkonsistent (Es-Klarinette vs. Klarinette) + Symbole/Wikipedia/Liste
 **Feedback:** „Beim Benutzerprofil kann man «Es-Klarinette» wählen, etwas später sieht man «Klarinette».
 Das ist systematisch inkonsistent. Ich spiele B-Klarinette und empfehle, die beiden zu ersetzen mit
 «Klarinette in Es» und «Klarinette in B», oder mit «Klarinette» (ohne Details), oder «B-Klarinette»."
@@ -299,6 +299,14 @@ gescannter Webseite kommt A oder B heraus. **Idee:** Instrumente um **„Alterna
 - **Migration/Bereinigung:** bestehende Dubletten (Es-Klarinette ↔ Klarinette) einmalig zusammenführen
   (Merge, wie bei Personen/Bands).
 - Passt zu Kunos „langfristige Liste" – kein Sofort-Fix, aber der Alias-Ansatz ist der saubere Weg.
+
+**Umgesetzt (voller Ausbau):** `InstrumentAlias` (Name-/Alias-Abgleich in `InstrumentService`, genutzt von
+`MitwirkungService` + `CrawlUebernahmeService`) + **Merge** im Admin. Instrument bekam **Familie**
+(5 on-brand SVG-Familien-Icons, ausbaufähig auf Einzel-Icons via `SymbolUrl`), **Wikipedia-Link** und
+Admin-„Familie & Wikipedia befüllen" (non-destruktiv). Neue öffentliche **`/instrumente`**-Liste
+(Symbol + Suche) + Detail „wer spielt es, gruppiert nach Band" (sichtbarkeitsbewusst). Migration
+`InstrumentAliasFamilieSymbol` (Dev angewandt + Dev-Backfill). **Offen bei Kuno:** Prod migrieren +
+„Befüllen" klicken; offensichtliche Dubletten (Bass-Klarinette/Bassklarinette, Klavier/Piano) im Admin mergen.
 
 ---
 

@@ -4,6 +4,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Shared
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
@@ -72,13 +73,29 @@ else
                                 <div>
                                     @foreach (var r in p.Rollen)
                                     {
+                                        var ri = Darstellung.RolleIcon(r);
                                         <MudChip T="string" Size="Size.Small" Class="mr-1"
-                                                 Style="background:#2d1657; color:#A78FC0;">@RolleText(r)</MudChip>
+                                                 Style="background:#2d1657; color:#A78FC0;">
+                                            @if (ri != null)
+                                            {
+                                                <img src="@ri" alt="" style="width:14px;height:14px;margin-right:3px;vertical-align:text-bottom;" />
+                                            }
+                                            @RolleText(r)
+                                        </MudChip>
                                     }
                                 </div>
                                 @if (p.Instrumente.Count > 0)
                                 {
-                                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">@string.Join(", ", p.Instrumente)</MudText>
+                                    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;margin-top:2px;">
+                                        @foreach (var inst in p.Instrumente)
+                                        {
+                                            <span style="display:inline-flex;align-items:center;gap:3px;">
+                                                <img src="@Darstellung.InstrumentIcon(inst.Familie, inst.SymbolUrl)" alt=""
+                                                     title="@inst.Name" style="width:16px;height:16px;" />
+                                                <MudText Typo="Typo.caption" Style="color:#6f5a86;">@inst.Name</MudText>
+                                            </span>
+                                        }
+                                    </div>
                                 }
                             </div>
                         </MudStack>
@@ -154,8 +171,8 @@ else
             p.Sichtbarkeit,
             p.BildUrl,
             p.Rollen.Select(r => r.Rolle).ToList(),
-            p.Instrumente.Select(pi => pi.InstrumentId).ToHashSet(),
-            p.Instrumente.Select(pi => pi.Instrument.Name).OrderBy(n => n).ToList()
+            p.Instrumente.Select(pi => new InstrItem(pi.InstrumentId, pi.Instrument.Name,
+                pi.Instrument.Familie, pi.Instrument.SymbolUrl)).OrderBy(x => x.Name).ToList()
         )).ToList();
 
         Filtern();
@@ -173,7 +190,7 @@ else
             .Where(z =>
                 (_rolle == null || z.Rollen.Contains(_rolle.Value)) &&
                 (string.IsNullOrWhiteSpace(_instrumentText)
-                    || z.Instrumente.Any(n => n.Contains(_instrumentText, StringComparison.OrdinalIgnoreCase))) &&
+                    || z.Instrumente.Any(n => n.Name.Contains(_instrumentText, StringComparison.OrdinalIgnoreCase))) &&
                 (_suche == "" || Name(z).Contains(_suche, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(z => Name(z))
             .ToList();
@@ -189,5 +206,6 @@ else
     };
 
     private record Zeile(Guid Id, string RawName, Sichtbarkeit Sichtbarkeit, string? BildUrl,
-        List<PersonRolleTyp> Rollen, HashSet<Guid> InstrumentIds, List<string> Instrumente);
+        List<PersonRolleTyp> Rollen, List<InstrItem> Instrumente);
+    private record InstrItem(Guid Id, string Name, InstrumentFamilie? Familie, string? SymbolUrl);
 }

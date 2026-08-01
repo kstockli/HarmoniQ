@@ -4,6 +4,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Shared
 @using System.Text.Json
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
@@ -42,7 +43,14 @@ else
             <MudStack Row="true" Spacing="1" Class="mt-1" Wrap="Wrap.Wrap">
                 @foreach (var r in _person.Rollen)
                 {
-                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@RolleText(r.Rolle)</MudChip>
+                    var ri = Darstellung.RolleIcon(r.Rolle);
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">
+                        @if (ri != null)
+                        {
+                            <img src="@ri" alt="" style="width:16px;height:16px;margin-right:4px;vertical-align:text-bottom;" />
+                        }
+                        @RolleText(r.Rolle)
+                    </MudChip>
                 }
                 @if (_person.Geburtsjahr.HasValue)
                 {
@@ -101,9 +109,18 @@ else
 
     @if (_person.Instrumente.Count > 0)
     {
-        <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
-            <b>Instrumente:</b> @string.Join(", ", _person.Instrumente.Select(pi => pi.Instrument.Name))
-        </MudText>
+        <div class="mb-4" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;">
+            <MudText Typo="Typo.body2" Style="color:#A78FC0;"><b>Instrumente:</b></MudText>
+            @foreach (var pi in _person.Instrumente.OrderBy(x => x.Instrument.Name))
+            {
+                <span style="display:inline-flex;align-items:center;gap:5px;">
+                    <img src="@Darstellung.InstrumentIcon(pi.Instrument.Familie, pi.Instrument.SymbolUrl)"
+                         alt="" title="@Darstellung.FamilieLabel(pi.Instrument.Familie)" style="width:22px;height:22px;" />
+                    <MudLink Href="@($"/instrumente/{pi.InstrumentId}")" Style="color:#A78FC0;"
+                             Underline="Underline.Hover">@pi.Instrument.Name</MudLink>
+                </span>
+            }
+        </div>
     }
 
     @if (_bands.Count > 0)

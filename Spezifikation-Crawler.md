@@ -20,8 +20,10 @@
   Massen-Aktionen). Crawler-Link im Admin-Menü über dem Import-Assistenten.
 - Übernahme-Pfade (Find-or-create): Konzert → `KonzertErfassungService`; Leitung → `BandMitgliedschaft`;
   Stück → `Stueck` (Titel-/Alias-Abgleich) + `StueckBeitrag`; Komponist:in → `Person`;
-  **Verein → `Band`** (Name/Alias-Abgleich, leere Felder füllen, Aliase + Social-Links ergänzen).
-  Stücke/Bands lassen sich im Admin **zusammenführen** (Merge), wenn derselbe Eintrag unter
+  **Verein → `Band`** (Name/Alias-Abgleich, leere Felder füllen, Aliase + Social-Links ergänzen);
+  **Instrument → `Instrument`** über `InstrumentService.FindeOderErstelleAsync` (Name **und** Alias-Abgleich,
+  z. B. „Es-Klarinette"/„Klarinette in Es" → ein Eintrag; genutzt von `MitwirkungService` + `CrawlUebernahmeService`).
+  Stücke/Bands/**Instrumente** lassen sich im Admin **zusammenführen** (Merge), wenn derselbe Eintrag unter
   verschiedenen Namen entstanden ist – alle Referenzen werden umgehängt, der Quell-Name bleibt als Alias.
 
 **Entscheide:**

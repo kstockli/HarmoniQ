@@ -26,6 +26,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<StueckAlias> StueckAliase => Set<StueckAlias>();
     public DbSet<PersonAlias> PersonAliase => Set<PersonAlias>();
     public DbSet<Instrument> Instrumente => Set<Instrument>();
+    public DbSet<InstrumentAlias> InstrumentAliase => Set<InstrumentAlias>();
     public DbSet<Stimme> Stimmen => Set<Stimme>();
     public DbSet<PersonInstrument> PersonInstrumente => Set<PersonInstrument>();
     public DbSet<VideoMitwirkung> VideoMitwirkungen => Set<VideoMitwirkung>();
@@ -178,6 +179,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         // Instrument / Stimme (Nachschlage-Tabellen)
         builder.Entity<Instrument>().HasIndex(i => i.Name).IsUnique();
+
+        // Instrument-Aliase (alternative Schreibweisen) – analog StueckAlias/PersonAlias.
+        builder.Entity<InstrumentAlias>(e =>
+        {
+            e.HasOne(a => a.Instrument).WithMany(i => i.Aliase)
+                .HasForeignKey(a => a.InstrumentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(a => new { a.InstrumentId, a.Name }).IsUnique();
+            // Clientseitiger Guid-Key → ValueGeneratedNever (siehe BandAlias/StueckAlias).
+            e.Property(a => a.Id).ValueGeneratedNever();
+        });
+
         builder.Entity<Stimme>(e =>
         {
             e.HasOne(s => s.Instrument).WithMany(i => i.Stimmen)

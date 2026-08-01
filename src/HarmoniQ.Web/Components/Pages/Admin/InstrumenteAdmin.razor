@@ -3,6 +3,8 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Shared
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ISnackbar Snackbar
 
@@ -21,7 +23,10 @@
         <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
                    StartIcon="@Icons.Material.Filled.Add" OnClick="InstrumentAnlegen"
                    Disabled="@string.IsNullOrWhiteSpace(_neuesInstrument)">Anlegen</MudButton>
+        <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C; border-color:#1ABC9C;"
+                   StartIcon="@Icons.Material.Filled.AutoFixHigh" OnClick="Befuellen">Familie & Wikipedia befüllen</MudButton>
     </MudStack>
+    <MudText Typo="Typo.caption" Style="color:#6f5a86;">„Befüllen" setzt fehlende Familie/Wikipedia (überschreibt nichts). Dubletten via „Zusammenführen" je Instrument.</MudText>
 </MudPaper>
 
 @if (_instrumente.Count == 0)
@@ -36,8 +41,9 @@ else
             <MudExpansionPanel Style="background:#1a0030; border:1px solid #3a1060;">
                 <TitleContent>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.MusicNote" Style="color:#D4AF37;" />
+                        <img src="@Darstellung.InstrumentIcon(i.Familie, i.SymbolUrl)" alt="" style="width:26px;height:26px;" />
                         <MudText Style="color:#F0E6FF;">@i.Name</MudText>
+                        <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#1ABC9C;">@Darstellung.FamilieLabel(i.Familie)</MudChip>
                         <MudChip T="string" Size="Size.Small" Style="background:#2d1657; color:#A78FC0;">@i.Stimmen.Count Stimmen</MudChip>
                         <MudText Typo="Typo.caption" Style="color:#6f5a86;">angelegt @AuditFormat.Zeit(i.CreateTime)@AuditFormat.Wer(i.CreateUser)</MudText>
                         <MudSpacer />
@@ -46,6 +52,70 @@ else
                     </MudStack>
                 </TitleContent>
                 <ChildContent>
+                    @* Metadaten: Familie + Wikipedia *@
+                    <MudGrid Spacing="2" Class="mb-1">
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_nameEdit[i.Id]" Label="Name" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudSelect T="InstrumentFamilie?" Value="_familie.GetValueOrDefault(i.Id)"
+                                       ValueChanged="@(v => _familie[i.Id] = v)" Label="Familie"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                                @foreach (var f in Enum.GetValues<InstrumentFamilie>())
+                                {
+                                    <MudSelectItem T="InstrumentFamilie?" Value="@f">@Darstellung.FamilieLabel(f)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_wikiEdit[i.Id]" Label="Wikipedia-URL" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Placeholder="https://de.wikipedia.org/wiki/…" />
+                        </MudItem>
+                        <MudItem xs="12" Class="d-flex justify-end">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Style="background:#D4AF37;color:#0e0018;"
+                                       OnClick="@(() => MetadatenSpeichern(i.Id))">Speichern</MudButton>
+                        </MudItem>
+                    </MudGrid>
+
+                    @* Aliase (alternative Namen) *@
+                    <MudText Typo="Typo.subtitle2" Style="color:#9B59B6;" Class="mt-1">Alternative Namen</MudText>
+                    <div>
+                        @foreach (var a in i.Aliase.OrderBy(x => x.Name))
+                        {
+                            <MudChip T="string" Size="Size.Small" Class="ma-1" OnClose="@(() => AliasLoeschen(a.Id))"
+                                     Style="background:#2d1657;color:#C4B0D8;">@a.Name</MudChip>
+                        }
+                        @if (i.Aliase.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Style="color:#6f5a86;">– keine –</MudText>
+                        }
+                    </div>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1">
+                        <MudTextField @bind-Value="_neuerAlias[i.Id]" Label="Alias" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" Style="flex:1;" Placeholder="z. B. Bassklarinette" />
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Style="color:#9B59B6; border-color:#9B59B6;"
+                                   OnClick="@(() => AliasAnlegen(i.Id))">Alias +</MudButton>
+                    </MudStack>
+
+                    @* Zusammenführen (Merge) *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                        <MudIcon Icon="@Icons.Material.Filled.MergeType" Style="color:#1ABC9C;" Size="Size.Small" />
+                        <MudSelect T="Guid?" Value="_mergeZiel.GetValueOrDefault(i.Id)" ValueChanged="@(v => _mergeZiel[i.Id] = v)"
+                                   Label="Dieses Instrument zusammenführen in …" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" Clearable="true" Style="flex:1;">
+                            @foreach (var ziel in _instrumente.Where(x => x.Id != i.Id))
+                            {
+                                <MudSelectItem T="Guid?" Value="@ziel.Id">@ziel.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                                   OnClick="@(() => Zusammenfuehren(i.Id))"
+                                   Disabled="@(_mergeZiel.GetValueOrDefault(i.Id) == null)">Merge</MudButton>
+                    </MudStack>
+
+                    <MudDivider Class="my-2" Style="border-color:#3a1060;" />
+                    <MudText Typo="Typo.subtitle2" Style="color:#9B59B6;">Stimmen</MudText>
                     @foreach (var s in i.Stimmen.OrderBy(x => x.Bezeichnung))
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
@@ -71,15 +141,101 @@ else
     private List<Instrument> _instrumente = [];
     private string _neuesInstrument = "";
     private readonly Dictionary<Guid, string> _neueStimme = new();
+    private readonly Dictionary<Guid, InstrumentFamilie?> _familie = new();
+    private readonly Dictionary<Guid, string> _nameEdit = new();
+    private readonly Dictionary<Guid, string> _wikiEdit = new();
+    private readonly Dictionary<Guid, string> _neuerAlias = new();
+    private readonly Dictionary<Guid, Guid?> _mergeZiel = new();
 
     protected override async Task OnInitializedAsync() => await Laden();
 
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _instrumente = await db.Instrumente.Include(i => i.Stimmen).OrderBy(i => i.Name).ToListAsync();
+        _instrumente = await db.Instrumente.Include(i => i.Stimmen).Include(i => i.Aliase)
+            .OrderBy(i => i.Name).ToListAsync();
         foreach (var i in _instrumente)
+        {
             _neueStimme.TryAdd(i.Id, "");
+            _neuerAlias.TryAdd(i.Id, "");
+            _nameEdit[i.Id] = i.Name;
+            _familie[i.Id] = i.Familie;
+            _wikiEdit[i.Id] = i.WikipediaUrl ?? "";
+            _mergeZiel[i.Id] = null;
+        }
+    }
+
+    private async Task MetadatenSpeichern(Guid id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var i = await db.Instrumente.FindAsync(id);
+        if (i == null) return;
+
+        // Umbenennen (mit Kollisionsprüfung gegen den Unique-Index).
+        var name = (_nameEdit.GetValueOrDefault(id) ?? "").Trim();
+        if (name == "")
+        {
+            Snackbar.Add("Name darf nicht leer sein.", Severity.Warning);
+            return;
+        }
+        if (!string.Equals(name, i.Name, StringComparison.Ordinal)
+            && await db.Instrumente.AnyAsync(x => x.Id != id && x.Name.ToLower() == name.ToLower()))
+        {
+            Snackbar.Add("Ein Instrument mit diesem Namen existiert bereits – ggf. 'Zusammenführen' nutzen.", Severity.Warning);
+            return;
+        }
+        i.Name = name;
+
+        i.Familie = _familie.GetValueOrDefault(id);
+        var wiki = (_wikiEdit.GetValueOrDefault(id) ?? "").Trim();
+        i.WikipediaUrl = wiki == "" ? null : wiki;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Gespeichert.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task AliasAnlegen(Guid instrumentId)
+    {
+        var name = (_neuerAlias.GetValueOrDefault(instrumentId) ?? "").Trim();
+        if (name == "") return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        // Nicht doppelt (weder als Alias dieses Instruments noch als Instrument-Name).
+        if (await db.InstrumentAliase.AnyAsync(a => a.InstrumentId == instrumentId && a.Name.ToLower() == name.ToLower())
+            || await db.Instrumente.AnyAsync(x => x.Name.ToLower() == name.ToLower()))
+        {
+            Snackbar.Add("Alias existiert bereits (oder ist ein Instrument-Name).", Severity.Warning);
+            return;
+        }
+        db.InstrumentAliase.Add(new InstrumentAlias { InstrumentId = instrumentId, Name = name });
+        await db.SaveChangesAsync();
+        _neuerAlias[instrumentId] = "";
+        await Laden();
+    }
+
+    private async Task AliasLoeschen(Guid aliasId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var a = await db.InstrumentAliase.FindAsync(aliasId);
+        if (a != null) { db.InstrumentAliase.Remove(a); await db.SaveChangesAsync(); }
+        await Laden();
+    }
+
+    private async Task Zusammenfuehren(Guid quelleId)
+    {
+        var zielId = _mergeZiel.GetValueOrDefault(quelleId);
+        if (zielId is not Guid ziel) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await InstrumentService.MergeAsync(db, quelleId, ziel);
+        Snackbar.Add("Instrumente zusammengeführt.", Severity.Success);
+        await Laden();
+    }
+
+    private async Task Befuellen()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var n = await InstrumentSeed.BefuellenAsync(db);
+        Snackbar.Add(n > 0 ? $"{n} Instrument(e) befüllt." : "Nichts zu befüllen (alles gesetzt).", Severity.Success);
+        await Laden();
     }
 
     private async Task InstrumentAnlegen()

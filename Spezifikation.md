@@ -167,7 +167,10 @@ kein Doppel-Konzert/-Video). Quellen sind serverseitig gerendert → reines HTTP
 #### Personen-/Stamm-Daten & Bewilligungen — *umgesetzt (Phase 6)*
 - **CRUD Personen** (`/admin/personen`): Personen + ihre Rollen + mögliche Instrumente
 - **CRUD Instrumente & Stimmen** (`/admin/instrumente`): Instrument-Tabelle und je Instrument
-  die Stimmen pflegen (inkl. Autocomplete-mit-Anlegen bei der Erfassung)
+  die Stimmen pflegen (inkl. Autocomplete-mit-Anlegen bei der Erfassung); dazu **Familie**,
+  **Wikipedia-Link**, **Aliase** (alternative Namen) und **Zusammenführen** (Merge von Dubletten,
+  Referenzen umhängen, Quell-Name bleibt als Alias). „Familie & Wikipedia befüllen" setzt fehlende
+  Felder per kuratierter Zuordnung (non-destruktiv).
 - **Mitwirkungs-Bewilligung:** vorgeschlagene `VideoMitwirkung`-Einträge (Status *Ausstehend*)
   prüfen → bei Genehmigung werden Person↔Video / Instrument / Stimme verknüpft
 - **Vorschlag-Bewilligung:** die bestehende Video-Vorschlags-Review-Queue (s. o.) wird um die
@@ -302,8 +305,17 @@ PersonRolle                         (welche Rollen kann die Person grundsätzlic
 Instrument                          (Nachschlage-Tabelle)
 ├── Id (Guid)
 ├── Name (string, eindeutig)        ← z. B. "Klarinette", "Trompete", "Schlagzeug"
-├── Stimmen [1:n] → Stimme
-└── Familie (enum?: Holz/Blech/Schlagwerk/… – optional)
+├── Familie (enum?: Holzbläser/Blechbläser/Schlagwerk/Saiten/Tasten/Sonstige – bestimmt das Symbol)
+├── SymbolUrl (string?)             ← optionales instrumenteigenes Icon; überschreibt das Familien-Icon
+├── WikipediaUrl (string?)          ← optionaler Link zur Instrument-Beschreibung
+├── Aliase [1:n] → InstrumentAlias  ← alternative Schreibweisen (Find-or-create/Merge)
+└── Stimmen [1:n] → Stimme
+
+InstrumentAlias                     (alternative Namen – analog BandAlias/StueckAlias)
+├── Id (Guid, clientseitig → ValueGeneratedNever)
+├── InstrumentId (FK, Cascade)
+├── Name (string)                   ← z. B. "Bassklarinette" neben "Bass-Klarinette"
+└── Unique (InstrumentId, Name)
 
 Stimme                              (Nachschlage-Tabelle, gehört zu einem Instrument)
 ├── Id (Guid)
@@ -971,6 +983,9 @@ markiert *Erledigt*/*Abgelehnt* (optional mit Notiz). Keine strukturierte Bearbe
                                  umfasst auch an Konzerten gespielte Stücke) / Stück-Detail + Videos + Voting +
                                  Vorschläge + **„An Konzerten gespielt"** (Konzert-Tag + Band, je verlinkt)
 /videos, /videos/{id}         → Videoliste / Einzel-Video (Besetzung, Bewertungen)
+/instrumente, /instrumente/{id} → Instrumenten-Liste (Familien-Symbol + Suche, nach Verbreitung sortiert) /
+                                 -Detail: Symbol, Familie, Aliase, Wikipedia-Link, „wer spielt es" gruppiert
+                                 nach Band (sichtbarkeitsbewusst; öffentliche Personen verlinkt)
 /bands                        → Band-Übersicht: **filterbare Tabelle** (Name, Kategorie, Stärkeklasse) – skaliert für >100 Bands
 /bands/{id}                   → Band-Detail (Kategorie/Stärkeklasse/Gründung/Geschichte/Links/Aliase; dann
                                  Aufnahmen, Konzerte, gespielte Stücke [Videos ∪ Konzertprogramme],

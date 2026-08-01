@@ -1,0 +1,8 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schlagwerk">
+  <g fill="none" stroke="#D4AF37" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="32" cy="34" rx="20" ry="7"/>
+    <path d="M12 34 V48 A20 7 0 0 0 52 48 V34"/>
+    <path d="M16 8 L35 28"/>
+    <path d="M48 8 L29 28"/>
+  </g>
+</svg>

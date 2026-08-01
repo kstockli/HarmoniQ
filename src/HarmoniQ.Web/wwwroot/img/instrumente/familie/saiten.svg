@@ -1,0 +1,10 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Saiten">
+  <g fill="none" stroke="#D4AF37" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 22 C23 22 21 30 26 35 C21 40 24 52 32 52 C40 52 43 40 38 35 C43 30 41 22 32 22 Z"/>
+    <path d="M32 22 V7"/>
+    <circle cx="32" cy="6" r="2.8"/>
+  </g>
+  <g fill="none" stroke="#D4AF37" stroke-width="1.6" stroke-linecap="round">
+    <path d="M30 24 V49"/><path d="M34 24 V49"/>
+  </g>
+</svg>

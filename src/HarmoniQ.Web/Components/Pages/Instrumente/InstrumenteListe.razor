@@ -1,0 +1,85 @@
+@page "/instrumente"
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Components.Shared
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Instrumente – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Instrumente</MudText>
+
+@if (_alle == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Instrument suchen"
+                      Variant="Variant.Outlined" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" />
+        <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:#A78FC0;">@_gefiltert.Count von @_alle.Count Instrumenten</MudText>
+    </MudPaper>
+
+    @if (_gefiltert.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Keine Instrumente gefunden.</MudAlert>
+    }
+    <MudGrid>
+        @foreach (var i in _gefiltert)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="4" Style="background:#1a0030; border:1px solid #3a1060;">
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <img src="@Darstellung.InstrumentIcon(i.Familie, i.SymbolUrl)" alt="" style="width:44px;height:44px;flex:none;" />
+                            <div style="flex:1;">
+                                <MudLink Href="@($"/instrumente/{i.Id}")" Style="color:#F0E6FF;font-weight:600;"
+                                         Underline="Underline.Hover">@i.Name</MudLink>
+                                <MudText Typo="Typo.caption" Class="d-block" Style="color:#A78FC0;">
+                                    @Darstellung.FamilieLabel(i.Familie) · @i.Anzahl Musikant@(i.Anzahl == 1 ? ":in" : ":innen")
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<Zeile>? _alle;
+    private List<Zeile> _gefiltert = [];
+    private string _suche = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var zahl = await db.PersonInstrumente.GroupBy(pi => pi.InstrumentId)
+            .Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
+
+        _alle = (await db.Instrumente
+                .Select(i => new { i.Id, i.Name, i.Familie, i.SymbolUrl,
+                    Aliase = i.Aliase.Select(a => a.Name).ToList() })
+                .ToListAsync())
+            .Select(i => new Zeile(i.Id, i.Name, i.Familie, i.SymbolUrl,
+                zahl.GetValueOrDefault(i.Id), i.Aliase))
+            .OrderByDescending(z => z.Anzahl).ThenBy(z => z.Name)
+            .ToList();
+        Filtern();
+    }
+
+    private void Filtern()
+    {
+        var s = _suche.Trim();
+        _gefiltert = (s == ""
+            ? _alle!
+            : _alle!.Where(z => z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                             || z.Aliase.Any(a => a.Contains(s, StringComparison.OrdinalIgnoreCase)))).ToList();
+    }
+
+    private record Zeile(Guid Id, string Name, InstrumentFamilie? Familie, string? SymbolUrl,
+        int Anzahl, List<string> Aliase);
+}

@@ -41,14 +41,8 @@ public static class MitwirkungService
         Guid? stimmeId = null;
         if (e.Rolle == MitwirkungRolle.Musikant && !string.IsNullOrWhiteSpace(e.InstrumentName))
         {
-            var iname = e.InstrumentName.Trim();
-            var instrument = await db.Instrumente.FirstOrDefaultAsync(i => i.Name == iname)
-                             ?? db.Instrumente.Local.FirstOrDefault(i => i.Name == iname);
-            if (instrument == null)
-            {
-                instrument = new Instrument { Name = iname };
-                db.Instrumente.Add(instrument);
-            }
+            // Alias-fähiges Find-or-create (Normalisierung von Schreibvarianten).
+            var instrument = await InstrumentService.FindeOderErstelleAsync(db, e.InstrumentName);
             if (!await db.PersonInstrumente.AnyAsync(pi => pi.PersonId == person.Id && pi.InstrumentId == instrument.Id))
                 db.PersonInstrumente.Add(new PersonInstrument { Person = person, Instrument = instrument });
             instrumentId = instrument.Id;

@@ -1,0 +1,171 @@
+@page "/instrumente/{Id:guid}"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Components.Shared
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>@(_name ?? "Instrument") – HarmoniQ</PageTitle>
+
+@if (_nichtGefunden)
+{
+    <MudAlert Severity="Severity.Warning">Instrument nicht gefunden.</MudAlert>
+}
+else if (_name == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="/instrumente"
+               StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Alle Instrumente</MudButton>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <img src="@Darstellung.InstrumentIcon(_familie, _symbolUrl)" alt="" style="width:56px;height:56px;flex:none;" />
+            <div style="flex:1;">
+                <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_name</MudText>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">@Darstellung.FamilieLabel(_familie)</MudText>
+                @if (_aliase.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#6f5a86;">auch: @string.Join(", ", _aliase)</MudText>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_wikipediaUrl))
+            {
+                <MudButton Variant="Variant.Outlined" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                           StartIcon="@Icons.Material.Filled.OpenInNew" Href="@_wikipediaUrl" Target="_blank"
+                           rel="noopener">Wikipedia</MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Style="color:#F0E6FF;" Class="mb-2">Wer spielt @_name?</MudText>
+
+    @if (_gruppen.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Für dieses Instrument sind noch keine Musikant:innen erfasst.</MudAlert>
+    }
+    else
+    {
+        foreach (var g in _gruppen)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#9B59B6;" Size="Size.Small" />
+                    @if (g.BandId is Guid bid)
+                    {
+                        <MudLink Href="@($"/bands/{bid}")" Style="color:#9B59B6;font-weight:600;"
+                                 Underline="Underline.Hover">@g.BandName</MudLink>
+                    }
+                    else
+                    {
+                        <MudText Style="color:#A78FC0;font-weight:600;">@g.BandName</MudText>
+                    }
+                    <MudChip T="string" Size="Size.Small" Style="background:#2d1657;color:#A78FC0;">@g.Personen.Count</MudChip>
+                </MudStack>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                    @foreach (var p in g.Personen)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="min-width:0;">
+                            <MudAvatar Size="Size.Small" Style="background:#3a1060; color:#D4AF37;">
+                                @if (p.Bild != null)
+                                {
+                                    <img src="@p.Bild" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="@p.Name" />
+                                }
+                                else { @(p.Name.Length > 0 ? p.Name[0].ToString() : "?") }
+                            </MudAvatar>
+                            @if (p.Verlinkbar)
+                            {
+                                <MudLink Href="@($"/personen/{p.Id}")" Typo="Typo.body2" Style="color:#F0E6FF;"
+                                         Underline="Underline.Hover">@p.Name</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="color:#C4B0D8;">@p.Name</MudText>
+                            }
+                        </MudStack>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private string? _name;
+    private InstrumentFamilie? _familie;
+    private string? _symbolUrl, _wikipediaUrl;
+    private List<string> _aliase = [];
+    private bool _nichtGefunden;
+    private List<Gruppe> _gruppen = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var instr = await db.Instrumente
+            .Where(i => i.Id == Id)
+            .Select(i => new { i.Name, i.Familie, i.SymbolUrl, i.WikipediaUrl,
+                Aliase = i.Aliase.Select(a => a.Name).OrderBy(a => a).ToList() })
+            .FirstOrDefaultAsync();
+        if (instr == null) { _nichtGefunden = true; return; }
+        _name = instr.Name; _familie = instr.Familie; _symbolUrl = instr.SymbolUrl;
+        _wikipediaUrl = instr.WikipediaUrl; _aliase = instr.Aliase;
+
+        // Sichtbarkeit des Betrachters.
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var vollSichtbar = await PersonenSicht.LadeVollSichtbareAsync(db, userId);
+
+        // Personen, die dieses Instrument spielen (allgemein).
+        var spielerIds = (await db.PersonInstrumente.Where(pi => pi.InstrumentId == Id)
+            .Select(pi => pi.PersonId).ToListAsync()).ToHashSet();
+        if (spielerIds.Count == 0) return;
+
+        var personen = (await db.Personen.Where(p => spielerIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, p.Sichtbarkeit, p.BildUrl }).ToListAsync())
+            .Select(p =>
+            {
+                var eff = PersonenSicht.Effektiv(p.Id, p.Sichtbarkeit, vollSichtbar);
+                return new PersonSicht(p.Id, PersonenSicht.AnzeigeName(p.Name, eff),
+                    PersonenSicht.BildUrl(p.BildUrl, eff), eff);
+            })
+            .Where(p => p.Effektiv != Sichtbarkeit.NichtBekannt)   // versteckte Personen raus
+            .ToDictionary(p => p.Id);
+
+        // Band-Zuordnung: Mitgliedschaften der Spieler, sofern das Instrument passt oder unbekannt ist.
+        var mitg = await db.BandMitgliedschaften
+            .Where(m => spielerIds.Contains(m.PersonId) && (m.InstrumentId == Id || m.InstrumentId == null))
+            .Select(m => new { m.PersonId, m.BandId, BandName = m.Band.Name })
+            .ToListAsync();
+
+        var gruppen = mitg
+            .Where(m => personen.ContainsKey(m.PersonId))
+            .GroupBy(m => new { m.BandId, m.BandName })
+            .Select(g => new Gruppe(g.Key.BandId, g.Key.BandName,
+                g.Select(x => x.PersonId).Distinct().Select(pid => personen[pid])
+                 .OrderBy(p => p.Name).ToList()))
+            .OrderBy(g => g.BandName)
+            .ToList();
+
+        // Spieler ganz ohne (passende) Band → eigene Gruppe „Ohne Verein".
+        var mitBand = mitg.Select(m => m.PersonId).ToHashSet();
+        var ohne = personen.Values.Where(p => !mitBand.Contains(p.Id)).OrderBy(p => p.Name).ToList();
+        if (ohne.Count > 0) gruppen.Add(new Gruppe(null, "Ohne Verein", ohne));
+
+        _gruppen = gruppen;
+    }
+
+    private record PersonSicht(Guid Id, string Name, string? Bild, Sichtbarkeit Effektiv)
+    {
+        public bool Verlinkbar => Effektiv == Sichtbarkeit.Oeffentlich;
+    }
+
+    private record Gruppe(Guid? BandId, string BandName, List<PersonSicht> Personen);
+}

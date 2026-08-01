@@ -196,10 +196,8 @@ public static class CrawlUebernahmeService
         Guid? instrumentId = null;
         if (!string.IsNullOrWhiteSpace(d.InstrumentName))
         {
-            var iname = d.InstrumentName.Trim();
-            var instrument = await db.Instrumente.FirstOrDefaultAsync(i => i.Name == iname)
-                             ?? db.Instrumente.Local.FirstOrDefault(i => i.Name == iname);
-            if (instrument == null) { instrument = new Instrument { Name = iname }; db.Instrumente.Add(instrument); }
+            // Alias-fähiges Find-or-create (Normalisierung von Schreibvarianten).
+            var instrument = await InstrumentService.FindeOderErstelleAsync(db, d.InstrumentName);
             instrumentId = instrument.Id;
         }
 
