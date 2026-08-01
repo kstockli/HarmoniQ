@@ -443,11 +443,18 @@
                 <div style="position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:2;">
                     <button type="button" class="hq-speed" aria-label="Geschwindigkeit"
                             style="background:rgba(14,0,24,.6);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:4px 10px;font-size:.8rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);">1×</button>
-                    <button type="button" class="hq-sound"
-                            style="background:rgba(14,0,24,.6);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:4px 10px;font-size:.8rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);">🔊 Ton</button>
+                    @* Icon-only wie TikTok/YouTube: Symbol = AKTUELLER Zustand (🔇 = jetzt stumm).
+                       Beschriftung nur als Hover-Tooltip (title) + Screenreader (aria-label). *@
+                    <button type="button" class="hq-sound" aria-label="Ton einschalten" title="Ton einschalten"
+                            style="background:rgba(14,0,24,.6);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:4px 9px;font-size:.9rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);">🔇</button>
                     <button type="button" class="hq-fs" aria-label="Vollbild"
                             style="background:rgba(14,0,24,.6);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:4px 9px;font-size:.9rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);">⛶</button>
                 </div>
+                @* Selbst-ausblendender Hinweis bei stummem Autoplay (wie Insta/Twitter): nach ~4,5 s weg,
+                   verschwindet sofort bei Ton-an; selbst antippbar = entstummt direkt. Nur bei data-autoplay
+                   (in harmoniqUi.initVideos gesteuert). *@
+                <button type="button" class="hq-hint" aria-label="Für Ton tippen"
+                        style="position:absolute;top:12%;left:50%;transform:translateX(-50%);z-index:3;display:none;opacity:0;transition:opacity .4s ease;background:rgba(14,0,24,.72);color:#F0E6FF;border:1px solid rgba(212,175,55,.55);border-radius:99px;padding:8px 16px;font-size:.9rem;line-height:1;cursor:pointer;backdrop-filter:blur(3px);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.45);">🔇 Für Ton tippen</button>
             </div>
         </div>
     };

@@ -66,7 +66,15 @@ window.harmoniqUi = {
                     v.playbackRate = stufen[si];
                     speed.textContent = stufen[si] + '×';
                 });
-                function refresh() { if (sound) sound.textContent = v.muted ? '🔊 Ton' : '🔇'; }
+                // Icon-only: Symbol = AKTUELLER Zustand (🔇 jetzt stumm / 🔊 Ton läuft).
+                // Beschriftung nur als Hover-Tooltip (title) + aria-label.
+                function refresh() {
+                    if (!sound) return;
+                    sound.textContent = v.muted ? '🔇' : '🔊';
+                    var lbl = v.muted ? 'Ton einschalten' : 'Ton ausschalten';
+                    sound.setAttribute('aria-label', lbl);
+                    sound.setAttribute('title', lbl);
+                }
                 v.muted = true; v.defaultMuted = true;
                 if (v.dataset.autoplay === '1') { var p = v.play(); if (p && p.catch) p.catch(function () { }); }
                 if (sound) sound.addEventListener('click', function (e) {
@@ -83,6 +91,27 @@ window.harmoniqUi = {
                     if (v.paused) { var q = v.play(); if (q && q.catch) q.catch(function () { }); } else v.pause();
                 });
                 v.addEventListener('volumechange', refresh);
+
+                // Selbst-ausblendender „Für Ton tippen"-Hinweis bei stummem Autoplay.
+                var hint = wrap.querySelector('.hq-hint');
+                if (hint && v.dataset.autoplay === '1') {
+                    var hideHint = function () {
+                        hint.style.opacity = '0';
+                        setTimeout(function () { hint.style.display = 'none'; }, 400);
+                    };
+                    hint.style.display = '';
+                    void hint.offsetWidth;   // Reflow → Einblend-Transition greift
+                    hint.style.opacity = '1';
+                    hint.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        v.muted = false;
+                        if (v.paused) { var q = v.play(); if (q && q.catch) q.catch(function () { }); }
+                        refresh(); hideHint();
+                    });
+                    v.addEventListener('volumechange', function () { if (!v.muted) hideHint(); });
+                    setTimeout(hideHint, 4500);
+                }
+
                 refresh();
             });
         } catch (e) { }
