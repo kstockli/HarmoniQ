@@ -451,6 +451,20 @@ jeden Verein mit Homepage einen **BandDomain-`CrawlQuelle`-Eintrag** an (Aktiv, 
 Domain noch keiner existiert (Dedup über Host ohne „www") → die Vereine werden so für den wiederkehrenden
 Band-Crawler erfasst.
 
+**KMVW-Import** (`KmvwImportService`/`KmvwImporter`, `/admin/kmvw-import`): Walliser Blasmusikvereine vom
+Kantonalen Musikverband Wallis (`kmvw.ch/de/mitglieder/vereine`, eine serverseitige Seite, HtmlAgilityPack). Je
+Verein ein `<div class="entry">` mit Logo, `<h2>` Name, `<h3>` Ort, `<ul class="contact">` (E-Mail/Webseite/
+Facebook) und Tabs „Präsident"/„Dirigent" (Name in `<strong>` + `mailto:`). Weil die kurzen Vereinsnamen (ABEILLE,
+ALPENGRUSS …) sich über verschiedene Orte überschneiden, ist der Band-Name „`<Name> <Ort>`". **Bestehende Bands
+anreichern** (nur leere Felder: `BildUrl` = Logo, `Webseite`, `EMail`, `Facebook`), **fehlende neu anlegen**
+(Abgleich über `KmvwImporter.WortSchluessel` gegen Name + Aliase). Zu **Dirigent:in** (Funktion „Dirigent",
+`PersonRolleTyp.Dirigent`) und **Präsident:in** (Funktion „Präsident", `PersonRolleTyp.Musikant`) je eine `Person`
+(öffentlich) + `BandMitgliedschaft`, E-Mail sofern vorhanden (nie öffentlich angezeigt); keine Dublette gleicher
+Funktion je Band. **Zusätzlich** je Homepage ein **BandDomain-`CrawlQuelle`-Eintrag** (Dedup über Host ohne „www").
+Damit der Crawler für diese Vereine nur aussagekräftige Konzerte liefert, gilt für **BandDomain-Funde**: nur
+Konzerte mit **mindestens einem Programm-Stück** werden übernommen (ein blosser Termin ohne Stücke wird verworfen;
+für Veranstalter-/Lokal-Seiten genügt weiterhin Datum **oder** Programm) – siehe `MistralExtraktion.AlsFunde`.
+
 **Erledigt & zurückgebaut (2026-08):** Die einmaligen Importer **WMC 2026** (`WmcImportService`) und
 **EMF 2026 Parademusik** (`EmfImportService`, RTR/SRG-Play-Videos) wurden nach Gebrauch entfernt. Die importierten
 Daten (Konzerte/Bands/Videos, `BandKategorie.Perkussion`, `VideoPlattform.SrgPlay` inkl. Embed-Anzeige) bleiben

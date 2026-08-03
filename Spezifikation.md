@@ -156,6 +156,11 @@ kein Doppel-Konzert/-Video). Quellen sind serverseitig gerendert → reines HTTP
   Detailseite). Reichert **bestehende** Bands an (nur leere Felder: Foto+Quelle, Homepage, Gründungsjahr,
   Kategorie, Stärkeklasse) und legt **fehlende** neu an. Abgleich order-/diakritik-unabhängig über einen
   Wortschlüssel (Name + Aliase). Fotos nur verlinkt (mit `FotoAttribution`). Details: `Spezifikation-Crawler.md` §4.6.
+- **KMVW-Import** (`/admin/kmvw-import`): Walliser Blasmusikvereine von kmvw.ch (eine Seite, alle Vereine). Reichert
+  **bestehende** Bands an (nur leere Felder: Logo, Homepage, E-Mail, Facebook) und legt **fehlende** neu an. Legt zu
+  Dirigent:in und Präsident:in je eine **Person + Mitgliedschaft** (mit Funktion + E-Mail, E-Mail nie öffentlich) an
+  und je Homepage einen **Crawler-Eintrag**. Für diese BandDomain-Crawler gilt: nur Konzerte mit **mindestens einem
+  Stück** werden übernommen. Details: `Spezifikation-Crawler.md` §4.6.
 - **Erledigt & Code entfernt (2026-08):** WMC 2026 (Kerkrade) und EMF 2026 Parademusik (RTR/SRG-Play-Videos,
   `VideoPlattform.SrgPlay`) wurden einmalig eingespielt; die **Importer wurden nach Gebrauch zurückgebaut** – die
   importierten Daten (Konzerte/Bands/Videos, Enum-Werte, Anzeige des SRG-Players) bleiben bestehen.
