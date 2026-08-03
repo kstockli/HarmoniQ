@@ -701,8 +701,14 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                     p.StueckTitel!.Trim(), Leer(p.KomponistName), Leer(p.BandName) ?? standardBand,
                     p.Reihenfolge, Leer(p.ArrangeurName)))
                 .ToList();
-            // Nur sinnvolle Konzert-Funde (Datum oder Programm vorhanden).
-            if (k.Datum is null && programm.Count == 0) continue;
+            // Vereinsseiten (BandDomain): nur Konzerte mit mindestens einem Programm-Stück – ein blosser
+            // Termin ohne Stücke ist für eine Vereins-Konzertliste zu wenig aussagekräftig. Sonst (Veranstalter-/
+            // Lokal-Seiten) genügt Datum oder Programm.
+            if (anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain)
+            {
+                if (programm.Count == 0) continue;
+            }
+            else if (k.Datum is null && programm.Count == 0) continue;
             var daten = new KonzertFundDaten(k.Datum, k.Uhrzeit, Leer(k.Name), Leer(k.Ort), null, programm, Webseite: Leer(k.Webseite));
             yield return new ExtrahierterFund(CrawlFundTyp.Konzert, CrawlDaten.Serialisiere(daten));
         }

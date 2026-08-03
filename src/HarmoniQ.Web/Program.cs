@@ -87,6 +87,9 @@ builder.Services.AddHttpClient<KomponistSuche>(c => c.Timeout = TimeSpan.FromSec
 // Einmaliger LKBV-Import (Admin-Seite /admin/lkbv-import): Luzerner Blasmusikvereine anreichern/anlegen.
 builder.Services.AddHttpClient<HarmoniQ.Web.Services.Lkbv.LkbvImportService>(c => c.Timeout = TimeSpan.FromSeconds(40));
 
+// Einmaliger KMVW-Import (Admin-Seite /admin/kmvw-import): Walliser Blasmusikvereine anreichern/anlegen.
+builder.Services.AddHttpClient<HarmoniQ.Web.Services.Kmvw.KmvwImportService>(c => c.Timeout = TimeSpan.FromSeconds(40));
+
 // Orchestrator: In-Memory-Queue (Singleton) + Hintergrund-Dienst, der Läufe sequenziell abarbeitet.
 builder.Services.AddSingleton<CrawlLaufQueue>();
 builder.Services.AddHttpClient<EventfrogImporter>();

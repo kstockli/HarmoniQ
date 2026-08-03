@@ -1,0 +1,110 @@
+@page "/admin/kmvw-import"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using HarmoniQ.Web.Services.Kmvw
+@inject KmvwImportService Kmvw
+@inject ISnackbar Snackbar
+
+<PageTitle>KMVW-Import – Admin</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-2" Style="color:#D4AF37;">KMVW-Import (Walliser Blasmusikvereine)</MudText>
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+    Reichert bestehende Vereine von kmvw.ch an (nur <b>leere</b> Felder: Logo, Homepage, E-Mail, Facebook) und legt
+    fehlende neu an. Zu Dirigent:in und Präsident:in wird je eine Person + Mitgliedschaft (mit E-Mail sofern vorhanden)
+    angelegt. Für Vereine mit Homepage entsteht ein Crawler-Eintrag. Zuerst Vorschau (schreibt nichts), dann übernehmen.
+</MudAlert>
+
+<div class="d-flex gap-3 mb-4 align-center flex-wrap">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SammelnAsync" Disabled="_busy">
+        Daten sammeln (Vorschau)
+    </MudButton>
+    @if (_vorschau is not null && (_vorschau.Neu + _vorschau.Anzureichern + _vorschau.PersonenNeu) > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ImportierenAsync" Disabled="_busy">
+            @($"Übernehmen ({_vorschau.Neu} neu, {_vorschau.Anzureichern} anreichern)")
+        </MudButton>
+    }
+    @if (_busy)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+        <MudText Typo="Typo.body2">@_status</MudText>
+    }
+</div>
+
+@if (_vorschau is not null)
+{
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <MudChip T="string" Color="Color.Default">@_vorschau.Total Vereine</MudChip>
+        <MudChip T="string" Color="Color.Primary">@_vorschau.Neu neu</MudChip>
+        <MudChip T="string" Color="Color.Info">@_vorschau.Anzureichern anzureichern</MudChip>
+        <MudChip T="string" Color="Color.Tertiary">@_vorschau.PersonenNeu Personen</MudChip>
+        <MudChip T="string" Color="Color.Secondary">@_vorschau.CrawlerEintraege Crawler-Einträge</MudChip>
+    </div>
+
+    <MudTable Items="_vorschau.Zeilen" Dense="true" Hover="true" Bordered="true" FixedHeader="true" Height="60vh">
+        <HeaderContent>
+            <MudTh>Verein (KMVW)</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Treffer in DB</MudTh>
+            <MudTh>Wird gesetzt</MudTh>
+            <MudTh>Personen</MudTh>
+            <MudTh>Crawler</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Verein">@context.Name</MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.Neu) { <MudChip T="string" Size="Size.Small" Color="Color.Primary">neu</MudChip> }
+                else if (context.Felder.Count > 0) { <MudChip T="string" Size="Size.Small" Color="Color.Info">anreichern</MudChip> }
+                else { <MudText Typo="Typo.caption" Style="color:#6f5a86;">vollständig</MudText> }
+            </MudTd>
+            <MudTd DataLabel="Treffer">@context.MatchName</MudTd>
+            <MudTd DataLabel="Wird gesetzt">@string.Join(", ", context.Felder)</MudTd>
+            <MudTd DataLabel="Personen">@string.Join(", ", context.Personen)</MudTd>
+            <MudTd DataLabel="Crawler">@(context.CrawlerNeu ? "＋ Eintrag" : "")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@if (_ergebnis is not null)
+{
+    <MudAlert Severity="@(_ergebnis.Fehler.Count == 0 ? Severity.Success : Severity.Warning)" Class="mt-4">
+        Import: @_ergebnis.Neu neue Vereine, @_ergebnis.Angereichert angereichert, @_ergebnis.Uebersprungen unverändert,
+        @_ergebnis.PersonenNeu Personen, @_ergebnis.MitgliedschaftenNeu Mitgliedschaften, @_ergebnis.CrawlerNeu Crawler-Einträge.
+        @if (_ergebnis.Fehler.Count > 0) { <ul class="mt-2">@foreach (var f in _ergebnis.Fehler.Take(20)) { <li>@f</li> }</ul> }
+    </MudAlert>
+}
+
+@code {
+    private bool _busy;
+    private string _status = "";
+    private IReadOnlyList<KmvwImportService.Verein> _vereine = [];
+    private KmvwImportService.Vorschau? _vorschau;
+    private KmvwImportService.Ergebnis? _ergebnis;
+
+    private async Task SammelnAsync()
+    {
+        _busy = true; _status = "Lade kmvw.ch …"; _vorschau = null; _ergebnis = null;
+        StateHasChanged();
+        try
+        {
+            _vereine = await Kmvw.SammelnAsync();
+            _status = "Gleiche mit bestehenden Bands ab …"; StateHasChanged();
+            _vorschau = await Kmvw.VorschauAsync(_vereine);
+            Snackbar.Add($"{_vorschau.Total} Vereine gesammelt.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task ImportierenAsync()
+    {
+        _busy = true; _status = "Übernehme …"; StateHasChanged();
+        try
+        {
+            _ergebnis = await Kmvw.ImportierenAsync(_vereine);
+            _vorschau = await Kmvw.VorschauAsync(_vereine);
+            Snackbar.Add("Import abgeschlossen.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+}

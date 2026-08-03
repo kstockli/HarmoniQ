@@ -60,11 +60,16 @@ else
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
                     <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Style="color:#9B59B6;" />
-                    <MudText Typo="Typo.caption" Style="color:#A78FC0;">
-                        @string.Join(" · ", new[] {
-                            _video.EffektiverAnlass, _video.EffektiverOrt, _video.AufnahmeDatum?.ToString("dd.MM.yyyy")
-                        }.Where(x => !string.IsNullOrWhiteSpace(x)))
-                    </MudText>
+                    @if (_video.KonzertId is Guid kid)
+                    {
+                        <MudLink Href="@($"/konzerte/{kid}")" Typo="Typo.caption" Style="color:#9B59B6;" Underline="Underline.Hover">
+                            @AufnahmeInfoText()
+                        </MudLink>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#A78FC0;">@AufnahmeInfoText()</MudText>
+                    }
                 </MudStack>
             }
 
@@ -180,6 +185,11 @@ else
 
 @code {
     [Parameter] public Guid Id { get; set; }
+
+    // Aufnahme-Info (Anlass · Ort · Datum) – bevorzugt aus dem verknüpften Konzert.
+    private string AufnahmeInfoText() => _video is null ? "" : string.Join(" · ", new[] {
+        _video.EffektiverAnlass, _video.EffektiverOrt, _video.AufnahmeDatum?.ToString("dd.MM.yyyy")
+    }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
     private Video? _video;
     private BewertungsStats? _stats;
