@@ -112,6 +112,11 @@ public static class CrawlUebernahmeService
         // Zugehörige Videos (z. B. SBBW Infomaniak-VOD) anlegen und mit Stück/Band verknüpfen.
         await VideosUebernehmenAsync(db, konzertId, d.Videos);
 
+        // Bisher angelegte KonzertBands (Programm + Ränge) persistieren, damit die folgende
+        // Quell-Band-Prüfung (AnyAsync gegen die DB) die bereits getrackten Zeilen sieht und
+        // die Band nicht doppelt anlegt (sonst: „instance … cannot be tracked … same key value").
+        await db.SaveChangesAsync();
+
         // Konzert der Quell-Band zuordnen (auch ohne Programm-Band):
         //  1) reguläre BandDomain-Quelle → Quelle.BandId
         //  2) Aggregat „Konzert-Vorschau" (Quelle über ALLE Bands, BandId = null) → Band aus dem
