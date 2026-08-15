@@ -4,7 +4,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">
+        <MudButton Variant="Variant.Filled" Color="ConfirmColor" OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">
             @ConfirmText
         </MudButton>
     </DialogActions>
@@ -14,4 +14,6 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public string Text { get; set; } = "Wirklich löschen?";
     [Parameter] public string ConfirmText { get; set; } = "Löschen";
+    /// <summary>Farbe des Bestätigungs-Buttons – Default Rot (Löschen); für unkritische Aktionen überschreibbar.</summary>
+    [Parameter] public Color ConfirmColor { get; set; } = Color.Error;
 }

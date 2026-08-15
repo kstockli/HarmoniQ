@@ -41,6 +41,8 @@
                 <MudSelectItem Value="CrawlQuelleTyp.Event">Event (JS – C2)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Wettbewerb">Wettbewerb (SBBW)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.Veranstalter">Veranstalter (KKL Luzern)</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.BandVideos">YouTube – alle Bands (Kanäle)</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.BandKonzertVorschau">Künftige Konzerte – alle Band-Webseiten</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="5">
@@ -76,6 +78,17 @@
                     SBBW: Start-URL = Resultate-Übersicht (<code>https://swissbrass.ch/resultate-sbbw</code>, alle Jahre)
                     oder ein einzelnes Jahres-PDF (<code>…/results_2025.pdf</code>). Erzeugt je Jahr/Kategorie einen
                     Konzert-Fund mit Rangliste (Videos folgen). Keine Ziel-Band nötig.
+                </MudAlert>
+            </MudItem>
+        }
+        @if (_neu.Typ is CrawlQuelleTyp.BandVideos or CrawlQuelleTyp.BandKonzertVorschau)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    @(_neu.Typ == CrawlQuelleTyp.BandVideos
+                        ? "Aggregat-Lauf über ALLE Bands mit hinterlegtem YouTube-Kanal: geht deren Uploads durch (nur Videos ≥ 2 Min), erkennt Stück/Komponist:in/Ort/Anlass und legt neue Treffer als Video-Funde an. Keine Start-URL/Ziel-Band nötig. Review im normalen „Funde-Review\" (Typ YouTube-Video)."
+                        : "Aggregat-Lauf über ALLE Bands mit Webseite: sucht auf Startseite + Agenda/Kalender nach KÜNFTIGEN, echten Konzerten (Jahres-/Gala-/Kirchenkonzert usw.; keine Kilbi/Ständchen/Heim-Auftritte). Programm nicht erforderlich. Keine Start-URL/Ziel-Band nötig. Review unter „Funde\".")
+                    Manuell ausgelöst mit Bestätigung; läuft im Hintergrund.
                 </MudAlert>
             </MudItem>
         }
@@ -282,6 +295,13 @@ else
             offenProLauf.GetValueOrDefault(l.Id), l.StartAm, l.Meldung)).ToList();
     }
 
+    /// <summary>Aggregat-Typen fächern über ALLE Bands auf (keine einzelne Start-URL/Ziel-Band).</summary>
+    private static bool IstAggregat(CrawlQuelleTyp t) =>
+        t is CrawlQuelleTyp.BandVideos or CrawlQuelleTyp.BandKonzertVorschau;
+
+    private static string AggregatUrl(CrawlQuelleTyp t) => t == CrawlQuelleTyp.BandVideos
+        ? "alle-bands://youtube-kanaele" : "alle-bands://konzert-vorschau";
+
     /// <summary>Belegt bei Spezial-Quelltypen sinnvolle Defaults vor (nur wenn Feld noch leer).</summary>
     private void TypGewechselt()
     {
@@ -293,6 +313,10 @@ else
         else if (_neu.Typ == CrawlQuelleTyp.Wettbewerb)
         {
             if (string.IsNullOrWhiteSpace(_neu.StartUrl)) _neu.StartUrl = "https://swissbrass.ch/resultate-sbbw";
+        }
+        else if (IstAggregat(_neu.Typ))
+        {
+            _neu.StartUrl = AggregatUrl(_neu.Typ);
         }
     }
 
@@ -307,7 +331,11 @@ else
 
     private async Task QuelleAnlegen()
     {
-        if (string.IsNullOrWhiteSpace(_neu.StartUrl) || !Uri.TryCreate(_neu.StartUrl.Trim(), UriKind.Absolute, out var uri))
+        // Aggregat-Typen (über alle Bands) brauchen keine echte Start-URL – Marker setzen und Validierung überspringen.
+        if (IstAggregat(_neu.Typ)) _neu.StartUrl = AggregatUrl(_neu.Typ);
+        Uri? uri = null;
+        if (!IstAggregat(_neu.Typ)
+            && (string.IsNullOrWhiteSpace(_neu.StartUrl) || !Uri.TryCreate(_neu.StartUrl.Trim(), UriKind.Absolute, out uri)))
         {
             Snackbar.Add("Bitte eine gültige Start-URL (http/https) angeben.", Severity.Warning);
             return;
@@ -318,7 +346,7 @@ else
         {
             Typ = _neu.Typ,
             StartUrl = _neu.StartUrl.Trim(),
-            Domain = _neu.Typ == CrawlQuelleTyp.BandDomain ? uri.Host : null,
+            Domain = _neu.Typ == CrawlQuelleTyp.BandDomain ? uri!.Host : null,
             BandId = _neuBand?.Id,
             BrauchtRendering = _neu.BrauchtRendering,
             MaxTiefe = _neu.MaxTiefe,
@@ -364,6 +392,23 @@ else
 
     private async Task LaufStarten(CrawlQuelle q)
     {
+        // Aggregat-Läufe (über alle Bands) sind aufwändig → Bestätigung einholen.
+        if (IstAggregat(q.Typ))
+        {
+            var text = q.Typ == CrawlQuelleTyp.BandVideos
+                ? "YouTube-Lauf über ALLE Bands mit hinterlegtem Kanal starten? Das prüft je Band die neuesten Uploads (verbraucht YouTube-Kontingent) und legt neue Video-Funde an."
+                : "Konzert-Vorschau-Lauf über ALLE Bands mit Webseite starten? Das lädt je Band Startseite + Agenda-Seiten und legt künftige Konzert-Funde an.";
+            var p = new DialogParameters<ConfirmDialog>
+            {
+                { x => x.Text, text },
+                { x => x.ConfirmText, "Starten" },
+                { x => x.ConfirmColor, Color.Success }
+            };
+            var dlg = await DialogService.ShowAsync<ConfirmDialog>("Aggregat-Lauf starten", p);
+            var r = await dlg.Result;
+            if (r is null || r.Canceled) return;
+        }
+
         await SpeichereHinweis(q.Id, q.ExtraktionsHinweis); // aktuell editierten Hinweis übernehmen
         Guid laufId;
         await using (var db = await DbFactory.CreateDbContextAsync())

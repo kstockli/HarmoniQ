@@ -18,6 +18,7 @@ public class CrawlRunner(
     KomponistSuche komponistSuche,
     ISeitenRenderer renderer,
     EventfrogImporter eventfrog,
+    BandVideoCrawlService bandVideos,
     ILogger<CrawlRunner> logger)
 {
     private string? _bandName;
@@ -77,7 +78,11 @@ public class CrawlRunner(
 
         try
         {
-            if (quelle.Typ == CrawlQuelleTyp.BandDomain)
+            if (quelle.Typ == CrawlQuelleTyp.BandVideos)
+                await BandVideosBatchAsync(lauf, ct);
+            else if (quelle.Typ == CrawlQuelleTyp.BandKonzertVorschau)
+                await KonzertVorschauAsync(lauf, quelle, ct);
+            else if (quelle.Typ == CrawlQuelleTyp.BandDomain)
                 await BandDomainCrawlAsync(lauf, quelle, ct);
             // Eventfrog VOR dem generischen Veranstalter/KKL-Zweig (beide Typ „Veranstalter") – per URL unterscheiden.
             else if (EventfrogImporter.IstZustaendig(quelle.StartUrl))
@@ -99,7 +104,7 @@ public class CrawlRunner(
                 await AbgaengePruefenAsync(lauf, quelle.BandId.Value, ct);
 
             lauf.Status = CrawlLaufStatus.Fertig;
-            lauf.Meldung = $"{lauf.SeitenBesucht} Seiten, {lauf.FundeAnzahl} Funde.";
+            lauf.Meldung ??= $"{lauf.SeitenBesucht} Seiten, {lauf.FundeAnzahl} Funde.";
             logger.LogInformation("■ Crawl-Lauf {LaufId} fertig: {Seiten} Seiten, {Funde} Funde.",
                 lauf.Id, lauf.SeitenBesucht, lauf.FundeAnzahl);
         }
@@ -136,6 +141,123 @@ public class CrawlRunner(
                     if (!besucht.Contains(l))
                         frontier.Enqueue((l, tiefe + 1));
         }
+    }
+
+    /// <summary>Aggregat „YouTube über alle Bands" (§4.7): delegiert an den YouTube-Batch (eigener DbContext,
+    /// schreibt Video-<see cref="CrawlFund"/>e). Der Lauf hält nur die Zusammenfassung.</summary>
+    private async Task BandVideosBatchAsync(CrawlLauf lauf, CancellationToken ct)
+    {
+        if (!bandVideos.Verfuegbar)
+        {
+            lauf.Meldung = "Kein YouTube-API-Key (YouTube:ApiKey) konfiguriert – Batch nicht möglich.";
+            logger.LogWarning("BandVideos-Batch: {Meldung}", lauf.Meldung);
+            return;
+        }
+        var b = await bandVideos.AlleBandsAsync(lauf.Id, ct);
+        lauf.SeitenBesucht = b.Bands;
+        lauf.FundeAnzahl = b.Neu;
+        lauf.Meldung = $"{b.Bands} Bands mit Kanal, {b.Geprueft} Videos geprüft, {b.Neu} neue Video-Funde.";
+    }
+
+    /// <summary>Aggregat „Künftige Konzerte über alle Band-Webseiten" (§4.8): geht je Band Startseite +
+    /// Agenda/Kalender-Unterseiten durch und legt künftige, echte Konzerte als Konzert-Fund an (Typ-/Zukunfts-
+    /// Filter in der Extraktion). Dedup über Läufe via ExternKey „vorschau:{bandId}:{datum}:{name}".</summary>
+    private async Task KonzertVorschauAsync(CrawlLauf lauf, CrawlQuelle quelle, CancellationToken ct)
+    {
+        var bands = await db.Bands.Where(b => b.Webseite != null && b.Webseite != "")
+            .Select(b => new { b.Id, b.Name, b.Webseite }).ToListAsync(ct);
+        logger.LogInformation("Konzert-Vorschau: {N} Bands mit Webseite.", bands.Count);
+
+        int bandsGeprueft = 0, funde = 0;
+        foreach (var band in bands)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!Uri.TryCreate(band.Webseite, UriKind.Absolute, out var start)) continue;
+            _bandName = band.Name;
+            bandsGeprueft++;
+
+            var startUrl = start.GetLeftPart(UriPartial.Query);
+            var seiten = new List<string> { startUrl };
+            try
+            {
+                var home = await fetch.HoleAsync(startUrl, quelle.BrauchtRendering, ct);
+                lauf.SeitenBesucht++;
+                if (home.Erfolg && !home.IstPdf && !string.IsNullOrEmpty(home.Text))
+                {
+                    foreach (var l in CrawlHtmlHelfer.InterneLinks(home.Text!, new Uri(startUrl))
+                                 .Where(IstAgendaLink).Distinct().Take(4))
+                        seiten.Add(l);
+                    funde += await VorschauSeiteAsync(lauf, band.Id, startUrl, home, ct);
+                }
+                foreach (var u in seiten.Skip(1))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var res = await fetch.HoleAsync(u, quelle.BrauchtRendering, ct);
+                    lauf.SeitenBesucht++;
+                    funde += await VorschauSeiteAsync(lauf, band.Id, u, res, ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) { logger.LogWarning(ex, "Konzert-Vorschau {Band} fehlgeschlagen.", band.Name); }
+            await db.SaveChangesAsync(ct);
+        }
+
+        lauf.FundeAnzahl = funde;
+        lauf.Meldung = $"{bandsGeprueft} Bands geprüft, {funde} künftige Konzert-Funde.";
+        logger.LogInformation("Konzert-Vorschau fertig: {Bands} Bands, {Funde} Funde.", bandsGeprueft, funde);
+    }
+
+    /// <summary>Extrahiert künftige Konzerte einer einzelnen Seite (Konzert-Vorschau) und legt neue Konzert-Funde
+    /// an (ExternKey-Dedup über Läufe). Gibt die Zahl NEUER Funde zurück.</summary>
+    private async Task<int> VorschauSeiteAsync(CrawlLauf lauf, Guid bandId, string url, CrawlFetchService.FetchErgebnis res, CancellationToken ct)
+    {
+        if (!res.Erfolg || res.IstPdf || string.IsNullOrEmpty(res.Text)) return 0;
+        var text = CrawlHtmlHelfer.TextBereinigen(res.Text!);
+        if (text.Trim().Length == 0) return 0;
+
+        var erg = await extraktion.ExtrahiereAsync(
+            new ExtraktionsAnfrage(CrawlQuelleTyp.BandKonzertVorschau, url, text, false, _bandName), ct);
+
+        int neu = 0;
+        foreach (var f in erg.Funde.Where(f => f.Typ == CrawlFundTyp.Konzert))
+        {
+            var d = CrawlDaten.Deserialisiere<KonzertFundDaten>(f.DatenJson);
+            if (d?.Datum is null) continue;
+            var key = $"vorschau:{bandId}:{d.Datum}:{Norm(d.Name)}";
+            var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(x => x.ExternKey == key, ct);
+            if (bestehend is { Status: not CrawlFundStatus.Offen }) continue;   // schon entschieden
+            if (bestehend != null)
+            {
+                bestehend.DatenJson = f.DatenJson;
+                bestehend.QuellUrl = url;
+                bestehend.AbgerufenAm = DateTime.UtcNow;
+                continue;
+            }
+            db.CrawlFunde.Add(new CrawlFund
+            {
+                LaufId = lauf.Id,
+                Typ = CrawlFundTyp.Konzert,
+                ExternKey = key,
+                QuellUrl = url,
+                AbgerufenAm = DateTime.UtcNow,
+                DatenJson = f.DatenJson,
+                Konfidenz = f.Konfidenz,
+                Status = CrawlFundStatus.Offen
+            });
+            lauf.FundeAnzahl++;
+            neu++;
+        }
+        return neu;
+    }
+
+    /// <summary>Link deutet auf eine Agenda/Termine/Konzerte/Kalender-Unterseite (für die Konzert-Vorschau).</summary>
+    private static bool IstAgendaLink(string url)
+    {
+        var u = url.ToLowerInvariant();
+        foreach (var s in new[] { "agenda", "termin", "konzert", "kalender", "aktuell", "event",
+                     "saison", "auftritt", "vorschau", "anlaess", "anlass", "anläss", "programm", "daten" })
+            if (u.Contains(s)) return true;
+        return false;
     }
 
     /// <summary>Lädt eine Seite, dedupliziert, filtert, extrahiert und gibt interne Links zurück

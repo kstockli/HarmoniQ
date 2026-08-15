@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
 @using HarmoniQ.Web.Services.Crawler
 @using HarmoniQ.Web.Components.Pages.Admin.Dialogs
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -33,6 +34,7 @@
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Komponist)">Komponist</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Band)">Verein/Band</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Webseite)">Webseiten-Vorschlag</MudSelectItem>
+        <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Video)">YouTube-Video</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Sonstiges)">Sonstiges</MudSelectItem>
     </MudSelect>
     <MudTextField @bind-Value="_suche" Label="Suche (Name/Ort/URL …)" Variant="Variant.Outlined"
@@ -122,6 +124,58 @@ else
                     </div>
                 }
 
+                @if (f.Typ == CrawlFundTyp.Video && !string.IsNullOrWhiteSpace(f.VideoExternId))
+                {
+                    <MudGrid Spacing="3" Class="mt-1">
+                        <MudItem xs="12" sm="5" md="4">
+                            @if (f.VideoPreview)
+                            {
+                                <div style="position:relative; padding-top:56.25%; border-radius:6px; overflow:hidden;">
+                                    <iframe src="@VideoEinbettung.Embed(VideoPlattform.YouTube, f.VideoExternId!)"
+                                            style="position:absolute; inset:0; width:100%; height:100%; border:0;"
+                                            allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="position:relative; cursor:pointer;" @onclick="() => f.VideoPreview = true">
+                                    <img src="@VideoEinbettung.Thumbnail(VideoPlattform.YouTube, f.VideoExternId!)"
+                                         alt="" style="width:100%; border-radius:6px; display:block;" />
+                                    <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large"
+                                             Style="position:absolute; inset:0; margin:auto; color:#fff; opacity:.85;" />
+                                </div>
+                            }
+                            <MudLink Href="@($"https://youtu.be/{f.VideoExternId}")" Target="_blank"
+                                     Typo="Typo.caption" Style="color:#6f5a86;">@(f.VideoKanal ?? "auf YouTube ansehen")</MudLink>
+                        </MudItem>
+                        <MudItem xs="12" sm="7" md="8">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="6">
+                                    <MudAutocomplete T="string" Label="Stück" Variant="Variant.Outlined" Dense="true"
+                                                     Value="f.VideoStueck" ValueChanged="v => { f.VideoStueck = v; VideoJsonAktualisieren(f); }"
+                                                     SearchFunc="SucheStueck" CoerceValue="true" CoerceText="false"
+                                                     ResetValueOnEmptyText="false" MaxItems="15"
+                                                     HelperText="Vorhandenes Stück wählen oder neu erfassen (Pflicht zum Übernehmen)." />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudAutocomplete T="string" Label="Komponist:in (bei neuem Stück)" Variant="Variant.Outlined" Dense="true"
+                                                     Value="f.VideoKomponist" ValueChanged="v => { f.VideoKomponist = v; VideoJsonAktualisieren(f); }"
+                                                     SearchFunc="SucheKomponist" CoerceValue="true" CoerceText="false"
+                                                     ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField Value="f.VideoOrt" ValueChanged="(string v) => { f.VideoOrt = v; VideoJsonAktualisieren(f); }"
+                                                  T="string" Label="Ort (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField Value="f.VideoAnlass" ValueChanged="(string v) => { f.VideoAnlass = v; VideoJsonAktualisieren(f); }"
+                                                  T="string" Label="Anlass (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudItem>
+                    </MudGrid>
+                }
+
                 <MudStack Row="true" Class="mt-2">
                     @if (f.Status == CrawlFundStatus.Offen)
                     {
@@ -180,12 +234,21 @@ else
     private CrawlFundTyp? _typ;
     private string? _suche;
     private List<FundEdit> _funde = [];
+    private List<string> _stueckNamen = [];
+    private List<string> _komponistNamen = [];
 
     protected override async Task OnInitializedAsync() => await Laden();
 
     private async Task Laden()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        // Autocomplete-Quellen für Video-Funde (Stück/Komponist:in) – einmal je Laden.
+        if (_stueckNamen.Count == 0)
+            _stueckNamen = await db.Stuecke.OrderBy(s => s.Titel).Select(s => s.Titel).ToListAsync();
+        _komponistNamen = await db.Personen
+            .Where(p => p.Rollen.Any(r => r.Rolle == PersonRolleTyp.Komponist))
+            .OrderBy(p => p.Name).Select(p => p.Name).ToListAsync();
+
         var q = db.CrawlFunde.AsQueryable();
         if (_laufId is not null) q = q.Where(f => f.LaufId == _laufId);
         if (_status is not null) q = q.Where(f => f.Status == _status);
@@ -305,6 +368,26 @@ else
                         fe.FriendlyZeilen = z;
                     }
                     break;
+                case CrawlFundTyp.Video:
+                    var vd = CrawlDaten.Deserialisiere<VideoFundDaten>(fe.Json);
+                    if (vd != null)
+                    {
+                        fe.VideoExternId = vd.ExternId;
+                        fe.VideoKanal = vd.KanalName;
+                        fe.VideoBandId = vd.BandId;
+                        fe.VideoStueck = vd.StueckTitel ?? "";
+                        fe.VideoKomponist = vd.KomponistName ?? "";
+                        fe.VideoOrt = vd.Ort ?? "";
+                        fe.VideoAnlass = vd.Anlass ?? "";
+                        fe.FriendlyBand = vd.BandName;
+                        fe.FriendlyTitel = vd.Titel;
+                        var vt = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(vd.StueckTitel)) vt.Add($"Stück: {vd.StueckTitel}");
+                        else vt.Add("Stück: (offen – bitte setzen)");
+                        if (!string.IsNullOrWhiteSpace(vd.KomponistName)) vt.Add(vd.KomponistName!);
+                        fe.FriendlySub = string.Join(" · ", vt);
+                    }
+                    break;
                 case CrawlFundTyp.Webseite:
                     var w = CrawlDaten.Deserialisiere<WebseiteFundDaten>(fe.Json);
                     if (w != null)
@@ -332,6 +415,30 @@ else
             fe.JsonFehler = "Daten nicht lesbar: " + ex.Message;
         }
         if (string.IsNullOrWhiteSpace(fe.FriendlyTitel)) fe.FriendlyTitel = fe.Typ.ToString();
+    }
+
+    /// <summary>Übernimmt die editierten Video-Felder (Stück/Komponist/Ort/Anlass) zurück ins DatenJson,
+    /// damit „Übernehmen" (das genau dieses JSON nutzt) die aktuellen Werte anlegt.</summary>
+    private static void VideoJsonAktualisieren(FundEdit fe)
+    {
+        if (fe.Typ != CrawlFundTyp.Video || string.IsNullOrWhiteSpace(fe.VideoExternId)) return;
+        var daten = new VideoFundDaten(
+            fe.VideoExternId!, fe.FriendlyTitel, fe.VideoBandId, fe.FriendlyBand, fe.VideoKanal,
+            string.IsNullOrWhiteSpace(fe.VideoStueck) ? null : fe.VideoStueck.Trim(),
+            string.IsNullOrWhiteSpace(fe.VideoKomponist) ? null : fe.VideoKomponist.Trim(),
+            string.IsNullOrWhiteSpace(fe.VideoOrt) ? null : fe.VideoOrt.Trim(),
+            string.IsNullOrWhiteSpace(fe.VideoAnlass) ? null : fe.VideoAnlass.Trim());
+        fe.Json = CrawlDaten.Serialisiere(daten);
+        BefuelleAnzeige(fe);
+    }
+
+    private Task<IEnumerable<string>> SucheStueck(string? wert, CancellationToken ct) => Vorschlaege(_stueckNamen, wert);
+    private Task<IEnumerable<string>> SucheKomponist(string? wert, CancellationToken ct) => Vorschlaege(_komponistNamen, wert);
+    private static Task<IEnumerable<string>> Vorschlaege(List<string> alle, string? wert)
+    {
+        IEnumerable<string> r = string.IsNullOrWhiteSpace(wert)
+            ? alle : alle.Where(n => n.Contains(wert, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(r.Take(15));
     }
 
     private static string ProgrammText(ProgrammZeileDaten p)
@@ -480,5 +587,15 @@ else
         public List<string> FriendlyZeilen { get; set; } = [];
         public bool JsonGueltig { get; set; } = true;
         public string? JsonFehler { get; set; }
+
+        // Video-Funde (Typ Video): editierbare Felder → werden bei Änderung ins Json zurückgeschrieben.
+        public string? VideoExternId { get; set; }
+        public string? VideoKanal { get; set; }
+        public Guid VideoBandId { get; set; }
+        public string VideoStueck { get; set; } = "";
+        public string VideoKomponist { get; set; } = "";
+        public string VideoOrt { get; set; } = "";
+        public string VideoAnlass { get; set; } = "";
+        public bool VideoPreview { get; set; }
     }
 }

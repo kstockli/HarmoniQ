@@ -39,8 +39,13 @@ public class StubExtraktion : IExtraktion
     public Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default) =>
         Task.FromResult(new KklProgramm([], [], null));
 
-    // Ohne LLM keine Titel-Analyse – Nutzer:in erfasst Stück/Komponist:in manuell.
-    public Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default) =>
+    // Ohne LLM keine Titel-Analyse – Nutzer:in erfasst Stück/Komponist:in/Ort/Anlass manuell.
+    public Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null,
+        string? beschreibung = null, CancellationToken ct = default) =>
+        Task.FromResult(new VideoAnalyse(null, null));
+
+    // Ohne LLM keine Auswertung der Web-Suchergebnisse.
+    public Task<VideoAnalyse> VideoAusSucheAsync(string videoTitel, string? bandName, string suchText, CancellationToken ct = default) =>
         Task.FromResult(new VideoAnalyse(null, null));
 
     // Ohne LLM keine Band-Erkennung aus Event-Titel/Beschreibung.

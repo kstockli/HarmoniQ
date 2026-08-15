@@ -47,10 +47,17 @@ public interface IExtraktion
     /// keine Stücke. Ohne LLM (Stub): leeres Programm.</summary>
     Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default);
 
-    /// <summary>Liest aus dem TITEL eines Blasmusik-YouTube-Videos das gespielte Stück und – falls klar
-    /// genannt – die Komponist:in heraus (nicht raten). Optionaler Bandname hilft, ihn vom Stück zu trennen.
+    /// <summary>Liest aus TITEL (+ optional Beschreibung) eines Blasmusik-YouTube-Videos das gespielte Stück,
+    /// – falls klar genannt – die Komponist:in sowie Aufführungs-Ort und Anlass heraus (nicht raten). Optionaler
+    /// Bandname hilft, ihn vom Stück zu trennen. Ohne LLM (Stub): alles null.</summary>
+    Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null,
+        string? beschreibung = null, CancellationToken ct = default);
+
+    /// <summary>Bestimmt aus <b>Web-Suchergebnissen</b> zu einem Blasmusik-YouTube-Video das gespielte Stück
+    /// und – falls belegt – die Komponist:in. Grounded: nur wenn die Treffer eindeutig EIN konkretes Werk als
+    /// Inhalt dieses Videos belegen; ein ganzes Konzert / mehrere Stücke / unklar → beides null (kein Raten).
     /// Ohne LLM (Stub): beides null.</summary>
-    Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default);
+    Task<VideoAnalyse> VideoAusSucheAsync(string videoTitel, string? bandName, string suchText, CancellationToken ct = default);
 
     /// <summary>Liest aus Titel + Beschreibung (+ Veranstalter nur als Hinweis) eines Blasmusik-Events die
     /// AUFTRETENDE Formation heraus (Blasorchester/Brass Band/Ensemble/Orchester) – nicht Veranstalter/
@@ -59,8 +66,9 @@ public interface IExtraktion
     Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default);
 }
 
-/// <summary>Aus einem Videotitel erkanntes Stück + Komponist:in (jeweils null, wenn nicht klar erkennbar).</summary>
-public record VideoAnalyse(string? StueckTitel, string? Komponist);
+/// <summary>Aus Videotitel/-beschreibung erkanntes Stück + Komponist:in + Aufführungs-Ort + Anlass
+/// (jeweils null, wenn nicht klar erkennbar).</summary>
+public record VideoAnalyse(string? StueckTitel, string? Komponist, string? Ort = null, string? Anlass = null);
 
 /// <summary>LLM-Einschätzung zu einem Veranstalter-Event (KKL): passt zum Stil-Kriterium + erkannte Band.</summary>
 public record KklEventInfo(bool Passt, string? Band);

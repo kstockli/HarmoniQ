@@ -161,6 +161,52 @@ public class YouTubeSearchService(HttpClient http, IConfiguration config, ILogge
         return info is null ? [] : await PlaylistVideosAsync(info.UploadsPlaylistId, maxResults, ct);
     }
 
+    /// <summary>Dauer (Sekunden) + Beschreibung mehrerer Videos (videos.list, part=contentDetails,snippet;
+    /// 1 Einheit je bis zu 50 IDs). Für den Dauer-Filter (Trailer/Interviews aussortieren) und die
+    /// Ort/Anlass-Erkennung aus der Beschreibung.</summary>
+    public record VideoDetail(int DauerSekunden, string? Beschreibung);
+
+    public async Task<Dictionary<string, VideoDetail>> VideoDetailsAsync(IReadOnlyList<string> videoIds, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, VideoDetail>(StringComparer.Ordinal);
+        if (!Verfuegbar || videoIds.Count == 0) return result;
+        foreach (var block in videoIds.Distinct(StringComparer.Ordinal).Chunk(50))
+        {
+            try
+            {
+                var url = "https://www.googleapis.com/youtube/v3/videos"
+                    + "?part=contentDetails,snippet&maxResults=50"
+                    + "&id=" + WebUtility.UrlEncode(string.Join(",", block))
+                    + "&key=" + _apiKey;
+                using var response = await http.GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("YouTube-Video-Details fehlgeschlagen ({Status}).", response.StatusCode);
+                    continue;
+                }
+                await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                if (!doc.RootElement.TryGetProperty("items", out var items)) continue;
+                foreach (var item in items.EnumerateArray())
+                {
+                    var id = item.TryGetProperty("id", out var i) ? i.GetString() : null;
+                    if (string.IsNullOrEmpty(id)) continue;
+                    var sek = 0;
+                    if (item.TryGetProperty("contentDetails", out var cd) && cd.TryGetProperty("duration", out var d)
+                        && d.GetString() is { } iso)
+                        try { sek = (int)System.Xml.XmlConvert.ToTimeSpan(iso).TotalSeconds; } catch { /* PT0S o. Ä. */ }
+                    string? besch = null;
+                    if (item.TryGetProperty("snippet", out var sn) && sn.TryGetProperty("description", out var de))
+                        besch = de.GetString();
+                    result[id] = new VideoDetail(sek, string.IsNullOrWhiteSpace(besch) ? null : besch);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) { logger.LogWarning(ex, "YouTube-Video-Details-Abruf fehlgeschlagen."); }
+        }
+        return result;
+    }
+
     /// <summary>Zerlegt eine YouTube-Kanal-URL in den passenden channels.list-Parameter
     /// (<c>id</c>/<c>forHandle</c>/<c>forUsername</c>). Moderne Custom-URLs werden als Handle behandelt.</summary>
     private static (string Param, string Wert)? KanalQuery(string url)

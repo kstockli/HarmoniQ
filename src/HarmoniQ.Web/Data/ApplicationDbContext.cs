@@ -59,9 +59,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CrawlFund> CrawlFunde => Set<CrawlFund>();
     public DbSet<CrawlSeite> CrawlSeiten => Set<CrawlSeite>();
 
-    /// <summary>Kandidaten der YouTube-Suche pro Band (Band-Admin, on-demand) – siehe <see cref="BandVideoFund"/>.</summary>
-    public DbSet<BandVideoFund> BandVideoFunde => Set<BandVideoFund>();
-
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -473,16 +470,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(s => s.QuelleId).OnDelete(DeleteBehavior.Cascade);
             // Dedup/Politeness: je Quelle jede URL nur einmal.
             e.HasIndex(s => new { s.QuelleId, s.Url }).IsUnique();
-        });
-
-        builder.Entity<BandVideoFund>(e =>
-        {
-            // Band-Löschung räumt die zugehörigen Kandidaten mit weg.
-            e.HasOne(f => f.Band).WithMany()
-                .HasForeignKey(f => f.BandId).OnDelete(DeleteBehavior.Cascade);
-            // Dedup je Band: jede YouTube-ID nur einmal (verhindert Wiederauftauchen bei erneuter Suche).
-            e.HasIndex(f => new { f.BandId, f.ExternId }).IsUnique();
-            e.HasIndex(f => f.Status);
         });
 
         // ── Technische Audit-Spalten (alle eigenen Entitäten) ──────────────────

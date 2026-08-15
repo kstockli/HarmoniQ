@@ -501,9 +501,20 @@ BandAdministrator                   (Konto „verwaltet" eine Band – band-skop
 > über den Bandnamen zurück (YouTube Data API); zeigt je Treffer Thumbnail + Video-Preview und
 > **editierbare** Felder Stück/Komponist:in → Übernehmen/Ablehnen. **Konzert-Zuordnung** (beide Wege):
 > hat genau ein vergangenes Konzert der Band das Stück im Programm, wird es vorgeschlagen, sonst zur
-> Auswahl angeboten (`Video.KonzertId`). Entschiedene Treffer werden gemerkt
-> (`BandVideoFund`), ein erneuter Lauf zeigt nur Neues. Beides erzeugt sofort **genehmigte** Videos
+> Auswahl angeboten (`Video.KonzertId`). Die Suchtreffer sind **Video-`CrawlFund`s** (Typ „YouTube-Video",
+> Dedup via ExternKey); ein erneuter Lauf zeigt nur Neues. Beides erzeugt sofort **genehmigte** Videos
 > (Band-Admin ist für die eigene Band vertrauenswürdig).
+
+> **Zwei Aggregat-Crawler (globaler Admin, manuell — 2026-08-14):** Im Crawler-Admin (`/admin/crawler`) als
+> eigene Quelltypen, je Lauf mit Bestätigung, ohne Zeitplan (Details `Spezifikation-Crawler.md` §4.5/§4.8).
+> **(a) „YouTube – alle Bands":** geht alle Bands mit hinterlegtem YouTube-Kanal durch (kanalbasiert), nur
+> Videos ≥ 2 Min (keine Trailer/Interviews); erkennt zusätzlich zu Stück/Komponist:in auch **Ort** und
+> **Anlass** aus Titel + Beschreibung. Die Funde sind **normale Video-`CrawlFund`s** (Typ „YouTube-Video") im
+> gemeinsamen Review `/admin/crawler/funde` — mit reicher Video-Karte (Thumbnail/Embed + editierbare Felder).
+> **(b) „Künftige Konzerte – alle Band-Webseiten":** sucht auf
+> Startseite + Agenda/Kalender nach **künftigen, echten** Konzerten (Jahres-/Gala-/Kirchenkonzert usw.;
+> ausgeschlossen: Kilbi, Ständchen, Heim-Auftritte, Fasnacht, Umzug, GV/Bazar/Lotto/Essen); Programm nicht
+> erforderlich; Funde in der normalen Konzert-Review.
 
 > **Einladungs-Vorschläge aus gefundenen Kontakten (Phase 2 A) — UMGESETZT:** Der Crawler erntet
 > offizielle Vereins-E-Mails (als `BandLink` Typ `EMail`). Daraus erzeugt die Admin-Seite

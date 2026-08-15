@@ -5,6 +5,7 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Services.Crawler
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
@@ -21,9 +22,10 @@
 
 <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
     Ist ein <b>YouTube-Kanal</b> bei der Band hinterlegt, werden gezielt dessen Uploads durchgegangen
-    (präzise); sonst wird nach dem <b>Bandnamen</b> gesucht. Stück und Komponist:in werden aus dem Titel
-    vorgeschlagen – bitte prüfen/korrigieren und dann übernehmen oder ablehnen. Abgelehnte Videos tauchen
-    bei einer erneuten Suche nicht wieder auf; ein weiterer Suchlauf zeigt nur Neues.
+    (präzise, nur Videos ≥ 2 Min); sonst wird nach dem <b>Bandnamen</b> gesucht. Stück, Komponist:in, Ort und
+    Anlass werden aus Titel/Beschreibung vorgeschlagen – bitte prüfen/korrigieren und dann übernehmen oder
+    ablehnen. Die Funde erscheinen auch im zentralen <MudLink Href="/admin/crawler/funde" Style="color:#9B59B6;">Funde-Review</MudLink>
+    (Typ „YouTube-Video"). Abgelehnte Videos tauchen bei einer erneuten Suche nicht wieder auf.
 </MudText>
 
 @if (!Crawler.Verfuegbar)
@@ -67,7 +69,7 @@ else
                         @if (k.Preview)
                         {
                             <div style="position:relative; padding-top:56.25%; border-radius:6px; overflow:hidden;">
-                                <iframe src="@VideoEinbettung.Embed(VideoPlattform.YouTube, k.Fund.ExternId)"
+                                <iframe src="@VideoEinbettung.Embed(VideoPlattform.YouTube, k.ExternId)"
                                         style="position:absolute; inset:0; width:100%; height:100%; border:0;"
                                         allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
                             </div>
@@ -75,19 +77,19 @@ else
                         else
                         {
                             <div style="position:relative; cursor:pointer;" @onclick="() => k.Preview = true">
-                                <img src="@VideoEinbettung.Thumbnail(VideoPlattform.YouTube, k.Fund.ExternId)"
+                                <img src="@VideoEinbettung.Thumbnail(VideoPlattform.YouTube, k.ExternId)"
                                      alt="" style="width:100%; border-radius:6px; display:block;" />
                                 <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large"
                                          Style="position:absolute; inset:0; margin:auto; color:#fff; opacity:.85;" />
                             </div>
                         }
-                        <MudLink Href="@($"https://youtu.be/{k.Fund.ExternId}")" Target="_blank"
+                        <MudLink Href="@($"https://youtu.be/{k.ExternId}")" Target="_blank"
                                  Typo="Typo.caption" Style="color:#6f5a86;">
-                            @(k.Fund.KanalName ?? "auf YouTube ansehen")
+                            @(k.Kanal ?? "auf YouTube ansehen")
                         </MudLink>
                     </MudItem>
                     <MudItem xs="12" sm="8" md="9">
-                        <MudText Typo="Typo.body1" Style="color:#F0E6FF;" Class="mb-2">@k.Fund.Titel</MudText>
+                        <MudText Typo="Typo.body1" Style="color:#F0E6FF;" Class="mb-2">@k.Titel</MudText>
                         <MudGrid Spacing="2">
                             <MudItem xs="12" sm="6">
                                 <MudAutocomplete T="string" Label="Stück" Variant="Variant.Outlined" Dense="true"
@@ -100,6 +102,12 @@ else
                                 <MudAutocomplete T="string" Label="Komponist:in (bei neuem Stück)" Variant="Variant.Outlined" Dense="true"
                                                  @bind-Value="k.Komponist" SearchFunc="@((s, c) => Suche(_komponistNamen, s))"
                                                  CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" MaxItems="15" Clearable="true" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="k.Ort" Label="Ort (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="k.Anlass" Label="Anlass (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
                             </MudItem>
                             @if (_konzerte.Count > 0)
                             {
@@ -149,9 +157,14 @@ else
 
     private sealed class Kandidat
     {
-        public required BandVideoFund Fund { get; init; }
+        public required Guid FundId { get; init; }
+        public required string ExternId { get; init; }
+        public required string Titel { get; init; }
+        public string? Kanal { get; init; }
         public string Stueck { get; set; } = "";
         public string Komponist { get; set; } = "";
+        public string Ort { get; set; } = "";
+        public string Anlass { get; set; } = "";
         public bool Preview { get; set; }
         public bool Busy { get; set; }
         public Guid? KonzertId { get; set; }
@@ -184,13 +197,22 @@ else
     private async Task KandidatenLadenAsync(ApplicationDbContext db)
     {
         _kandidaten.Clear();
-        var funde = await db.BandVideoFunde
-            .Where(f => f.BandId == BandId && f.Status == CrawlFundStatus.Offen)
-            .OrderByDescending(f => f.GefundenAm)
+        var prefix = $"youtube:{BandId}:";
+        var funde = await db.CrawlFunde
+            .Where(f => f.Typ == CrawlFundTyp.Video && f.Status == CrawlFundStatus.Offen
+                        && f.ExternKey != null && f.ExternKey.StartsWith(prefix))
+            .OrderByDescending(f => f.AbgerufenAm)
             .ToListAsync();
         foreach (var f in funde)
         {
-            var k = new Kandidat { Fund = f, Stueck = f.StueckVorschlag ?? "", Komponist = f.KomponistVorschlag ?? "" };
+            var vd = CrawlDaten.Deserialisiere<VideoFundDaten>(f.DatenJson);
+            if (vd is null || string.IsNullOrWhiteSpace(vd.ExternId)) continue;
+            var k = new Kandidat
+            {
+                FundId = f.Id, ExternId = vd.ExternId, Titel = vd.Titel, Kanal = vd.KanalName,
+                Stueck = vd.StueckTitel ?? "", Komponist = vd.KomponistName ?? "",
+                Ort = vd.Ort ?? "", Anlass = vd.Anlass ?? ""
+            };
             KonzertVorschlagen(k);
             _kandidaten.Add(k);
         }
@@ -232,26 +254,26 @@ else
         if (string.IsNullOrWhiteSpace(k.Stueck)) { Snackbar.Add("Bitte das Stück angeben.", Severity.Warning); return; }
         k.Busy = true;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var fund = await db.BandVideoFunde.FirstOrDefaultAsync(f => f.Id == k.Fund.Id);
+        var fund = await db.CrawlFunde.FirstOrDefaultAsync(f => f.Id == k.FundId);
         if (fund is null || fund.Status != CrawlFundStatus.Offen) { _kandidaten.Remove(k); return; }
 
         var stueck = await VideoErfassung.StueckHolenAsync(db, k.Stueck.Trim(), k.Komponist);
-        var vorhanden = await db.Videos.AnyAsync(v => v.ExternId == fund.ExternId && v.StueckId == stueck.Id);
+        var vorhanden = await db.Videos.AnyAsync(v => v.ExternId == k.ExternId && v.StueckId == stueck.Id);
         if (!vorhanden)
         {
-            var video = new Video
+            db.Videos.Add(new Video
             {
                 Plattform = VideoPlattform.YouTube,
-                ExternId = fund.ExternId,
-                Titel = fund.Titel,
+                ExternId = k.ExternId,
+                Titel = k.Titel,
                 Stueck = stueck,
                 BandId = BandId,
                 KonzertId = k.KonzertId,
+                Ort = string.IsNullOrWhiteSpace(k.Ort) ? null : k.Ort.Trim(),
+                Anlass = string.IsNullOrWhiteSpace(k.Anlass) ? null : k.Anlass.Trim(),
                 Status = VideoStatus.Genehmigt,   // Band-Admin für die eigene Band vertrauenswürdig
                 VorgeschlagenVonId = _userId
-            };
-            db.Videos.Add(video);
-            fund.ErgebnisVideoId = video.Id;
+            });
         }
         fund.Status = CrawlFundStatus.Uebernommen;
         fund.EntschiedenAm = DateTime.UtcNow;
@@ -265,7 +287,7 @@ else
     {
         k.Busy = true;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var fund = await db.BandVideoFunde.FirstOrDefaultAsync(f => f.Id == k.Fund.Id);
+        var fund = await db.CrawlFunde.FirstOrDefaultAsync(f => f.Id == k.FundId);
         if (fund is not null)
         {
             fund.Status = CrawlFundStatus.Verworfen;

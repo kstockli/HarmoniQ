@@ -45,6 +45,9 @@ public static class CrawlUebernahmeService
             case CrawlFundTyp.Webseite:
                 await WebseiteUebernehmenAsync(db, datenJson);
                 break;
+            case CrawlFundTyp.Video:
+                await VideoUebernehmenAsync(db, fund, datenJson);
+                break;
             default:
                 throw new InvalidOperationException(
                     "Funde vom Typ „Sonstiges“ werden manuell bearbeitet, nicht automatisch übernommen.");
@@ -438,6 +441,34 @@ public static class CrawlUebernahmeService
                     Stueck = stueck, Person = person, Rolle = beitrag.Rolle
                 });
         }
+    }
+
+    /// <summary>Video-Fund → <c>Video</c> (Plattform YouTube). Stück ist Pflicht (find-or-create via
+    /// <see cref="VideoErfassung"/>, Komponist:in optional); Ort/Anlass werden übernommen. Dublette
+    /// (gleiche ExternId + Stück) wird nicht doppelt angelegt.</summary>
+    private static async Task VideoUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)
+    {
+        var d = CrawlDaten.Deserialisiere<VideoFundDaten>(datenJson)
+            ?? throw new InvalidOperationException("Video-Daten konnten nicht gelesen werden.");
+        if (string.IsNullOrWhiteSpace(d.ExternId))
+            throw new InvalidOperationException("YouTube-Video-ID fehlt.");
+        if (string.IsNullOrWhiteSpace(d.StueckTitel))
+            throw new InvalidOperationException("Stück fehlt – bitte im Fund ergänzen, bevor er übernommen wird.");
+
+        var stueck = await VideoErfassung.StueckHolenAsync(db, d.StueckTitel.Trim(), Leer(d.KomponistName));
+        var vorhanden = await db.Videos.AnyAsync(v => v.ExternId == d.ExternId && v.StueckId == stueck.Id);
+        if (!vorhanden)
+            db.Videos.Add(new Video
+            {
+                Plattform = VideoPlattform.YouTube,
+                ExternId = d.ExternId.Trim(),
+                Titel = d.Titel,
+                Stueck = stueck,
+                BandId = d.BandId == Guid.Empty ? null : d.BandId,
+                Ort = Leer(d.Ort),
+                Anlass = Leer(d.Anlass),
+                Status = VideoStatus.Genehmigt   // Admin-Übernahme = vertrauenswürdig
+            });
     }
 
     private static async Task KomponistUebernehmenAsync(ApplicationDbContext db, string datenJson)

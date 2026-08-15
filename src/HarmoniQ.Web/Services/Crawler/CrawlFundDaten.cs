@@ -137,6 +137,23 @@ public record BandFundDaten(
     IReadOnlyList<string>? Aliase = null);
 
 /// <summary>
+/// YouTube-Video-Fund (Typ <see cref="CrawlFundTyp.Video"/>) aus dem Kanal-Crawl einer Band (§4.5). Stück/
+/// Komponist:in/Ort/Anlass sind LLM-Vorschläge (aus Titel + Beschreibung, nicht geraten) und in der Review
+/// editierbar. Übernahme → <c>Video</c> (Plattform YouTube, find-or-create Stück via <c>VideoErfassung</c>),
+/// verknüpft mit der Band. Dedup über Läufe via <c>CrawlFund.ExternKey = "youtube:{BandId}:{ExternId}"</c>.
+/// </summary>
+public record VideoFundDaten(
+    string ExternId,
+    string Titel,
+    Guid BandId,
+    string? BandName = null,
+    string? KanalName = null,
+    string? StueckTitel = null,
+    string? KomponistName = null,
+    string? Ort = null,
+    string? Anlass = null);
+
+/// <summary>
 /// Entdeckte Vereins-Webseite (Typ <see cref="CrawlFundTyp.Webseite"/>) aus der Link-Ernte einer
 /// Event-Seite, mit kleiner Vorschau (Seitentitel/Beschreibung, ohne LLM) zur Entscheidung. Übernahme
 /// legt eine inaktive <c>CrawlQuelle</c> Typ BandDomain (Vorschlag) an.

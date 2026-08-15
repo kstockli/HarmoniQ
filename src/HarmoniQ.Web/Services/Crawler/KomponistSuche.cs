@@ -43,7 +43,7 @@ public class KomponistSuche(HttpClient http, IExtraktion extraktion, IConfigurat
             return null;
         }
 
-        var snippets = await SucheSnippetsAsync(titel, ct);
+        var snippets = await SucheSnippetsAsync($"\"{titel}\" brass band composer", ct);
         if (string.IsNullOrWhiteSpace(snippets)) return null;
 
         var name = await extraktion.KomponistAusSucheAsync(titel, snippets, ct);
@@ -52,16 +52,33 @@ public class KomponistSuche(HttpClient http, IExtraktion extraktion, IConfigurat
         return name;
     }
 
-    private async Task<string?> SucheSnippetsAsync(string titel, CancellationToken ct)
+    /// <summary>Ermittelt aus einer <b>Web-Suche zum Videotitel</b> (+ Bandname) das gespielte Stück und –
+    /// falls belegt – die Komponist:in (grounded über die Treffer-Snippets, kein Raten). Für YouTube-Funde,
+    /// wenn Titel/Beschreibung allein kein Stück hergaben. Null, wenn inaktiv/kein Treffer/nicht eindeutig.</summary>
+    public async Task<VideoAnalyse?> StueckAusVideoAsync(string videoTitel, string? bandName, CancellationToken ct = default)
+    {
+        var titel = videoTitel?.Trim();
+        if (string.IsNullOrWhiteSpace(titel) || !Aktiv) return null;
+        var query = string.IsNullOrWhiteSpace(bandName) ? titel : $"{bandName} {titel}";
+        var snippets = await SucheSnippetsAsync(query, ct);
+        if (string.IsNullOrWhiteSpace(snippets)) return null;
+
+        var r = await extraktion.VideoAusSucheAsync(titel, bandName, snippets, ct);
+        if (!string.IsNullOrWhiteSpace(r.StueckTitel))
+            logger.LogInformation("Video-Suche: \"{Titel}\" -> Stück \"{Stueck}\"", titel, r.StueckTitel);
+        return r;
+    }
+
+    private async Task<string?> SucheSnippetsAsync(string suchbegriff, CancellationToken ct)
     {
         try
         {
-            var q = Uri.EscapeDataString($"\"{titel}\" brass band composer");
+            var q = Uri.EscapeDataString(suchbegriff);
             var url = $"https://www.googleapis.com/customsearch/v1?key={_apiKey}&cx={_cx}&num=5&q={q}";
             using var resp = await http.GetAsync(url, ct);
             if (!resp.IsSuccessStatusCode)
             {
-                logger.LogWarning("Google-Suche HTTP {Code} für {Titel}", (int)resp.StatusCode, titel);
+                logger.LogWarning("Google-Suche HTTP {Code} für {Suchbegriff}", (int)resp.StatusCode, suchbegriff);
                 return null;
             }
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
@@ -76,6 +93,6 @@ public class KomponistSuche(HttpClient http, IExtraktion extraktion, IConfigurat
             return sb.ToString();
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception ex) { logger.LogWarning(ex, "Google-Komponistensuche fehlgeschlagen für {Titel}", titel); return null; }
+        catch (Exception ex) { logger.LogWarning(ex, "Google-Suche fehlgeschlagen für {Suchbegriff}", suchbegriff); return null; }
     }
 }

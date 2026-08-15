@@ -396,7 +396,8 @@ Zwei Wege, beide mit LLM-Erkennung von **Stück + Komponist:in aus dem Videotite
    vertrauenswürdig).
 2. **Suche pro Band** (`/admin/bands/{id}/videos-suchen`, `BandVideosSuchen` + `BandVideoCrawlService`):
    holt Kandidaten bei der YouTube Data API (`YouTube:ApiKey`), lässt je Treffer das LLM Stück/Komponist:in
-   vorschlagen und legt neue Treffer als `BandVideoFund` (Status Offen) ab. **Quelle bevorzugt der Kanal:**
+   vorschlagen und legt neue Treffer als **Video-`CrawlFund`** (`CrawlFundTyp.Video`, `VideoFundDaten`-JSON,
+   Status Offen) ab. **Quelle bevorzugt der Kanal:**
    ist an der Band ein YouTube-Link hinterlegt (`BandLink` Typ `YouTube`, z. B. `youtube.com/@Handle`,
    `/channel/UC…`, `/user/…`), werden gezielt **dessen Uploads** durchgegangen (`channels.list` →
    Uploads-Playlist → `playlistItems.list`); nur ohne Link (oder wenn der Kanal 0 Videos liefert) fällt der
@@ -414,9 +415,36 @@ das gewählte Stück im Programm, wird es **vorgeschlagen** (Feld „Konzert (op
 (Titel + `StueckAlias`), reagiert also live auf Änderungen am Stück-Feld. So landet das Video auf der
 Konzert-Detailseite und Bewertungen/Notizen binden an den Konzerttag.
 
-**On-demand statt Sammellauf (Entscheid):** ausgelöst pro Band auf Knopfdruck. Grund: die YouTube-Suche
-kostet **100 Kontingent-Einheiten/Aufruf** (Default 10 000/Tag ≈ 100 Band-Suchen/Tag) — ein Sammellauf über
-alle Bands wäre kontingent-limitiert und müsste über Tage verteilt werden.
+**Sammellauf über alle Bands (Aggregat-Quelltyp `BandVideos`, manuell, 2026-08-14):** Zusätzlich zur Einzel-
+Band-Suche gibt es im Crawler-Admin (`/admin/crawler`) den Quelltyp **„YouTube – alle Bands (Kanäle)"**. Ein
+Lauf (manuell mit Bestätigung, im Hintergrund) fächert über **alle Bands mit hinterlegtem YouTube-Kanal**
+(`BandLink` Typ `YouTube`) auf und ruft je Band `BandVideoCrawlService.SuchenAsync` — d. h. nur der günstige
+Kanal-Weg (je Band `channels.list` + `playlistItems.list` + einmal `videos.list` = 3 Einheiten; ~3000 für 1000
+Bands, weit unter 10 000/Tag; die teure `search.list`-Namenssuche bleibt der Einzel-Band-Suche vorbehalten).
+Die Funde landen als **normale Video-`CrawlFund`s** im **gemeinsamen Funde-Review** `/admin/crawler/funde`
+(Typ „YouTube-Video", `CrawlFundeAdmin`) — mit reicher **Video-Karte** (Thumbnail/Embed/YouTube-Link + editierbare
+Felder Stück/Komponist:in/Ort/Anlass, die ins `VideoFundDaten`-JSON zurückgeschrieben werden). Die per-Band-Seite
+(`/admin/bands/{id}/videos-suchen`) ist dieselbe Datenquelle, nur nach der Band gefiltert (via ExternKey-Präfix)
+und mit zusätzlicher Konzert-Zuordnung. Reiner On-demand-Batch, **kein** Zeitplan. (Vereinheitlicht 2026-08-14 —
+die frühere separate `BandVideoFund`-Tabelle + `/admin/crawler/video-funde`-Seite wurden entfernt.)
+
+**Qualität der Funde (2026-08-14):** (a) **Dauer-Filter** — vor der Analyse werden je neuem Treffer Dauer +
+Beschreibung via `videos.list` (`YouTubeSearchService.VideoDetailsAsync`) geholt; Clips **< 2 Minuten** (Trailer/
+Interviews/Jingles) werden verworfen (unbekannte Dauer im Zweifel behalten). (b) **Reichere Erkennung** —
+`IExtraktion.VideoTitelAnalysierenAsync` liest aus **Titel + Beschreibung** neben Stück + Komponist:in neu auch
+**Ort** und **Anlass** (`VideoAnalyse`); im `VideoFundDaten`-JSON gehalten, in der Review editierbar und beim
+Übernehmen als `Video.Ort`/`Video.Anlass` gesetzt.
+
+**Web-Suche-Anreicherung (grounded, 2026-08-15):** Reichen Titel + Beschreibung nicht, ergänzt die bestehende
+`KomponistSuche` (Google Programmable Search → LLM liest die Treffer-Snippets, **kein Raten**; Setup: Key
+`YouTube:ApiKey` mitgenutzt **+** Such-ID `Crawler:KomponistSuche:GoogleCx`, Gratis-Kontingent 100/Tag):
+**(A)** Ist ein Stück erkannt, aber die Komponist:in fehlt → `KomponistSuche.KomponistAsync` (gecacht pro Titel).
+**(B)** Ist gar kein Stück erkannt → `KomponistSuche.StueckAusVideoAsync` googelt „{Band} {Videotitel}" und lässt
+das LLM (`IExtraktion.VideoAusSucheAsync`) nur bei **eindeutig einem Werk** Stück (+ Komponist:in) ableiten —
+vorgefiltert per Heuristik (Ganz-Konzert-/Nicht-Musik-Titel wie „Jahreskonzert", „Trailer", „Interview" werden
+übersprungen). Beides ist **kontingent-gedeckelt** (`SuchBudget`: 80 Suchen/Batch-Lauf, 25/Einzel-Band) und
+degradiert sauber (ohne `GoogleCx` oder bei erschöpftem Kontingent bleiben die Felder leer → Admin füllt in der
+Review). Steuerung in `BandVideoCrawlService.AnreichernAsync`.
 
 **Kanal vor Namenssuche (Entscheid, 2026-07-13):** Der Kanal-Weg ist **präziser** (genau die Uploads dieser
 Band statt namensähnlicher Fremdtreffer) und **günstiger** (`channels.list` + `playlistItems.list` je
@@ -425,11 +453,10 @@ für Bands ohne hinterlegten Kanal. Empfehlung fürs Datenpflegen: bei den Bands
 `BandLink` erfassen.
 
 **Inkrementell („nur Neueres"):** vor dem Anlegen wird jede Video-ID gegen bereits erfasste `Video`s der
-Band **und** bereits vorhandene `BandVideoFund`s (egal ob offen/entschieden) geprüft; Duplikate werden per
-Unique-Index `(BandId, ExternId)` zusätzlich hart verhindert. Ein erneuter Suchlauf liefert daher nur
-wirklich neue Treffer; einmal übernommene/abgelehnte Videos tauchen nicht wieder auf. Analog zum
-`ExternKey`-Dedup der übrigen Quellen (§7), hier über die dedizierte Sichtungstabelle statt `CrawlFund`,
-weil die Funde **standalone Band-Videos** ohne Konzert-/Lauf-Bezug sind.
+Band **und** bereits vorhandene Video-`CrawlFund`s geprüft — Letzteres über den **`ExternKey`
+`"youtube:{bandId}:{externId}"`** (egal ob offen/entschieden), analog zum `ExternKey`-Dedup der übrigen
+Quellen (§7). Ein erneuter Suchlauf liefert daher nur wirklich neue Treffer; einmal übernommene/abgelehnte
+Videos tauchen nicht wieder auf.
 
 ### 4.6 Einmalige Sonder-Importe (abgeschlossene Grossanlässe)
 
@@ -486,12 +513,34 @@ Rechtliche Leitplanken für alle Import-/Crawl-Quellen (Details in `Spezifikatio
   anzeigen; Commons-**Bild** je-Bild-lizenziert → Urheber/Lizenz via Commons-API (`extmetadata`) in
   `Person.BildAttribution`; Nachtrag bestehender Bilder über den Button „Bild-Quellen nachtragen" im Crawler-Admin.
 
+### 4.8 Künftige Konzerte über alle Band-Webseiten (Aggregat-Quelltyp `BandKonzertVorschau`)
+
+**Ziel (2026-08-14):** Möglichst viele **angekündigte, künftige** Konzerte finden – wichtig ab Herbst, wenn die
+Vereine ihre Jahresplanung veröffentlichen. Im Crawler-Admin als Quelltyp **„Künftige Konzerte – alle Band-
+Webseiten"**; ein Lauf (manuell mit Bestätigung, im Hintergrund; **kein** Zeitplan) fächert über **alle Bands mit
+Webseite** auf. Handler `CrawlRunner.KonzertVorschauAsync`: je Band **Startseite** + bis zu 4 **Agenda-/Kalender-/
+Konzerte-Unterseiten** (Link-Heuristik `IstAgendaLink`) laden und per LLM extrahieren.
+
+- **Zukunfts- statt Programm-Fokus:** Für `BandKonzertVorschau` behält `MistralExtraktion.AlsFunde` nur Konzerte
+  mit **Datum ≥ heute** – ein Programm/Stücke sind **nicht** erforderlich (anders als der reguläre BandDomain-Crawl,
+  der ≥ 1 Stück verlangt). Vergangene/datumslose Termine werden verworfen.
+- **Typ-Filter „echtes Konzert" (LLM):** Der Extraktions-Prompt lässt nur Konzerte durch – Jahres-/Frühlings-/
+  Herbst-/Gala-/Kirchen-/Advents-/Weihnachts-/Muttertagskonzert, Unterhaltungskonzert/-abend, Serenade, **Musical**,
+  **Platzkonzert** (im Zweifel ja). **Ausgeschlossen:** Kilbi/Chilbi, Ständchen, Alters-/Pflegeheim-Auftritte,
+  Fasnacht/Guggen, Umzug/Marsch/Parade, GV, Bazar, Lotto, Vereinsessen, Papiersammlung.
+- **Funde & Dedup:** Konzert-`CrawlFund`e (Review in `/admin/crawler/funde`), Band aus dem Seiten-Kontext gesetzt.
+  Dedup über Läufe via `ExternKey = "vorschau:{bandId}:{datum}:{name}"` (offene Funde werden aktualisiert,
+  bereits entschiedene übersprungen). Endgültige Doppel-Vermeidung beim Übernehmen via
+  `KonzertErfassungService.ErfasseOderAktualisiereAsync` (Datum+Name+Ort+Bands).
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```
 CrawlQuelle                         (Seed: Band-Domain, Dokument/PDF oder Event)
 ├── Id (Guid)
-├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb / Veranstalter)   ← Wettbewerb=SBBW (§4.2), Veranstalter=KKL (§4.3) / Eventfrog (§4.4)
+├── Typ (enum: BandDomain / Dokument / Event / Wettbewerb / Veranstalter / BandVideos / BandKonzertVorschau)
+│                                      ← Wettbewerb=SBBW (§4.2), Veranstalter=KKL (§4.3) / Eventfrog (§4.4),
+│                                        BandVideos=YouTube alle Bands (§4.5), BandKonzertVorschau=künftige Konzerte alle Bands (§4.8)
 ├── BandId (FK → Band?)             ← Zielband (bei BandDomain; sonst optional)
 ├── StartUrl (string)               ← Domain-Start, PDF-/Dokument-Link oder Event-Seite
 ├── Domain (string?)                ← bei BandDomain; Crawler bleibt darauf
@@ -516,11 +565,13 @@ CrawlLauf                           (ein Durchlauf einer Quelle)
 
 CrawlFund                           (Kandidat zur Übernahme)
 ├── Id (Guid)
-├── LaufId (FK)
-├── Typ (enum: Konzert / Leitung / Stück / Komponist / Band / Sonstiges)
+├── LaufId (FK?)                    ← null bei lauf-losen Funden (per-Band-Videosuche, Wikipedia-Anreicherung)
+├── Typ (enum: Konzert / Leitung / Stück / Komponist / Band / Webseite / Video / Sonstiges)  ← Video=YouTube (§4.5)
 ├── QuellUrl (string)               ← Provenienz
+├── ExternKey (string?)            ← stabiler Quell-Schlüssel für Dedup über Läufe (z. B. „youtube:{bandId}:{id}",
+│                                     „vorschau:{bandId}:{datum}:{name}", vivenu-/eventfrog-ID)
 ├── AbgerufenAm (DateTime)
-├── DatenJson (string)              ← strukturierter Vorschlag (Konzert+Programm bzw. Person+Rolle)
+├── DatenJson (string)              ← strukturierter Vorschlag (Konzert+Programm, Person+Rolle, VideoFundDaten …)
 ├── Konfidenz (enum?: Hoch/Mittel/Tief)  ← optional, aus Heuristik/LLM
 ├── DublettHinweis (string?)        ← „existiert evtl. schon als …"
 ├── Status (enum: Offen / Übernommen / Verworfen)
@@ -529,16 +580,10 @@ CrawlFund                           (Kandidat zur Übernahme)
 (optional) CrawlSeite               (Dedup/Politeness über Läufe)
 ├── Id · QuelleId (FK) · Url · InhaltsHash · AbgerufenAm · Relevant (bool)
 
-BandVideoFund                       (YouTube-Kandidat pro Band, §4.5 — eigene Sichtungstabelle)
-├── Id (Guid)
-├── BandId (FK → Band, Cascade)     ← Zielband; Band-Löschung räumt die Funde mit weg
-├── ExternId (string)               ← YouTube-Video-ID; Unique-Index (BandId, ExternId) = Dedup
-├── Titel (string) · KanalName (string?)
-├── StueckVorschlag (string?)       ← vom LLM aus dem Titel erkannt, in der Review editierbar
-├── KomponistVorschlag (string?)    ← dito
-├── Status (enum CrawlFundStatus: Offen / Übernommen / Verworfen)   ← Status hält „nur Neueres"
-├── GefundenAm (DateTime) · EntschiedenAm (DateTime?)
-└── ErgebnisVideoId (Guid?)         ← bei Übernahme: erzeugtes Video
+> **Video-Funde (Typ `Video`, §4.5):** kein eigenes Datenmodell — `DatenJson` = `VideoFundDaten`
+> (ExternId, Titel, BandId, BandName, KanalName, StueckTitel/KomponistName/Ort/Anlass als LLM-Vorschläge),
+> Dedup via `ExternKey = "youtube:{bandId}:{externId}"`. Übernahme → `Video` (Plattform YouTube, find-or-create
+> Stück via `VideoErfassung`). *(Die frühere separate `BandVideoFund`-Tabelle wurde 2026-08-14 entfernt.)*
 ```
 
 > `DatenJson` hält den Vorschlag flexibel (z. B. ein Konzert mit Programmzeilen). Die Review-UI

@@ -126,10 +126,19 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
     {
         var kontext = new System.Text.StringBuilder();
         kontext.Append($"Quelle: {anfrage.QuellUrl} (Typ: {anfrage.QuelleTyp}).");
-        if (anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain && !string.IsNullOrWhiteSpace(anfrage.BandName))
+        var eigeneVereinsseite = anfrage.QuelleTyp is CrawlQuelleTyp.BandDomain or CrawlQuelleTyp.BandKonzertVorschau;
+        if (eigeneVereinsseite && !string.IsNullOrWhiteSpace(anfrage.BandName))
             kontext.Append($" Diese Seite gehört der Band „{anfrage.BandName}\". Ist bei einem Konzert/" +
                            "Programm die spielende Band nicht ausdrücklich genannt, ist es diese Band – " +
                            "trage sie dann als bandName ein.");
+        if (anfrage.QuelleTyp == CrawlQuelleTyp.BandKonzertVorschau)
+            kontext.Append("\nZIEL: NUR KÜNFTIGE, ECHTE KONZERTE dieser Band (Jahresvorschau/Agenda). " +
+                "Als Konzert gelten: Jahreskonzert, Frühlings-/Herbst-/Gala-/Kirchen-/Advents-/Weihnachts-/" +
+                "Muttertagskonzert, Unterhaltungskonzert/-abend, Serenade, Musical, Platzkonzert (im Zweifel ja). " +
+                "KEINE Konzerte sind: Kilbi/Chilbi, Ständchen, Auftritte in Alters-/Pflegeheimen, Fasnacht/" +
+                "Guggen, Umzug/Marsch/Parade, Generalversammlung, Bazar/Basar, Lotto/Loto, Risotto-/Spaghetti-/" +
+                "Vereinsessen, Papiersammlung – diese WEGLASSEN. Gib nur Konzerte mit erkennbarem (künftigem) " +
+                "Datum zurück; ein Programm/Stücke sind NICHT erforderlich. Vergangene Termine weglassen.");
         if (!string.IsNullOrWhiteSpace(anfrage.Hinweis))
             kontext.Append($"\nZUSÄTZLICHE ANWEISUNG DES ADMINS (unbedingt befolgen): {anfrage.Hinweis.Trim()}");
         if (anfrage.VorstandGewuenscht || anfrage.MukoGewuenscht)
@@ -549,6 +558,50 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         catch (Exception ex) { logger.LogWarning(ex, "Paraphrase fehlgeschlagen."); return null; }
     }
 
+    public async Task<VideoAnalyse> VideoAusSucheAsync(string videoTitel, string? bandName, string suchText, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(suchText)) return new VideoAnalyse(null, null);
+        var sys = "Du bestimmst aus WEB-SUCHERGEBNISSEN zu einem Blasmusik-/Brass-Band-YouTube-Video das " +
+            "gespielte STÜCK und die KOMPONIST:IN. Antworte AUSSCHLIESSLICH mit JSON: " +
+            "{\"stueckTitel\":\"|null\",\"komponist\":\"|null\"}.\n" +
+            "Regeln (streng, kein Raten):\n" +
+            "- stueckTitel NUR, wenn die Treffer eindeutig EIN konkretes Werk als Inhalt DIESES Videos belegen " +
+            "(reiner Werktitel, ohne Bandname/Jahr/Ort/Zusätze). Ist das Video ein ganzes Konzert, mehrere " +
+            "Stücke, eine Playlist oder unklar → null.\n" +
+            "- komponist \"Vorname Nachname\" NUR, wenn klar belegt (bei Bearbeitung der ursprüngliche Komponist, " +
+            "nicht der Arrangeur). Sonst null. NICHT den Bandnamen/die Dirigentin nehmen.";
+        var text = suchText.Length > 6000 ? suchText[..6000] : suchText;
+        var user = string.IsNullOrWhiteSpace(bandName)
+            ? $"Videotitel: \"{videoTitel}\"\n\nSuchergebnisse:\n{text}"
+            : $"Videotitel: \"{videoTitel}\"\n(Spielende Band: \"{bandName}\" – NICHT der Stücktitel.)\n\nSuchergebnisse:\n{text}";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[]
+            {
+                new { role = "system", content = sys },
+                new { role = "user", content = user }
+            }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return new VideoAnalyse(null, null);
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(json)) return new VideoAnalyse(null, null);
+            var dto = JsonSerializer.Deserialize<VideoTitelDto>(json, MistralJson);
+            return new VideoAnalyse(Plausibel(dto?.StueckTitel, 2, 160), Plausibel(dto?.Komponist, 3, 60));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "Video-Such-Analyse fehlgeschlagen für {Titel}", videoTitel); return new VideoAnalyse(null, null); }
+    }
+
     public async Task<string?> KomponistAusSucheAsync(string stueckTitel, string suchText, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(suchText)) return null;
@@ -586,21 +639,28 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         catch (Exception ex) { logger.LogWarning(ex, "Komponist-Extraktion fehlgeschlagen für {Titel}", stueckTitel); return null; }
     }
 
-    public async Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null, CancellationToken ct = default)
+    public async Task<VideoAnalyse> VideoTitelAnalysierenAsync(string videoTitel, string? bandName = null,
+        string? beschreibung = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(videoTitel)) return new VideoAnalyse(null, null);
-        var sys = "Du extrahierst aus dem TITEL eines Blasmusik-/Brassband-YouTube-Videos das gespielte " +
-            "Stück und – falls klar genannt – die Komponist:in. Antworte AUSSCHLIESSLICH mit JSON: " +
-            "{\"stueckTitel\":\"|null\",\"komponist\":\"|null\"}.\n" +
+        var sys = "Du extrahierst aus TITEL und (falls vorhanden) BESCHREIBUNG eines Blasmusik-/Brassband-" +
+            "YouTube-Videos das gespielte Stück, – falls klar genannt – die Komponist:in, den Aufführungs-Ort " +
+            "und den Anlass. Antworte AUSSCHLIESSLICH mit JSON: " +
+            "{\"stueckTitel\":\"|null\",\"komponist\":\"|null\",\"ort\":\"|null\",\"anlass\":\"|null\"}.\n" +
             "Regeln:\n" +
             "- stueckTitel: der reine Werktitel – OHNE Bandname, OHNE Jahr, OHNE Ort, OHNE Zusätze wie " +
             "\"live\", \"Jahreskonzert\", \"HD\", Kanal-/Reihennamen. Ist kein Stück erkennbar: null.\n" +
-            "- komponist: \"Vorname Nachname\", NUR wenn im Titel genannt oder eindeutig (z. B. in Klammern/" +
+            "- komponist: \"Vorname Nachname\", NUR wenn genannt oder eindeutig (z. B. in Klammern/" +
             "nach \"by\"/\"von\"). Sonst null. NICHT raten, NICHT den Bandnamen oder die Dirigentin nehmen.\n" +
-            "- Bei Bearbeitungen zählt der ursprüngliche Komponist des Werks, nicht der Arrangeur.";
+            "- Bei Bearbeitungen zählt der ursprüngliche Komponist des Werks, nicht der Arrangeur.\n" +
+            "- ort: Aufführungsort (z. B. \"KKL Luzern\", \"Mehrzweckhalle Sempach\"), NUR wenn genannt. Sonst null.\n" +
+            "- anlass: der Anlass/das Konzert (z. B. \"Jahreskonzert 2024\", \"Kirchenkonzert\", \"Galakonzert\"), " +
+            "NUR wenn genannt. Sonst null. NICHT raten.";
         var user = string.IsNullOrWhiteSpace(bandName)
             ? $"Videotitel: \"{videoTitel}\""
             : $"Videotitel: \"{videoTitel}\"\n(Spielende Band: \"{bandName}\" – das ist NICHT der Stücktitel.)";
+        if (!string.IsNullOrWhiteSpace(beschreibung))
+            user += $"\n\nBeschreibung (Auszug):\n{beschreibung.Trim()[..Math.Min(beschreibung.Trim().Length, 1200)]}";
         var body = new
         {
             model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
@@ -623,7 +683,8 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
             var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
             if (string.IsNullOrWhiteSpace(json)) return new VideoAnalyse(null, null);
             var dto = JsonSerializer.Deserialize<VideoTitelDto>(json, MistralJson);
-            return new VideoAnalyse(Plausibel(dto?.StueckTitel, 2, 160), Plausibel(dto?.Komponist, 3, 60));
+            return new VideoAnalyse(Plausibel(dto?.StueckTitel, 2, 160), Plausibel(dto?.Komponist, 3, 60),
+                Plausibel(dto?.Ort, 2, 80), Plausibel(dto?.Anlass, 3, 80));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) { logger.LogWarning(ex, "Videotitel-Analyse fehlgeschlagen für {Titel}", videoTitel); return new VideoAnalyse(null, null); }
@@ -638,7 +699,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         return s.Length >= min && s.Length <= max ? s : null;
     }
 
-    private record VideoTitelDto(string? StueckTitel, string? Komponist);
+    private record VideoTitelDto(string? StueckTitel, string? Komponist, string? Ort, string? Anlass);
 
     // ── Chunking großer Seiten + Zusammenführung der Teil-Antworten ──────────
     private const int ChunkUeberlappung = 1500;
@@ -690,8 +751,10 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private static IEnumerable<ExtrahierterFund> AlsFunde(MistralAntwort a, ExtraktionsAnfrage anfrage)
     {
-        // Bei BandDomain ist die Quell-Band die Standard-Band, wenn keine genannt wird.
-        var standardBand = anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain ? Leer(anfrage.BandName) : null;
+        // Auf einer Vereinsseite (BandDomain/Konzert-Vorschau) ist die Quell-Band die Standard-Band, wenn keine genannt wird.
+        var standardBand = anfrage.QuelleTyp is CrawlQuelleTyp.BandDomain or CrawlQuelleTyp.BandKonzertVorschau
+            ? Leer(anfrage.BandName) : null;
+        var heute = DateOnly.FromDateTime(DateTime.Today);
 
         foreach (var k in a.Konzerte ?? [])
         {
@@ -701,10 +764,16 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                     p.StueckTitel!.Trim(), Leer(p.KomponistName), Leer(p.BandName) ?? standardBand,
                     p.Reihenfolge, Leer(p.ArrangeurName)))
                 .ToList();
+            // Konzert-Vorschau (BandKonzertVorschau): nur KÜNFTIGE Termine, dafür OHNE Programm-Pflicht –
+            // es geht um möglichst viele angekündigte Konzerte. Vergangene/datumslose weglassen.
+            if (anfrage.QuelleTyp == CrawlQuelleTyp.BandKonzertVorschau)
+            {
+                if (k.Datum is not { } dat || dat < heute) continue;
+            }
             // Vereinsseiten (BandDomain): nur Konzerte mit mindestens einem Programm-Stück – ein blosser
             // Termin ohne Stücke ist für eine Vereins-Konzertliste zu wenig aussagekräftig. Sonst (Veranstalter-/
             // Lokal-Seiten) genügt Datum oder Programm.
-            if (anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain)
+            else if (anfrage.QuelleTyp == CrawlQuelleTyp.BandDomain)
             {
                 if (programm.Count == 0) continue;
             }

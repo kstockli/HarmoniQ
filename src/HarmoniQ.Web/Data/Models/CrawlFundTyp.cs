@@ -23,6 +23,10 @@ public enum CrawlFundTyp
     /// Übernahme legt eine inaktive BandDomain-Quelle (Vorschlag) an.</summary>
     Webseite = 5,
 
+    /// <summary>YouTube-Video einer Band (aus dem Kanal-Crawl §4.5): Stück/Komponist:in/Ort/Anlass als
+    /// Vorschlag (per LLM aus Titel+Beschreibung). Übernahme → <see cref="Video"/> (find-or-create Stück).</summary>
+    Video = 6,
+
     /// <summary>Sonstiger Fund (z. B. Webseiten-Vorschlag, noch nicht zugeordnet).</summary>
     Sonstiges = 99
 }
