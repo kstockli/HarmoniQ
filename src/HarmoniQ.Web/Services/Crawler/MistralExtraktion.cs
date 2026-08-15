@@ -778,7 +778,17 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
                 if (programm.Count == 0) continue;
             }
             else if (k.Datum is null && programm.Count == 0) continue;
-            var daten = new KonzertFundDaten(k.Datum, k.Uhrzeit, Leer(k.Name), Leer(k.Ort), null, programm, Webseite: Leer(k.Webseite));
+
+            // BandKonzertVorschau: Die Quelle ist „alle Bands" (Quelle.BandId = null), daher trägt der
+            // Übernahme-Pfad die Band NICHT selbst nach. Deshalb die Quell-Band (die Band, deren Agenda
+            // gecrawlt wurde) als teilnehmende Band in die Fund-Daten legen – so wird das Konzert beim
+            // Übernehmen der Original-Band zugeordnet (im Programm genannte Gastbands kommen zusätzlich über
+            // die Programmzeilen). Sichtbar auch als „Band" im Funde-Review.
+            var raenge = anfrage.QuelleTyp == CrawlQuelleTyp.BandKonzertVorschau && standardBand is { } sb
+                ? new List<RangZeileDaten> { new(sb) }
+                : null;
+            var daten = new KonzertFundDaten(k.Datum, k.Uhrzeit, Leer(k.Name), Leer(k.Ort), null, programm,
+                Raenge: raenge, Webseite: Leer(k.Webseite));
             yield return new ExtrahierterFund(CrawlFundTyp.Konzert, CrawlDaten.Serialisiere(daten));
         }
 

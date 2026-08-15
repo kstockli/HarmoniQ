@@ -528,10 +528,17 @@ Konzerte-Unterseiten** (Link-Heuristik `IstAgendaLink`) laden und per LLM extrah
   Herbst-/Gala-/Kirchen-/Advents-/Weihnachts-/Muttertagskonzert, Unterhaltungskonzert/-abend, Serenade, **Musical**,
   **Platzkonzert** (im Zweifel ja). **Ausgeschlossen:** Kilbi/Chilbi, Ständchen, Alters-/Pflegeheim-Auftritte,
   Fasnacht/Guggen, Umzug/Marsch/Parade, GV, Bazar, Lotto, Vereinsessen, Papiersammlung.
-- **Funde & Dedup:** Konzert-`CrawlFund`e (Review in `/admin/crawler/funde`), Band aus dem Seiten-Kontext gesetzt.
-  Dedup über Läufe via `ExternKey = "vorschau:{bandId}:{datum}:{name}"` (offene Funde werden aktualisiert,
-  bereits entschiedene übersprungen). Endgültige Doppel-Vermeidung beim Übernehmen via
+- **Funde & Dedup:** Konzert-`CrawlFund`e (Review in `/admin/crawler/funde`). Dedup über Läufe via
+  `ExternKey = "vorschau:{bandId}:{datum}:{name}"` (offene Funde werden aktualisiert, bereits entschiedene
+  übersprungen). Endgültige Doppel-Vermeidung beim Übernehmen via
   `KonzertErfassungService.ErfasseOderAktualisiereAsync` (Datum+Name+Ort+Bands).
+- **Band-Zuordnung (Fix 2026-08-15):** Da die Aggregat-Quelle über ALLE Bands läuft (`Quelle.BandId = null`),
+  wird die **Quell-Band** (die Band, deren Agenda gecrawlt wurde) als teilnehmende Band **in die Fund-Daten**
+  gelegt (`KonzertFundDaten.Raenge` in `MistralExtraktion.AlsFunde`) – sichtbar im Review und beim Übernehmen
+  verlinkt. Zusätzlich zieht `CrawlUebernahmeService` die Band notfalls aus dem `ExternKey` (`vorschau:{bandId}:…`),
+  falls `Quelle.BandId` fehlt (greift auch für bereits vorhandene Funde). Im Programm genannte **Gastbands**
+  kommen zusätzlich über die Programmzeilen dazu. Grundsatz: **findet der Crawler keine andere Band, wird das
+  Konzert der Original-Band angehängt.**
 
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 

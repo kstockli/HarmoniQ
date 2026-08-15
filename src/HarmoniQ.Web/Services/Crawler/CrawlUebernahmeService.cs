@@ -112,11 +112,20 @@ public static class CrawlUebernahmeService
         // Zugehörige Videos (z. B. SBBW Infomaniak-VOD) anlegen und mit Stück/Band verknüpfen.
         await VideosUebernehmenAsync(db, konzertId, d.Videos);
 
-        // BandDomain-Funde: Konzert immer der Quell-Band zuordnen (auch ohne Programm-Band).
+        // Konzert der Quell-Band zuordnen (auch ohne Programm-Band):
+        //  1) reguläre BandDomain-Quelle → Quelle.BandId
+        //  2) Aggregat „Konzert-Vorschau" (Quelle über ALLE Bands, BandId = null) → Band aus dem
+        //     ExternKey „vorschau:{bandId}:{datum}:{name}". So wird auch ein bereits vorhandener Fund
+        //     korrekt der Original-Band angehängt, wenn der Crawler keine andere Band gefunden hat.
         var bandId = await db.CrawlLaeufe
             .Where(l => l.Id == fund.LaufId)
             .Select(l => l.Quelle.BandId)
             .FirstOrDefaultAsync();
+        if (bandId is null && fund.ExternKey is { } ek && ek.StartsWith("vorschau:", StringComparison.Ordinal))
+        {
+            var teile = ek.Split(':');
+            if (teile.Length >= 2 && Guid.TryParse(teile[1], out var ausKey)) bandId = ausKey;
+        }
         if (bandId is { } bid && !await db.KonzertBands.AnyAsync(kb => kb.KonzertId == konzertId && kb.BandId == bid))
             db.KonzertBands.Add(new KonzertBand { KonzertId = konzertId, BandId = bid });
     }
