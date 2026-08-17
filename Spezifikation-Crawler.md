@@ -446,6 +446,16 @@ vorgefiltert per Heuristik (Ganz-Konzert-/Nicht-Musik-Titel wie „Jahreskonzert
 degradiert sauber (ohne `GoogleCx` oder bei erschöpftem Kontingent bleiben die Felder leer → Admin füllt in der
 Review). Steuerung in `BandVideoCrawlService.AnreichernAsync`.
 
+**Robustheit LLM (Fix 2026-08-17):** Ursache leerer Funde auf Prod war NICHT der Prompt (das Modell erkennt
+z. B. „Band - Dirty Dancing - Torstein Aagaard-Nilsen" inkl. Ort/Anlass korrekt), sondern **verschluckte
+LLM-Fehler**: Ein `HTTP 429` (Rate-Limit im Batch über viele Videos) wurde still zu `null`. Zwei Massnahmen:
+(1) **Retry mit Backoff** bei 429/5xx (respektiert `Retry-After`) in `MistralExtraktion.PostMitRetryAsync` –
+genutzt von der Titel-Analyse, der Video-Such-Analyse und der Haupt-Extraktion; Fehlschläge werden jetzt
+**geloggt** (Status sichtbar) statt still verschluckt. (2) **Selbstheilung**: ein erneuter YouTube-Lauf
+überspringt bereits vorhandene, **offene Funde mit leerem Stück** nicht mehr, sondern **analysiert sie neu und
+füllt sie nach** (`BandVideoCrawlService.SuchenAsync`, „geheilt"-Zähler im Log). Prüfen falls weiter leer:
+`Crawler:Llm:Model` auf Prod (sollte `mistral-large-latest` sein, kein kleineres Modell).
+
 **Kanal vor Namenssuche (Entscheid, 2026-07-13):** Der Kanal-Weg ist **präziser** (genau die Uploads dieser
 Band statt namensähnlicher Fremdtreffer) und **günstiger** (`channels.list` + `playlistItems.list` je
 1 Einheit statt 100 für die Suche). Deshalb: Kanal-Link, wenn vorhanden — die Namenssuche bleibt Fallback

@@ -99,10 +99,20 @@ else
                 }
 
                 <MudStack Row="true" Class="mt-3" Wrap="Wrap.Wrap" Spacing="2">
-                    <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
-                               StartIcon="@Icons.Material.Filled.Star" OnClick="Bewerten" Disabled="@(!_bereit)">
-                        @(_eigene != null ? "Bewertung ändern" : "Bewerten")
-                    </MudButton>
+                    @if (_userId != null)
+                    {
+                        <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
+                                   StartIcon="@Icons.Material.Filled.Star" OnClick="Bewerten" Disabled="@(!_bereit)">
+                            @(_eigene != null ? "Bewertung ändern" : "Bewerten")
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                                   StartIcon="@Icons.Material.Filled.Login" Href="@LoginHref">
+                            Zum Bewerten anmelden
+                        </MudButton>
+                    }
                     @if (_stats != null && _stats.Anzahl > 0)
                     {
                         <MudButton Variant="Variant.Text" Style="color:#9B59B6;"
@@ -111,6 +121,12 @@ else
                         </MudButton>
                     }
                 </MudStack>
+                @if (_userId == null)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="color:#A78FC0;">
+                        Für Bewertungen ist ein kostenloses Konto nötig.
+                    </MudText>
+                }
             </MudPaper>
 
             @* Besetzung – ein-/ausklappbar *@
@@ -197,12 +213,12 @@ else
     private List<Zeile> _mitwirkende = [];
 
     private string? _userId;
-    private string? _voterId;
     private bool _bereit;
+    // Bewertungen erfordern ein Konto (Nutzungsbedingungen §2). Anonyme werden zum Login geleitet.
+    private string LoginHref => $"Account/Login?ReturnUrl={Uri.EscapeDataString($"/videos/{Id}")}";
 
     private List<Kandidat> _kandidaten = [];
     private readonly HashSet<Guid> _ausgewaehlt = [];
-    private IJSObjectReference? _voterModule;
 
     private List<BreadcrumbItem> _breadcrumbs => _video == null ? [] :
     [
@@ -320,11 +336,6 @@ else
         if (!firstRender) return;
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (_userId == null)
-        {
-            _voterModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voter.js");
-            _voterId = await _voterModule.InvokeAsync<string>("getVoterId");
-        }
         await LadeEigeneAsync();
         _bereit = true;
         StateHasChanged();
@@ -350,14 +361,20 @@ else
     private async Task LadeEigeneAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _eigene = _userId != null
-            ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId)
-            : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.AnonymerCookieId == _voterId);
+        _eigene = _userId == null
+            ? null
+            : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId);
     }
 
     private async Task Bewerten()
     {
         if (_video == null) return;
+        if (_userId == null)   // Konto-Pflicht (Nutzungsbedingungen §2): kein anonymes Bewerten mehr.
+        {
+            Snackbar.Add("Für Bewertungen ist ein Konto nötig – bitte melde dich an.", Severity.Info);
+            Nav.NavigateTo(LoginHref);
+            return;
+        }
         var parameters = new DialogParameters<BewertenDialog>
         {
             { x => x.VideoTitel, _video.Titel },
@@ -379,13 +396,11 @@ else
         var m = (BewertenDialog.BewertungsModell)result.Data!;
 
         await using var db = await DbFactory.CreateDbContextAsync();
-        var bestehend = _userId != null
-            ? await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId)
-            : await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.AnonymerCookieId == _voterId);
+        var bestehend = await db.Bewertungen.FirstOrDefaultAsync(b => b.VideoId == Id && b.BenutzerId == _userId);
         var istNeu = bestehend == null;
         if (bestehend == null)
         {
-            bestehend = new Bewertung { VideoId = Id, BenutzerId = _userId, AnonymerCookieId = _userId == null ? _voterId : null };
+            bestehend = new Bewertung { VideoId = Id, BenutzerId = _userId };
             db.Bewertungen.Add(bestehend);
         }
         bestehend.GesamtEindruck = m.GesamtEindruck;

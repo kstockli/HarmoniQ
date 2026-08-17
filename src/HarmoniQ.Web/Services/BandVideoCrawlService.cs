@@ -106,16 +106,26 @@ public class BandVideoCrawlService(
         var band = await db.Bands.FirstOrDefaultAsync(b => b.Id == bandId, ct);
         if (band is null) return new SuchBericht(0, 0, true);
 
-        // Schon bekannt = bereits erfasste YouTube-Videos der Band + bereits vorhandene Video-Funde (ExternKey).
-        var bekannteVideos = await db.Videos
+        // Bereits als Video erfasste YouTube-IDs der Band → immer überspringen.
+        var erfasst = new HashSet<string>(await db.Videos
             .Where(v => v.BandId == bandId && v.Plattform == VideoPlattform.YouTube)
-            .Select(v => v.ExternId).ToListAsync(ct);
+            .Select(v => v.ExternId).ToListAsync(ct), StringComparer.Ordinal);
+
+        // Vorhandene Video-Funde der Band: entschiedene ODER bereits befüllte überspringen; OFFENE mit noch
+        // LEEREM Stück erneut analysieren (Selbstheilung – z. B. nach Rate-Limit-Ausfällen beim ersten Lauf).
         var prefix = $"youtube:{bandId}:";
-        var bekannteFundKeys = await db.CrawlFunde
+        var vorhandeneFunde = await db.CrawlFunde
             .Where(f => f.Typ == CrawlFundTyp.Video && f.ExternKey != null && f.ExternKey.StartsWith(prefix))
-            .Select(f => f.ExternKey!).ToListAsync(ct);
-        var bekannt = new HashSet<string>(bekannteVideos, StringComparer.Ordinal);
-        foreach (var k in bekannteFundKeys) bekannt.Add(k[prefix.Length..]);
+            .ToListAsync(ct);
+        var blockiert = new HashSet<string>(erfasst, StringComparer.Ordinal);
+        var heilbar = new Dictionary<string, CrawlFund>(StringComparer.Ordinal);
+        foreach (var f in vorhandeneFunde)
+        {
+            var extId = f.ExternKey![prefix.Length..];
+            var offenLeer = f.Status == CrawlFundStatus.Offen
+                && string.IsNullOrWhiteSpace(CrawlDaten.Deserialisiere<VideoFundDaten>(f.DatenJson)?.StueckTitel);
+            if (offenLeer) heilbar[extId] = f; else blockiert.Add(extId);
+        }
 
         // Kanal bevorzugen (präzise + 1 statt 100 Kontingent-Einheiten), sonst Namenssuche.
         var kanalUrl = await db.BandLinks
@@ -135,15 +145,18 @@ public class BandVideoCrawlService(
             treffer = ergebnis.Treffer;
         }
 
-        // Nur wirklich neue Video-IDs weiterverarbeiten.
-        var neueTreffer = treffer.Where(t => !string.IsNullOrWhiteSpace(t.VideoId) && bekannt.Add(t.VideoId)).ToList();
+        // Zu bearbeiten: neue Videos ODER heilbare (offen + leeres Stück). Lokaler Dedup gegen Doppel-IDs.
+        var gesehen = new HashSet<string>(StringComparer.Ordinal);
+        var zuBearbeiten = treffer
+            .Where(t => !string.IsNullOrWhiteSpace(t.VideoId) && !blockiert.Contains(t.VideoId) && gesehen.Add(t.VideoId))
+            .ToList();
 
         // Dauer + Beschreibung nachladen: kurze Clips (Trailer/Interviews/Jingles) < 2 Min aussortieren,
         // die Beschreibung hilft dem LLM bei Ort/Anlass. 1 Kontingent-Einheit je 50 Videos.
-        var details = await suche.VideoDetailsAsync(neueTreffer.Select(t => t.VideoId).ToList(), ct);
+        var details = await suche.VideoDetailsAsync(zuBearbeiten.Select(t => t.VideoId).ToList(), ct);
 
-        int neu = 0, zuKurz = 0;
-        foreach (var t in neueTreffer)
+        int neu = 0, geheilt = 0, zuKurz = 0;
+        foreach (var t in zuBearbeiten)
         {
             details.TryGetValue(t.VideoId, out var det);
             // Bekannte Dauer < Mindestlänge → überspringen; unbekannte Dauer (0) im Zweifel behalten.
@@ -166,23 +179,37 @@ public class BandVideoCrawlService(
 
             var daten = new VideoFundDaten(t.VideoId, t.Titel, bandId, band.Name, t.Kanal,
                 stueck, komponist, analyse.Ort, analyse.Anlass);
-            db.CrawlFunde.Add(new CrawlFund
+
+            if (heilbar.TryGetValue(t.VideoId, out var bestehend))
             {
-                LaufId = laufId,
-                Typ = CrawlFundTyp.Video,
-                ExternKey = FundKey(bandId, t.VideoId),
-                QuellUrl = $"https://youtu.be/{t.VideoId}",
-                AbgerufenAm = DateTime.UtcNow,
-                DatenJson = CrawlDaten.Serialisiere(daten),
-                Konfidenz = Konfidenz.Mittel,
-                Status = CrawlFundStatus.Offen
-            });
-            neu++;
+                // Bestehenden leeren Fund nur aktualisieren, wenn die Analyse jetzt etwas ergab (kein Downgrade).
+                if (!string.IsNullOrWhiteSpace(stueck) || !string.IsNullOrWhiteSpace(analyse.Ort) || !string.IsNullOrWhiteSpace(analyse.Anlass))
+                {
+                    bestehend.DatenJson = CrawlDaten.Serialisiere(daten);
+                    bestehend.AbgerufenAm = DateTime.UtcNow;
+                    geheilt++;
+                }
+            }
+            else
+            {
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    LaufId = laufId,
+                    Typ = CrawlFundTyp.Video,
+                    ExternKey = FundKey(bandId, t.VideoId),
+                    QuellUrl = $"https://youtu.be/{t.VideoId}",
+                    AbgerufenAm = DateTime.UtcNow,
+                    DatenJson = CrawlDaten.Serialisiere(daten),
+                    Konfidenz = Konfidenz.Mittel,
+                    Status = CrawlFundStatus.Offen
+                });
+                neu++;
+            }
         }
 
         await db.SaveChangesAsync(ct);
-        logger.LogInformation("YouTube {Modus} Band {Band}: {Geprueft} geprüft, {Neu} neu, {Kurz} zu kurz (<2 Min).",
-            ueberKanal ? "Kanal" : "Namenssuche", band.Name, treffer.Count, neu, zuKurz);
+        logger.LogInformation("YouTube {Modus} Band {Band}: {Geprueft} geprüft, {Neu} neu, {Geheilt} nachgefüllt, {Kurz} zu kurz (<2 Min).",
+            ueberKanal ? "Kanal" : "Namenssuche", band.Name, treffer.Count, neu, geheilt, zuKurz);
         return new SuchBericht(neu, treffer.Count, true, ueberKanal);
     }
 

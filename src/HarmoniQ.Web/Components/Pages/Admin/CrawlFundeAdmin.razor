@@ -507,7 +507,9 @@ else
 
         var parameters = new DialogParameters<ConfirmDialog>
         {
-            { x => x.Text, $"{offene.Count} angezeigte, offene Funde übernehmen? (Find-or-create; bei Webseiten entstehen Quellen-Vorschläge.)" }
+            { x => x.Text, $"{offene.Count} angezeigte, offene Funde übernehmen? (Find-or-create; bei Webseiten entstehen Quellen-Vorschläge.)" },
+            { x => x.ConfirmText, "Übernehmen" },
+            { x => x.ConfirmColor, Color.Success }
         };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Übernehmen bestätigen", parameters);
         var result = await dialog.Result;
@@ -530,7 +532,9 @@ else
     {
         var parameters = new DialogParameters<ConfirmDialog>
         {
-            { x => x.Text, "Alle OFFENEN Funde im aktuellen Filter (Typ/Lauf) als verworfen markieren?" }
+            { x => x.Text, "Alle OFFENEN Funde im aktuellen Filter (Typ/Lauf) als verworfen markieren?" },
+            { x => x.ConfirmText, "Verwerfen" },
+            { x => x.ConfirmColor, Color.Warning }
         };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Verwerfen bestätigen", parameters);
         var result = await dialog.Result;

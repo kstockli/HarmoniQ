@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -93,6 +94,45 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         "Muko = Musikkommission (gremium=\"Muko\"). funktion = die konkrete Rolle, email/instrument nur falls " +
         "genannt. Sonst leeres Array. (Dirigent:innen gehören weiterhin in leitungen, NICHT in funktionaere.)";
 
+    /// <summary>POST an Mistral mit Retry bei <b>Rate-Limit (429)</b> und vorübergehenden Serverfehlern (5xx):
+    /// exponentieller Backoff, respektiert den <c>Retry-After</c>-Header. Ohne Retry würde ein 429 im Batch
+    /// (viele Videos/Seiten) still zu einem leeren Fund führen. Aufrufer:in muss die Antwort disposen.</summary>
+    private async Task<HttpResponseMessage> PostMitRetryAsync(object body, CancellationToken ct)
+    {
+        const int maxVersuche = 4;
+        for (var versuch = 1; ; versuch++)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+            {
+                Content = JsonContent.Create(body)
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            var resp = await http.SendAsync(req, ct);
+
+            var voruebergehend = resp.StatusCode == HttpStatusCode.TooManyRequests || (int)resp.StatusCode >= 500;
+            if (!voruebergehend || versuch >= maxVersuche) return resp;
+
+            var wartMs = BackoffMs(resp, versuch);
+            logger.LogWarning("Mistral HTTP {Code} (Rate-Limit/temporär) – Versuch {V}/{Max}, warte {Ms} ms.",
+                (int)resp.StatusCode, versuch, maxVersuche, wartMs);
+            resp.Dispose();
+            await Task.Delay(wartMs, ct);
+        }
+    }
+
+    /// <summary>Wartezeit vor dem nächsten Versuch: <c>Retry-After</c> (Sek. oder Datum) bevorzugt, sonst
+    /// exponentiell 1s/2s/4s (Deckel 8s) + kleiner fixer Aufschlag.</summary>
+    private static int BackoffMs(HttpResponseMessage resp, int versuch)
+    {
+        if (resp.Headers.RetryAfter?.Delta is { } d) return (int)Math.Min(d.TotalMilliseconds, 30_000);
+        if (resp.Headers.RetryAfter?.Date is { } dt)
+        {
+            var ms = (dt - DateTimeOffset.UtcNow).TotalMilliseconds;
+            if (ms > 0) return (int)Math.Min(ms, 30_000);
+        }
+        return Math.Min(1000 * (int)Math.Pow(2, versuch - 1), 8000) + 250;
+    }
+
     public async Task<ExtraktionsErgebnis> ExtrahiereAsync(ExtraktionsAnfrage anfrage, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(anfrage.Text)) return ExtraktionsErgebnis.Leer();
@@ -173,10 +213,7 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
-            req.Content = JsonContent.Create(body);
-            using var resp = await http.SendAsync(req, ct);
+            using var resp = await PostMitRetryAsync(body, ct);
             if (!resp.IsSuccessStatusCode)
             {
                 var fehlertext = await resp.Content.ReadAsStringAsync(ct);
@@ -587,11 +624,12 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         };
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
-            req.Content = JsonContent.Create(body);
-            using var resp = await http.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return new VideoAnalyse(null, null);
+            using var resp = await PostMitRetryAsync(body, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Video-Such-Analyse: Mistral HTTP {Code} für {Titel} → leer.", (int)resp.StatusCode, videoTitel);
+                return new VideoAnalyse(null, null);
+            }
             var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
             var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
             if (string.IsNullOrWhiteSpace(json)) return new VideoAnalyse(null, null);
@@ -674,11 +712,12 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         };
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
-            req.Content = JsonContent.Create(body);
-            using var resp = await http.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return new VideoAnalyse(null, null);
+            using var resp = await PostMitRetryAsync(body, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Videotitel-Analyse: Mistral HTTP {Code} für {Titel} → leer.", (int)resp.StatusCode, videoTitel);
+                return new VideoAnalyse(null, null);
+            }
             var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
             var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
             if (string.IsNullOrWhiteSpace(json)) return new VideoAnalyse(null, null);
