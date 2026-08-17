@@ -45,9 +45,13 @@
     </MudPaper>
 }
 
-<MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Stück / Kommentar)" Variant="Variant.Outlined"
-              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
-              Clearable="true" Class="mb-3" Style="max-width:360px;" />
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3" Spacing="3" Wrap="Wrap.Wrap">
+    <MudTextField @bind-Value="_suche" @bind-Value:after="Filtern" Label="Suchen (Stück / Kommentar)" Variant="Variant.Outlined"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+                  Clearable="true" Style="max-width:360px;" Margin="Margin.Dense" />
+    <MudCheckBox T="bool" @bind-Value="_nurPruefung" @bind-Value:after="Filtern" Dense="true" Color="Color.Warning"
+                 Label="Nur zur Prüfung" />
+</MudStack>
 
 <MudDataGrid T="Zeile" Items="_gefiltert" Hover="true" Dense="true" SortMode="SortMode.Single" Style="background:#1a0030;">
     <Columns>
@@ -64,6 +68,18 @@
             </CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="z => z.Kommentar" Title="Kommentar" />
+        <TemplateColumn Title="Status" Sortable="false">
+            <CellTemplate>
+                @if (context.Item.Status == BewertungStatus.ZurPruefung)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.HourglassTop">zur Prüfung</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Style="background:#103d36;color:#1ABC9C;">freigegeben</MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
         <TemplateColumn Title="Datum" SortBy="@(z => z.ErstelltAm)">
             <CellTemplate>@context.Item.ErstelltAm.ToString("dd.MM.yyyy")</CellTemplate>
         </TemplateColumn>
@@ -73,6 +89,11 @@
         }
         <TemplateColumn Title="Aktionen" Sortable="false">
             <CellTemplate>
+                @if (context.Item.Status == BewertungStatus.ZurPruefung)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                   title="Freigeben" OnClick="@(() => Freigeben(context.Item))" />
+                }
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="color:#D4AF37;"
                                OnClick="@(() => Bearbeiten(context.Item))" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -87,6 +108,7 @@
     private List<Zeile> _gefiltert = [];
     private string _suche = "";
     private bool _zeigeAudit;
+    private bool _nurPruefung;
     private int[] _verteilung = new int[6];  // Index 1..5 = Anzahl Bewertungen mit diesem Gesamteindruck
     private double _schnitt;
 
@@ -105,7 +127,7 @@
                 b.Video.Stueck.Titel,
                 b.Benutzer != null ? (b.Benutzer.Email ?? "Benutzer") : "anonym (Cookie)",
                 b.GesamtEindruck, b.Praezision, b.Musikalitaet, b.AkustischeQualitaet, b.VideoQualitaet,
-                b.Kommentar, b.ErstelltAm, b.ModifyTime, b.ModifyUser))
+                b.Status, b.Kommentar, b.ErstelltAm, b.ModifyTime, b.ModifyUser))
             .ToListAsync();
 
         _verteilung = new int[6];
@@ -116,10 +138,24 @@
         Filtern();
     }
 
-    private void Filtern() =>
-        _gefiltert = _suche == "" ? _alle
-            : _alle.Where(z => z.StueckTitel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
-                            || (z.Kommentar?.Contains(_suche, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+    private void Filtern()
+    {
+        IEnumerable<Zeile> q = _alle;
+        if (_nurPruefung) q = q.Where(z => z.Status == BewertungStatus.ZurPruefung);
+        if (_suche != "")
+            q = q.Where(z => z.StueckTitel.Contains(_suche, StringComparison.OrdinalIgnoreCase)
+                          || (z.Kommentar?.Contains(_suche, StringComparison.OrdinalIgnoreCase) ?? false));
+        _gefiltert = q.ToList();
+    }
+
+    private async Task Freigeben(Zeile z)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Bewertungen.FindAsync(z.Id);
+        if (entity != null) { entity.Status = BewertungStatus.Freigegeben; await db.SaveChangesAsync(); }
+        Snackbar.Add("Bewertung freigegeben.", Severity.Success);
+        await Laden();
+    }
 
     private async Task Bearbeiten(Zeile z)
     {
@@ -175,6 +211,6 @@
 
     private record Zeile(Guid Id, Guid StueckId, string StueckTitel, string Bewerter,
         int GesamtEindruck, int Praezision, int Musikalitaet, int AkustischeQualitaet, int VideoQualitaet,
-        string? Kommentar, DateTime ErstelltAm,
+        BewertungStatus Status, string? Kommentar, DateTime ErstelltAm,
         DateTime? ModifyTime, string? ModifyUser);
 }

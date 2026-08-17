@@ -95,7 +95,7 @@
                 Videos
             </MudNavLink>
             <MudNavLink Href="/admin/bewertungen" Icon="@Icons.Material.Filled.Star">
-                Bewertungen
+                Bewertungen @Badge(_bewertungenOffen)
             </MudNavLink>
 
             <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary">Vorschläge</MudText>
@@ -136,7 +136,7 @@
 </MudNavMenu>
 
 @code {
-    private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen, _crawlerFundeOffen, _einladungenOffen;
+    private int _videosOffen, _mitwirkungenOffen, _richtigstellungenOffen, _verknuepfungenOffen, _bandantraegeOffen, _crawlerFundeOffen, _einladungenOffen, _bewertungenOffen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,6 +149,7 @@
             _verknuepfungenOffen = await db.PersonAnsprueche.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
             _bandantraegeOffen = await db.BandbeitrittAntraege.CountAsync(a => a.Status == PersonAnspruchStatus.Offen);
             _crawlerFundeOffen = await db.CrawlFunde.CountAsync(f => f.Status == CrawlFundStatus.Offen);
+            _bewertungenOffen = await db.Bewertungen.CountAsync(b => b.Status == BewertungStatus.ZurPruefung);
             _einladungenOffen = await BandAdminService.OffeneVorschlaegeCountAsync(db);
         }
         catch { /* Menü darf nie wegen Zählern brechen */ }

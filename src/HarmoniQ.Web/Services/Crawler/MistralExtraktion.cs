@@ -508,6 +508,41 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
 
     private record BandAntwort(string? Band);
 
+    public async Task<BeitragPruefung> BeitragPruefenAsync(string text, CancellationToken ct = default)
+    {
+        // Ohne Schlüssel oder leerer Text → freigeben (fail-open; Moderation kann nachträglich eingreifen).
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(_llm.ApiKey)) return new(true, null);
+        var sys = "Du moderierst öffentliche Bewertungs-Kommentare einer Blasmusik-Plattform anhand der " +
+            "Verhaltensregeln: Beiträge müssen SACHLICH sein; verboten sind Schmähkritik, Beleidigungen, " +
+            "ehrverletzende oder diskriminierende Aussagen, rechtswidrige/persönlichkeitsverletzende/irreführende " +
+            "Inhalte. Sachliche Kritik (auch negativ) ist ERLAUBT. Gib AUSSCHLIESSLICH JSON zurück: " +
+            "{\"ok\":true|false,\"grund\":\"kurz\"|null}. ok=false nur bei klarem Regelverstoss; im Zweifel ok=true.";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.0,
+            response_format = new { type = "json_object" },
+            messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = text } }
+        };
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llm.ApiKey);
+            req.Content = JsonContent.Create(body);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return new(true, null);   // fail-open bei API-Problem
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var inhalt = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(inhalt)) return new(true, null);
+            var a = JsonSerializer.Deserialize<PruefAntwort>(inhalt, MistralJson);
+            return new(a?.Ok ?? true, Leer(a?.Grund));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "Beitrags-Prüfung fehlgeschlagen."); return new(true, null); }
+    }
+
+    private record PruefAntwort(bool? Ok, string? Grund);
+
     public async Task<KklProgramm> KklProgrammAsync(string titel, string? programmText, string? mitwirkendeText, CancellationToken ct = default)
     {
         var leer = new KklProgramm([], [], null);

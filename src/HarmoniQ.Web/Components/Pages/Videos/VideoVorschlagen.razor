@@ -1,0 +1,171 @@
+@page "/videos/vorschlagen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using HarmoniQ.Web.Data
+@using HarmoniQ.Web.Data.Models
+@using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Services.Crawler
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthProvider
+@inject YouTubeMetadataService YouTube
+@inject IExtraktion Extraktion
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Video vorschlagen – HarmoniQ</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Video vorschlagen</MudText>
+
+<MudPaper Class="pa-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060; max-width:680px;">
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
+        Kennst du eine Aufnahme? Füge den <b>Link</b> ein (YouTube oder direkte Datei-URL) – wir versuchen
+        Band und Titel zu erkennen. Ergänze dann <b>Band</b> und <b>Stück</b>: bereits erfasste kannst du
+        auswählen, neue einfach eintippen. Eine Admin-Person prüft den Vorschlag, bevor er erscheint.
+    </MudText>
+
+    @* 1. Link *@
+    <MudTextField @bind-Value="_url" @bind-Value:after="LinkGeaendert" Immediate="false"
+                  Label="Video-Link (YouTube oder …/film.mp4)" Variant="Variant.Outlined" Required="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" Class="mb-1" />
+    @if (_pruefeLaeuft)
+    {
+        <MudText Typo="Typo.caption" Style="color:#A78FC0;">Erkenne Video …</MudText>
+    }
+    else if (_erkannt)
+    {
+        <MudText Typo="Typo.caption" Style="color:#1ABC9C;">
+            Erkannt: @(_istDatei ? "direkte Datei" : "YouTube")@(string.IsNullOrWhiteSpace(_kanal) ? "" : $" · Kanal: {_kanal}")
+            @(_kiLaeuft ? " · analysiere Stück …" : "")
+        </MudText>
+    }
+    else if (!string.IsNullOrWhiteSpace(_url))
+    {
+        <MudText Typo="Typo.caption" Style="color:#e57373;">Kein gültiger YouTube-/Datei-Link erkannt.</MudText>
+    }
+
+    @* 2. Band *@
+    <MudAutocomplete T="string" @bind-Value="_bandName" Label="Band (wählen oder neu eintippen)"
+                     Variant="Variant.Outlined" Class="mt-4" SearchFunc="SucheBand"
+                     CoerceValue="true" ResetValueOnEmptyText="false" MaxItems="20" Clearable="true"
+                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups"
+                     HelperText="Leer lassen → wird bei YouTube aus dem Kanal übernommen." />
+
+    @* 3. Stück *@
+    <MudAutocomplete T="string" @bind-Value="_stueckTitel" Label="Stück (wählen oder neu eintippen)"
+                     Variant="Variant.Outlined" Class="mt-4" SearchFunc="SucheStueck" Required="true"
+                     CoerceValue="true" ResetValueOnEmptyText="false" MaxItems="20" Clearable="true"
+                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.MusicNote"
+                     HelperText="Noch nicht erfasste Stücke einfach eintippen – wir legen sie an." />
+
+    @if (!string.IsNullOrWhiteSpace(_stueckTitel) && !_stueckBekannt)
+    {
+        <MudTextField @bind-Value="_komponist" Label="Komponist:in (optional, bei neuem Stück)"
+                      Variant="Variant.Outlined" Class="mt-4"
+                      Placeholder="z. B. John Mackey; arr. …" />
+    }
+
+    <MudTextField @bind-Value="_titel" Label="Titel der Aufnahme (optional)" Variant="Variant.Outlined" Class="mt-4"
+                  HelperText="Leer lassen → wird automatisch übernommen (YouTube/Dateiname)." />
+
+    <MudButton Class="mt-4" Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+               StartIcon="@Icons.Material.Filled.Send" OnClick="Absenden"
+               Disabled="@(!_erkannt || string.IsNullOrWhiteSpace(_stueckTitel) || _sendet)">
+        @(_sendet ? "Sende …" : "Vorschlag senden")
+    </MudButton>
+</MudPaper>
+
+@code {
+    private string _url = "";
+    private string? _titel;
+    private string? _bandName;
+    private string? _stueckTitel;
+    private string? _komponist;
+
+    private bool _erkannt, _istDatei, _pruefeLaeuft, _kiLaeuft, _sendet;
+    private string? _kanal;
+    private string? _userId;
+
+    private List<string> _bandNamen = [];
+    private List<string> _stueckNamen = [];
+
+    private bool _stueckBekannt => _stueckTitel != null &&
+        _stueckNamen.Any(s => string.Equals(s, _stueckTitel.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _bandNamen = await db.Bands.OrderBy(b => b.Name).Select(b => b.Name).ToListAsync();
+        _stueckNamen = await db.Stuecke.OrderBy(s => s.Titel).Select(s => s.Titel).ToListAsync();
+    }
+
+    // Link geändert: Quelle erkennen; bei YouTube Metadaten (Titel/Kanal) als Vorschlag holen.
+    private async Task LinkGeaendert()
+    {
+        _erkannt = false; _istDatei = false; _kanal = null;
+        var q = VideoQuelle.Parse(_url);
+        if (q is not { } quelle) { StateHasChanged(); return; }
+        _erkannt = true;
+        _istDatei = quelle.Plattform == VideoPlattform.Datei;
+
+        // Bestmöglichen „Roh-Titel" bestimmen: YouTube-Metadaten oder Dateiname.
+        string? rohTitel = null;
+        if (quelle.Plattform == VideoPlattform.YouTube)
+        {
+            _pruefeLaeuft = true; StateHasChanged();
+            var meta = await YouTube.HoleAsync(quelle.ExternId);
+            _pruefeLaeuft = false;
+            if (meta != null)
+            {
+                _kanal = meta.KanalName;
+                rohTitel = meta.Titel;
+                if (string.IsNullOrWhiteSpace(_titel)) _titel = meta.Titel;
+                if (string.IsNullOrWhiteSpace(_bandName)) _bandName = meta.KanalName;   // Band „geraten"
+            }
+        }
+        else
+        {
+            rohTitel = VideoQuelle.TitelAusDateiUrl(quelle.ExternId);
+        }
+
+        // KI: Stück + Komponist:in aus dem Titel raten – nur leere Felder befüllen.
+        if (!string.IsNullOrWhiteSpace(rohTitel))
+        {
+            _kiLaeuft = true; StateHasChanged();
+            var info = await Extraktion.VideoTitelAnalysierenAsync(rohTitel, _bandName);
+            _kiLaeuft = false;
+            if (info != null)
+            {
+                if (string.IsNullOrWhiteSpace(_stueckTitel) && !string.IsNullOrWhiteSpace(info.StueckTitel)) _stueckTitel = info.StueckTitel;
+                if (string.IsNullOrWhiteSpace(_komponist) && !string.IsNullOrWhiteSpace(info.Komponist)) _komponist = info.Komponist;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private Task<IEnumerable<string>> SucheBand(string? w, CancellationToken ct) => Task.FromResult(Filter(_bandNamen, w));
+    private Task<IEnumerable<string>> SucheStueck(string? w, CancellationToken ct) => Task.FromResult(Filter(_stueckNamen, w));
+    private static IEnumerable<string> Filter(List<string> alle, string? w) =>
+        string.IsNullOrWhiteSpace(w) ? alle.Take(20) : alle.Where(x => x.Contains(w, StringComparison.OrdinalIgnoreCase)).Take(20);
+
+    private async Task Absenden()
+    {
+        _sendet = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var e = new VideoVorschlagService.Eingabe(_url, _titel, _bandName, _stueckTitel ?? "", _komponist);
+            var r = await VideoVorschlagService.ErstelleAsync(db, e, _userId, YouTube);
+            if (!r.Ok) { Snackbar.Add(r.Meldung, Severity.Warning); return; }
+
+            var bandHinweis = string.IsNullOrWhiteSpace(_bandName) && !string.IsNullOrWhiteSpace(r.ErkannteBand)
+                ? $" Band erkannt: {r.ErkannteBand}." : "";
+            Snackbar.Add(r.Meldung + bandHinweis, Severity.Success);
+            Nav.NavigateTo("/videos");
+        }
+        finally { _sendet = false; }
+    }
+}

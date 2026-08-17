@@ -75,8 +75,17 @@ window.harmoniqUi = {
                     sound.setAttribute('aria-label', lbl);
                     sound.setAttribute('title', lbl);
                 }
-                v.muted = true; v.defaultMuted = true;
-                if (v.dataset.autoplay === '1') { var p = v.play(); if (p && p.catch) p.catch(function () { }); }
+                if (v.dataset.autoplay === '1') {
+                    // Bevorzugt MIT Ton starten. Browser blocken Autoplay-mit-Ton meist bis zur ersten
+                    // Interaktion → dann stumm weiterlaufen (Nutzer entstummt per Klick/Hinweis).
+                    v.muted = false; v.defaultMuted = false;
+                    var p = v.play();
+                    if (p && p.catch) p.catch(function () {
+                        v.muted = true; var q = v.play(); if (q && q.catch) q.catch(function () { }); refresh();
+                    });
+                } else {
+                    v.muted = true; v.defaultMuted = true;
+                }
                 if (sound) sound.addEventListener('click', function (e) {
                     e.stopPropagation(); v.muted = !v.muted;
                     if (!v.muted && v.paused) { var q = v.play(); if (q && q.catch) q.catch(function () { }); }

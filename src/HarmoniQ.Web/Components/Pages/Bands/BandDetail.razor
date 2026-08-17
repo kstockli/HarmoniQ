@@ -20,14 +20,7 @@ else
     <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4 pa-0" />
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-2" Wrap="Wrap.Wrap">
-        @if (!string.IsNullOrWhiteSpace(_band.BildUrl))
-        {
-            <img src="@_band.BildUrl" style="width:64px;height:64px;object-fit:cover;border-radius:8px;" alt="@_band.Name" />
-        }
-        else
-        {
-            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;font-size:3rem;" />
-        }
+        <MudIcon Icon="@Icons.Material.Filled.Groups" Style="color:#D4AF37;font-size:3rem;" />
         <div>
             <MudText Typo="Typo.h4" Style="color:#D4AF37;">@_band.Name</MudText>
             <MudStack Row="true" Spacing="1" Class="mt-1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
@@ -135,6 +128,14 @@ else
                    StartIcon="@Icons.Material.Filled.MusicNote">Alle Stücke dieser Band</MudButton>
         <RichtigstellungMelden Typ="RichtigstellungTyp.Band" Id="_band.Id" />
     </MudStack>
+
+    @* Vereinsfoto – nach den Links dargestellt. *@
+    @if (!string.IsNullOrWhiteSpace(_band.BildUrl))
+    {
+        <img src="@_band.BildUrl" alt="@_band.Name"
+             style="max-width:100%;width:480px;max-height:360px;object-fit:cover;border-radius:10px;border:1px solid #3a1060;"
+             class="mb-6" />
+    }
 
     @* Imagefilm der Band (YouTube oder direkte Datei) – prominent, eingebettet. *@
     @if (_imagefilmUrl != null)

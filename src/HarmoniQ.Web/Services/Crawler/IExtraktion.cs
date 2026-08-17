@@ -64,7 +64,15 @@ public interface IExtraktion
     /// Sponsor/Ort und keine Einzelperson. Steht oft im Titel vor einem Doppelpunkt oder in der Beschreibung
     /// („… spielt das X"). Null, wenn nicht klar genannt (nicht raten). Ohne LLM (Stub): null.</summary>
     Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default);
+
+    /// <summary>Prüft einen öffentlichen Beitrag (Bewertungs-Kommentar) gegen die Verhaltensregeln
+    /// (sachlich; keine Schmähkritik/Beleidigung/Diskriminierung/rechtswidrigen Inhalte).
+    /// Ok=true → sofort veröffentlichen; Ok=false → zur Freigabe. Ohne LLM (Stub) / bei Fehler: Ok=true.</summary>
+    Task<BeitragPruefung> BeitragPruefenAsync(string text, CancellationToken ct = default);
 }
+
+/// <summary>Ergebnis der KI-Moderation eines Beitrags.</summary>
+public record BeitragPruefung(bool Ok, string? Grund);
 
 /// <summary>Aus Videotitel/-beschreibung erkanntes Stück + Komponist:in + Aufführungs-Ort + Anlass
 /// (jeweils null, wenn nicht klar erkennbar).</summary>

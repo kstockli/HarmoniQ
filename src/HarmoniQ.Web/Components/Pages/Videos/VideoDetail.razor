@@ -4,12 +4,14 @@
 @using HarmoniQ.Web.Data
 @using HarmoniQ.Web.Data.Models
 @using HarmoniQ.Web.Services
+@using HarmoniQ.Web.Services.Crawler
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthProvider
+@inject IExtraktion Extraktion
 
 <PageTitle>@(_video?.Titel ?? "Video") – HarmoniQ</PageTitle>
 
@@ -125,6 +127,13 @@ else
                 {
                     <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="color:#A78FC0;">
                         Für Bewertungen ist ein kostenloses Konto nötig.
+                    </MudText>
+                }
+                @if (_eigene?.Status == BewertungStatus.ZurPruefung)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="color:#e0a030;">
+                        <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Size="Size.Small" />
+                        Dein Kommentar wird noch geprüft und ist erst nach Freigabe öffentlich sichtbar.
                     </MudText>
                 }
             </MudPaper>
@@ -344,7 +353,7 @@ else
     private async Task LadeStatsAsync(ApplicationDbContext db)
     {
         _stats = await db.Bewertungen
-            .Where(b => b.VideoId == Id)
+            .Where(b => b.VideoId == Id && b.Status == BewertungStatus.Freigegeben)
             .GroupBy(b => b.VideoId)
             .Select(g => new BewertungsStats
             {
@@ -410,16 +419,29 @@ else
         bestehend.VideoQualitaet = m.VideoQualitaet;
         bestehend.Kommentar = m.Kommentar;
         bestehend.ErstelltAm = DateTime.UtcNow;
+
+        // KI-Moderation des Kommentars gegen die Verhaltensregeln (§3): bestanden → sofort sichtbar,
+        // sonst zur Freigabe. Ohne Kommentar (nur Sterne) immer freigegeben.
+        var status = BewertungStatus.Freigegeben;
+        if (!string.IsNullOrWhiteSpace(m.Kommentar))
+        {
+            var pruef = await Extraktion.BeitragPruefenAsync(m.Kommentar);
+            status = pruef.Ok ? BewertungStatus.Freigegeben : BewertungStatus.ZurPruefung;
+        }
+        bestehend.Status = status;
         await db.SaveChangesAsync();
 
-        // Feed-Ereignis nur bei der ersten Bewertung eines eingeloggten Nutzers mit Person.
-        if (istNeu && _userId != null)
+        // Feed-Ereignis nur bei erster, FREIGEGEBENER Bewertung eines eingeloggten Nutzers mit Person.
+        if (istNeu && _userId != null && status == BewertungStatus.Freigegeben)
             await AktivitaetService.ProtokolliereFuerBenutzerAsync(db, _userId,
                 AktivitaetTyp.BewertungAbgegeben, AktivitaetZielTyp.Video, Id);
 
         await LadeStatsAsync(db);
         await LadeEigeneAsync();
-        Snackbar.Add("Danke für deine Bewertung!", Severity.Success);
+        Snackbar.Add(status == BewertungStatus.ZurPruefung
+            ? "Danke! Dein Kommentar wird noch geprüft und nach Freigabe veröffentlicht."
+            : "Danke für deine Bewertung!",
+            status == BewertungStatus.ZurPruefung ? Severity.Info : Severity.Success);
         StateHasChanged();
     }
 
@@ -428,7 +450,7 @@ else
         if (_video == null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
         var liste = await db.Bewertungen
-            .Where(b => b.VideoId == Id)
+            .Where(b => b.VideoId == Id && b.Status == BewertungStatus.Freigegeben)
             .OrderByDescending(b => b.ErstelltAm)
             .Select(b => new BewertungenAnsehenDialog.Eintrag(
                 b.GesamtEindruck, b.Praezision, b.Musikalitaet, b.AkustischeQualitaet, b.VideoQualitaet,

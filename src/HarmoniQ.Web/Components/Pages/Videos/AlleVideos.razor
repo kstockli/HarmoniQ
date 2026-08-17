@@ -6,7 +6,21 @@
 
 <PageTitle>Videos – HarmoniQ</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true" Style="color:#D4AF37;">Videos</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
+    <MudText Typo="Typo.h4" Style="color:#D4AF37;">Videos</MudText>
+    <MudSpacer />
+    <AuthorizeView>
+        <Authorized>
+            <MudButton Variant="Variant.Filled" Style="background:#D4AF37; color:#0e0018;"
+                       StartIcon="@Icons.Material.Filled.AddLink" Href="/videos/vorschlagen">Video vorschlagen</MudButton>
+        </Authorized>
+        <NotAuthorized>
+            <MudButton Variant="Variant.Outlined" Style="color:#D4AF37; border-color:#D4AF37;"
+                       StartIcon="@Icons.Material.Filled.Login" Href="Account/Login?ReturnUrl=%2Fvideos%2Fvorschlagen">
+                Anmelden &amp; Video vorschlagen</MudButton>
+        </NotAuthorized>
+    </AuthorizeView>
+</MudStack>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background:#1a0030; border:1px solid #3a1060;">
     <MudGrid Spacing="3">

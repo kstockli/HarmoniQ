@@ -51,4 +51,8 @@ public class StubExtraktion : IExtraktion
     // Ohne LLM keine Band-Erkennung aus Event-Titel/Beschreibung.
     public Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default) =>
         Task.FromResult<string?>(null);
+
+    // Ohne LLM keine Moderation → freigeben (fail-open).
+    public Task<BeitragPruefung> BeitragPruefenAsync(string text, CancellationToken ct = default) =>
+        Task.FromResult(new BeitragPruefung(true, null));
 }

@@ -64,7 +64,8 @@
         {
             <MudText Typo="Typo.body2" Class="mb-4" Style="color:#A78FC0;">
                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Style="color:#9B59B6;" />
-                Angemeldet als <b>@auth.User.Identity?.Name</b> – du kannst bewerten, Videos vorschlagen und Besetzungen ergänzen.
+                Angemeldet als <b>@auth.User.Identity?.Name</b> – du kannst bewerten und
+                <MudLink Href="/videos/vorschlagen" Style="color:#D4AF37;" Underline="Underline.Always">Videos vorschlagen</MudLink>.
             </MudText>
         }
 

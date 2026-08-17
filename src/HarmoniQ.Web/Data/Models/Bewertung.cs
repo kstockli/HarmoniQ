@@ -12,6 +12,8 @@ public class Bewertung : AuditierteEntitaet
     public int AkustischeQualitaet { get; set; }
     public int VideoQualitaet { get; set; }
     public string? Kommentar { get; set; }
+    /// <summary>Moderationsstatus (KI-Prüfung des Kommentars, Nutzungsbedingungen §3).</summary>
+    public BewertungStatus Status { get; set; } = BewertungStatus.Freigegeben;
     public DateTime ErstelltAm { get; set; } = DateTime.UtcNow;
 
     public Video Video { get; set; } = null!;
