@@ -57,6 +57,10 @@ window.harmoniqUi = {
                 var sound = wrap.querySelector('.hq-sound');
                 var fs = wrap.querySelector('.hq-fs');
                 var speed = wrap.querySelector('.hq-speed');
+                var play = wrap.querySelector('.hq-play');
+                // Zentraler Play-Knopf: nur sichtbar, solange das Video pausiert ist. Wichtig für
+                // Eingeloggte (kein Autoplay – Datenmenge/Performance), damit ein Start-Knopf da ist.
+                function refreshPlay() { if (play) play.style.display = v.paused ? '' : 'none'; }
                 // Abspielgeschwindigkeit durchschalten (Video ist etwas schnell). Oben rechts, damit die
                 // eingebrannten Untertitel unten frei bleiben.
                 var stufen = [1, 0.75, 0.5], si = 0;
@@ -84,8 +88,17 @@ window.harmoniqUi = {
                         v.muted = true; var q = v.play(); if (q && q.catch) q.catch(function () { }); refresh();
                     });
                 } else {
+                    // Eingeloggte: NICHT automatisch laden/abspielen (Datenmenge/Performance) – Play-Knopf zeigen.
                     v.muted = true; v.defaultMuted = true;
                 }
+                if (play) play.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    v.muted = false;   // manueller Start → mit Ton (Nutzer-Interaktion erlaubt das)
+                    var q = v.play(); if (q && q.catch) q.catch(function () { });
+                    refresh(); refreshPlay();
+                });
+                v.addEventListener('play', refreshPlay);
+                v.addEventListener('pause', refreshPlay);
                 if (sound) sound.addEventListener('click', function (e) {
                     e.stopPropagation(); v.muted = !v.muted;
                     if (!v.muted && v.paused) { var q = v.play(); if (q && q.catch) q.catch(function () { }); }
@@ -122,6 +135,7 @@ window.harmoniqUi = {
                 }
 
                 refresh();
+                refreshPlay();
             });
         } catch (e) { }
     }
