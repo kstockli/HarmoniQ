@@ -84,7 +84,7 @@ else
     }
 
     <MudStack Row="true" Spacing="2" Class="mb-6" Wrap="Wrap.Wrap">
-        @if (_band.Webseite != null)
+        @if (IstWeblink(_band.Webseite))
         {
             <MudButton Variant="Variant.Text" Style="color:#9B59B6;" Href="@_band.Webseite" Target="_blank"
                        StartIcon="@Icons.Material.Filled.OpenInNew">Webseite</MudButton>
@@ -160,6 +160,34 @@ else
     @* 1. Konzerte *@
     @if (_konzerte.Count > 0)
     {
+        @* Zeitnahes Konzert prominent oben: heute > nächstes künftiges > zuletzt (wie auf der Startseite). *@
+        @if (FeaturedKonzert() is {} feat)
+        {
+            <MudPaper Class="pa-4 mb-4" Elevation="4"
+                      Style="@($"background:linear-gradient(135deg,#241640,#1a0030); border:1px solid {(feat.Heute ? "#D4AF37" : "#1ABC9C")};")">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Size="Size.Small" Color="@(feat.Heute ? Color.Warning : Color.Default)"
+                             Icon="@(feat.Heute ? Icons.Material.Filled.Today : (feat.Kuenftig ? Icons.Material.Filled.EventAvailable : Icons.Material.Filled.History))"
+                             Style="@(feat.Heute ? "" : "color:#1ABC9C;")">
+                        @(feat.Heute ? "Heute" : feat.Kuenftig ? "Als Nächstes" : "Zuletzt")
+                    </MudChip>
+                    @if (feat.Kuenftig && !feat.Heute)
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#6f5a86;">@TageBisText(feat.K.Datum)</MudText>
+                    }
+                </MudStack>
+                <MudLink Href="@($"/konzerte/{feat.K.Id}")" Underline="Underline.Hover">
+                    <MudText Typo="Typo.h5" Style="color:#F0E6FF;font-weight:600;" Class="mt-1">@feat.K.Titel</MudText>
+                </MudLink>
+                <MudText Typo="Typo.body2" Style="color:#A78FC0;">
+                    @KonzertZeitFormat.Kompakt(feat.K.Datum, feat.K.Uhrzeit)@(string.IsNullOrWhiteSpace(feat.K.Ort) ? "" : $" · {feat.K.Ort}")
+                </MudText>
+                <MudButton Href="@($"/konzerte/{feat.K.Id}")" Variant="Variant.Filled" Size="Size.Small" Class="mt-2"
+                           Style="@(feat.Heute ? "background:#D4AF37;color:#0e0018;" : "background:#1ABC9C;color:#0e0018;")"
+                           EndIcon="@Icons.Material.Filled.ArrowForward">Zum Konzert</MudButton>
+            </MudPaper>
+        }
+
         <MudText Typo="Typo.h5" GutterBottom="true" Style="color:#D4AF37;">
             Konzerte (@_konzerte.Count)
         </MudText>
@@ -275,6 +303,10 @@ else
 
 @code {
     [Parameter] public Guid Id { get; set; }
+
+    // Webseite ist eine eigene Spalte (nicht über LinkUrl) → hier gegen Import-Altlasten ("|null") absichern.
+    private static bool IstWeblink(string? u) => !string.IsNullOrWhiteSpace(u)
+        && (u.StartsWith("http", StringComparison.OrdinalIgnoreCase) || (u.Contains('.') && !u.Contains(' ')));
 
     private Band? _band;
     private string? _imagefilmUrl;   // Embed-/Datei-URL des Imagefilms (null = keiner)
@@ -423,6 +455,27 @@ else
 
     private record VideoZeile(Guid Id, VideoPlattform Plattform, string ExternId, string Titel, Guid StueckId, string StueckTitel, string? BildUrl);
     private record StueckZeile(Guid Id, string Titel, int? Jahr);
+    // Zeitnahes Konzert für die Hervorhebung: heute (Prio) → nächstes künftiges → zuletzt vergangenes.
+    private (KonzertZeile K, bool Heute, bool Kuenftig)? FeaturedKonzert()
+    {
+        if (_konzerte.Count == 0) return null;
+        var heute = DateOnly.FromDateTime(DateTime.Today);
+        var heuteK = _konzerte.Where(k => k.Datum == heute)
+            .OrderBy(k => k.Uhrzeit ?? TimeOnly.MinValue).FirstOrDefault();
+        if (heuteK != null) return (heuteK, true, true);
+        var naechst = _konzerte.Where(k => k.Datum > heute)
+            .OrderBy(k => k.Datum).ThenBy(k => k.Uhrzeit ?? TimeOnly.MinValue).FirstOrDefault();
+        if (naechst != null) return (naechst, false, true);
+        var letzt = _konzerte.Where(k => k.Datum < heute).OrderByDescending(k => k.Datum).FirstOrDefault();
+        return letzt != null ? (letzt, false, false) : null;
+    }
+
+    private static string TageBisText(DateOnly d)
+    {
+        var n = d.DayNumber - DateOnly.FromDateTime(DateTime.Today).DayNumber;
+        return n == 1 ? "morgen" : $"in {n} Tagen";
+    }
+
     private record KonzertZeile(Guid Id, DateOnly Datum, TimeOnly? Uhrzeit, string? Name, string? Ort)
     {
         public string Titel => Name ?? Datum.ToString("dd.MM.yyyy");

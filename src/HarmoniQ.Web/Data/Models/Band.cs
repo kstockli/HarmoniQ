@@ -52,7 +52,21 @@ public class Band : AuditierteEntitaet
     [NotMapped] public string? EMail { get => LinkUrl(LinkTyp.EMail); set => SetzeLink(LinkTyp.EMail, value); }
     [NotMapped] public string? Mobile { get => LinkUrl(LinkTyp.Mobile); set => SetzeLink(LinkTyp.Mobile, value); }
 
-    private string? LinkUrl(LinkTyp typ) => Links.FirstOrDefault(l => l.Typ == typ)?.Url;
+    private string? LinkUrl(LinkTyp typ)
+    {
+        var url = Links.FirstOrDefault(l => l.Typ == typ)?.Url?.Trim();
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        // Nur echte Links liefern – Import-Altlasten (z. B. "|null", "null") ausblenden, damit keine
+        // toten Buttons entstehen und ein erneutes Speichern das Feld bereinigt.
+        bool gueltig = typ switch
+        {
+            LinkTyp.EMail  => url.Contains('@') && !url.Contains(' '),
+            LinkTyp.Mobile => url.Any(char.IsDigit),
+            _              => url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                           || (url.Contains('.') && !url.Contains(' ')),   // Domain ohne Schema zulassen
+        };
+        return gueltig ? url : null;
+    }
 
     private void SetzeLink(LinkTyp typ, string? url)
     {

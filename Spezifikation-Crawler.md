@@ -550,6 +550,50 @@ Konzerte-Unterseiten** (Link-Heuristik `IstAgendaLink`) laden und per LLM extrah
   kommen zusätzlich über die Programmzeilen dazu. Grundsatz: **findet der Crawler keine andere Band, wird das
   Konzert der Original-Band angehängt.**
 
+### 4.9 Stück-Beschreibungen anreichern (Aggregat-Quelltyp `StueckBeschreibung`) — *geplant*
+
+**Ziel:** Stücke zum „digitalen Programmheft" machen. Am Konzert wollen viele Besucher:innen kein Bewerten,
+sondern **Hintergrundwissen** – was ist das Stück, wer hat es geschrieben. Darum die Felder `Stueck.Beschreibung`
+und `Stueck.Jahr` möglichst füllen, **vor allem bei echten Werken bekannter Komponist:innen** (Original-
+Literatur, nicht Arrangements von Popsongs).
+
+- **Auswahl:** Stücke mit leerer `Beschreibung` **und** einer verknüpften Komponist:in mit `PersonRolle.Komponist`
+  (Fokus auf Kunstwerke). Manuell im Crawler-Admin anstoßbar (kein Zeitplan), inkrementell.
+- **Quellen:** Wikipedia (`WikipediaService`, bereits vorhanden) und – wo nötig – eine grounded Web-Suche
+  (analog `BandVideoCrawlService.AnreichernAsync`). Als Faktenbasis dienen z. B. Wind Repertory Project,
+  Komponisten-/Verlagsseiten.
+- **Eigener Text, kein Kopieren (Recht, §4.7):** Das LLM schreibt eine **kurze, eigene** deutsche Sachnotiz
+  (Jahr, Charakter, ggf. worauf das Werk basiert) – **keine** wörtliche Übernahme von Verlags-Programmnotizen
+  (urheberrechtlich geschützt). Wikipedia-Text nur mit Quellenangabe (CC BY-SA), sonst paraphrasieren.
+- **Review statt Auto-Speichern:** Vorschläge landen als `CrawlFund` (neuer Typ „Stück-Beschreibung") im
+  Review `/admin/crawler/funde`; ein Mensch bestätigt/korrigiert, bevor `Beschreibung`/`Jahr` gesetzt werden.
+- **Anzeige:** `StueckDetail` zeigt Beschreibung/Jahr bereits; zusätzlich auf der **Konzert-Seite je
+  Programmpunkt ausklappbar** (Feinschliff).
+- **Manuell bereits erledigt (Referenz-Beispiel):** die 3 Stücke des JBL-Lagerkonzerts „Fantasy" (Fantasy
+  Variations / Barnes 1988, Pantomime / Sparke 1988, Bulgarian Dances Part II / Cesarini 2013) wurden von Hand
+  nach genau diesem Muster befüllt – der Crawler automatisiert das.
+
+### 4.10 Dubletten-Vorschläge (Aggregat-Quelltyp `DublettenVorschlag`) — *geplant*
+
+**Ziel:** Über die Zeit entstehen **Dubletten** mit minimen Schreibunterschieden – Stücke („… Part II" vs.
+„… Part 2", mit/ohne Akzent, Tippfehler) und Personen/Komponist:innen (Namensvarianten). Das **Finden** ist
+teuer, das **Bestätigen** billig – also schlägt der Crawler **Merge-Kandidaten** vor, ein Mensch bestätigt.
+
+- **Entitäten:** `Stueck` und `Person` (inkl. Komponist:innen). Nutzt die bestehenden Merge-Services
+  (`StueckMergeService`, `PersonMergeService`) beim Übernehmen.
+- **Kandidaten-Heuristik:** Normalisierter Schlüssel (lowercase, Akzente/Satzzeichen entfernt, „Part/Teil"
+  + römische/arabische Zahlen vereinheitlichen, Mehrfach-Leerzeichen). Match nur bei **hoher Ähnlichkeit**
+  (z. B. gleicher Normalschlüssel oder geringe Levenshtein-Distanz); bei Stücken zusätzlich **gleiche:r
+  Komponist:in** als Gegenprobe.
+- **WICHTIG – False Positives vermeiden:** Unterschiedliche Werke mit ähnlichem Titel dürfen **nicht**
+  zusammengeführt werden (z. B. „Bulgarian Dances **Part I**" ≠ „**Part II**"; „Sinfonie Nr. 1" ≠ „Nr. 2").
+  Nummern/Teil-Kennungen sind **unterscheidend**, nicht angleichbar. Darum **immer Review**, nie Auto-Merge.
+- **Review:** je Kandidatenpaar ein `CrawlFund` (neuer Typ „Dublette") mit beiden Datensätzen + Begründung
+  (was matcht). Bestätigen = Merge (Referenzen umhängen, Quell-Name/-Titel bleibt als **Alias**). Ablehnen =
+  als „kein Duplikat" merken, taucht nicht erneut auf.
+- **Alias-Nebeneffekt:** Beim Merge wird die abweichende Schreibweise automatisch als Alias gesetzt („Part 2"
+  → Alias von „Part II"), sodass Find-or-create künftig beide Varianten trifft.
+
 ## 5. Datenmodell (neue Entitäten, isoliert vom Kernmodell)
 
 ```

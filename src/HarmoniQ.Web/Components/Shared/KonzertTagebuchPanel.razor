@@ -180,7 +180,8 @@
 
     public record Komponist(Guid Id, string Name);
     public record Programmpunkt(Guid KonzertStueckId, Guid StueckId, string Titel,
-        Guid? BandId, string? BandName, List<Komponist> Komponisten, int? Reihenfolge = null);
+        Guid? BandId, string? BandName, List<Komponist> Komponisten, int? Reihenfolge = null,
+        string? Beschreibung = null, int? Jahr = null);
 
     protected override async Task OnInitializedAsync()
     {
@@ -213,7 +214,17 @@
     }
 
     // ── Gemeinsame Darstellung eines Programmpunkts (für Desktop-Tabelle UND Mobile-Karten) ──
-    private RenderFragment StueckTitel(Programmpunkt p) =>@<MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.Titel</MudLink>;
+    private RenderFragment StueckTitel(Programmpunkt p) =>@<text>
+        <MudLink Href="@($"/stuecke/{p.StueckId}")" Style="color:#F0E6FF;" Underline="Underline.Hover">@p.Titel</MudLink>
+        @if (!string.IsNullOrWhiteSpace(p.Beschreibung))
+        {
+            <details style="margin-top:2px;">
+                <summary style="color:#1ABC9C;cursor:pointer;font-size:.78rem;">ℹ Mehr zum Stück</summary>
+                <div style="color:#C4B0D8;font-size:.85rem;line-height:1.45;margin-top:4px;max-width:560px;white-space:pre-line;">@if (p.Jahr is int j)
+                    {<span style="color:#6f5a86;">@j · </span>}@p.Beschreibung</div>
+            </details>
+        }
+    </text>;
 
     // Reihenfolge klein voranstellen (bei Wettbewerben kodiert sie die Startzeit, z. B. 1440 = 14:40).
     private RenderFragment ReihenfolgeMarker(Programmpunkt p) =>@<text>@if (p.Reihenfolge is int r)
