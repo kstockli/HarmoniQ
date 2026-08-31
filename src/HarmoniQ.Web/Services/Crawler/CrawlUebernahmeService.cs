@@ -93,7 +93,8 @@ public static class CrawlUebernahmeService
         var stueck = await db.Stuecke.FirstOrDefaultAsync(s => s.Id == d.StueckId)
             ?? throw new InvalidOperationException("Stück nicht gefunden (evtl. gelöscht/zusammengeführt).");
         if (string.IsNullOrWhiteSpace(stueck.Beschreibung) && !string.IsNullOrWhiteSpace(d.Beschreibung))
-            stueck.Beschreibung = d.Beschreibung!.Trim();
+            // Markdown-Emphase (*, **, _) strippen → reiner Fließtext (das Feld wird plain gerendert).
+            stueck.Beschreibung = Regex.Replace(d.Beschreibung!, @"[*_]{1,3}", "").Trim();
         if (stueck.Jahr is null && d.Jahr is int j) stueck.Jahr = j;
         // Speichern erfolgt im Rahmen von UebernehmenAsync.
     }

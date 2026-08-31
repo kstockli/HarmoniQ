@@ -638,7 +638,8 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
             "Regeln (streng, KEIN Raten):\n" +
             "- Schreibe NUR, wenn du GENAU DIESES Werk DIESER Komponist:in sicher kennst. Im Zweifel: beschreibung=null, jahr=null.\n" +
             "- beschreibung: 2-3 EIGENE deutsche Sätze (Charakter, worauf es basiert, Besonderheit). KEINE wörtliche " +
-            "Übernahme von Verlags-/Programmnotizen (Urheberrecht). Sachlich, ohne Werbe-Floskeln, ohne Anführungszeichen.\n" +
+            "Übernahme von Verlags-/Programmnotizen (Urheberrecht). Sachlich, ohne Werbe-Floskeln, ohne Anführungszeichen. " +
+            "REINER Fließtext – KEINE Markdown-Formatierung (keine Sternchen *, kein Fettdruck **, keine Listen/Überschriften).\n" +
             "- jahr: Entstehungs-/Erscheinungsjahr als Zahl, nur wenn sicher; sonst null.\n" +
             "- Erfinde NICHTS. Lieber null als falsch.";
         var user = string.IsNullOrWhiteSpace(komponist) ? $"Werk: \"{titel}\"" : $"Werk: \"{titel}\"\nKomponist:in: {komponist}";
@@ -661,7 +662,10 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
             var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
             if (string.IsNullOrWhiteSpace(json)) return new StueckInfo(null, null);
             var dto = JsonSerializer.Deserialize<StueckInfoDto>(json, MistralJson);
-            var beschr = Plausibel(dto?.Beschreibung, 20, 1200);
+            // Sicherheitsnetz: etwaige Markdown-Emphase (*, **, _) entfernen → reiner Fließtext.
+            var roh = dto?.Beschreibung is string rb
+                ? System.Text.RegularExpressions.Regex.Replace(rb, @"[*_]{1,3}", "").Trim() : null;
+            var beschr = Plausibel(roh, 20, 1200);
             int? jahr = dto?.Jahr is int j && j >= 1500 && j <= DateTime.UtcNow.Year + 1 ? j : null;
             return new StueckInfo(beschr, jahr);
         }
