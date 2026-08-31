@@ -105,9 +105,12 @@ public static class CrawlUebernahmeService
         var d = CrawlDaten.Deserialisiere<DublettenDaten>(datenJson)
             ?? throw new InvalidOperationException("Dublette: ungültige Daten.");
         if (d.QuelleId == d.ZielId) throw new InvalidOperationException("Dublette: Quelle = Ziel.");
-        var (ok, meldung) = d.Entitaet.Equals("Person", StringComparison.OrdinalIgnoreCase)
-            ? await PersonMergeService.MergeAsync(db, d.QuelleId, d.ZielId)
-            : await StueckMergeService.MergeAsync(db, d.QuelleId, d.ZielId);
+        var (ok, meldung) = d.Entitaet.ToLowerInvariant() switch
+        {
+            "person" => await PersonMergeService.MergeAsync(db, d.QuelleId, d.ZielId),
+            "band" => await BandMergeService.MergeAsync(db, d.QuelleId, d.ZielId),
+            _ => await StueckMergeService.MergeAsync(db, d.QuelleId, d.ZielId)
+        };
         if (!ok) throw new InvalidOperationException($"Zusammenführen fehlgeschlagen: {meldung}");
     }
 

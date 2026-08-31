@@ -189,4 +189,6 @@ public record DublettenDaten(
     string QuelleName,
     Guid ZielId,
     string ZielName,
-    string Grund);
+    string Grund,
+    string? QuelleZusatz = null,   // z. B. Komponist:in bei Stücken (nur Anzeige)
+    string? ZielZusatz = null);

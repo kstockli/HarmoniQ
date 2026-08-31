@@ -186,6 +186,13 @@ else
                                    OnClick="@(() => Uebernehmen(f))">Übernehmen</MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => Verwerfen(f))">Verwerfen</MudButton>
+                        @if (f.Typ == CrawlFundTyp.Dublette)
+                        {
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Style="color:#1ABC9C;border-color:#1ABC9C;"
+                                       StartIcon="@Icons.Material.Filled.SwapHoriz" OnClick="@(() => RichtungTauschen(f))">
+                                Richtung tauschen
+                            </MudButton>
+                        }
                     }
                     else
                     {
@@ -280,6 +287,21 @@ else
         StateHasChanged();
         Snackbar.Add(fe.JsonGueltig ? "Vorschau aktualisiert." : "JSON ungültig – siehe Meldung beim Fund.",
             fe.JsonGueltig ? Severity.Success : Severity.Error);
+    }
+
+    /// <summary>Dublette-Fund: Quelle ↔ Ziel tauschen (welcher Datensatz erhalten bleibt), dann Vorschau
+    /// neu berechnen. Wirkt auf das editierbare JSON – beim Übernehmen gilt genau diese Richtung.</summary>
+    private void RichtungTauschen(FundEdit f)
+    {
+        var d = CrawlDaten.Deserialisiere<DublettenDaten>(f.Json);
+        if (d is null) return;
+        var getauscht = d with
+        {
+            QuelleId = d.ZielId, QuelleName = d.ZielName, QuelleZusatz = d.ZielZusatz,
+            ZielId = d.QuelleId, ZielName = d.QuelleName, ZielZusatz = d.QuelleZusatz
+        };
+        f.Json = CrawlDaten.Serialisiere(getauscht);
+        BefuelleAnzeige(f);
     }
 
     /// <summary>Bereitet aus dem DatenJson eine lesbare Zusammenfassung je Fund-Typ auf und setzt
@@ -422,10 +444,12 @@ else
                     {
                         fe.FriendlyTitel = $"Dublette ({du.Entitaet}): {du.QuelleName} → {du.ZielName}";
                         fe.FriendlySub = du.Grund;
+                        var zZus = string.IsNullOrWhiteSpace(du.ZielZusatz) ? "" : $" — {du.ZielZusatz}";
+                        var qZus = string.IsNullOrWhiteSpace(du.QuelleZusatz) ? "" : $" — {du.QuelleZusatz}";
                         fe.FriendlyZeilen =
                         [
-                            $"Bleibt erhalten (Ziel): {du.ZielName}",
-                            $"Wird eingegliedert (Quelle, wird Alias): {du.QuelleName}"
+                            $"Bleibt erhalten (Ziel): {du.ZielName}{zZus}",
+                            $"Wird eingegliedert (Quelle → Alias): {du.QuelleName}{qZus}"
                         ];
                     }
                     break;

@@ -100,7 +100,7 @@
                 <MudAlert Severity="Severity.Info" Dense="true">
                     @(_neu.Typ == CrawlQuelleTyp.StueckBeschreibung
                         ? "Aggregat-Lauf: geht Stücke mit LEERER Beschreibung und verknüpfter Komponist:in durch und schlägt via LLM eine kurze, eigene Sachnotiz (+ Jahr) vor – nur wenn das Werk sicher bekannt ist (sonst nichts). LLM-Deckel je Lauf; erneute Läufe decken weitere Stücke ab. Review unter „Funde\"; nichts wird automatisch gespeichert."
-                        : "Aggregat-Lauf: schlägt mutmassliche DUBLETTEN (Stücke + Personen) über Normalisierung vor (z. B. „Part II\"/„Part 2\", mit/ohne Akzent). Zusammenführen passiert ERST beim Bestätigen im Review – KEIN Auto-Merge (\"Part I\" ≠ \"Part II\"). Keine Start-URL/Ziel-Band nötig.")
+                        : "Aggregat-Lauf: schlägt mutmassliche DUBLETTEN (Stücke, Personen + Bands) über Normalisierung vor (z. B. „Part II\"/„Part 2\", mit/ohne Akzent). Im Review Richtung tauschbar (welcher bleibt). Zusammenführen passiert ERST beim Bestätigen – KEIN Auto-Merge (\"Part I\" ≠ \"Part II\"). Keine Start-URL/Ziel-Band nötig.")
                     Manuell ausgelöst mit Bestätigung; läuft im Hintergrund.
                 </MudAlert>
             </MudItem>

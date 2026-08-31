@@ -225,6 +225,7 @@ public class CrawlRunner(
         {
             s.Id, s.Titel, s.CreateTime,
             Komp = s.Beitraege.Where(b => b.Rolle == StueckRolle.Komponist).Select(b => b.PersonId).ToList(),
+            KompName = s.Beitraege.Where(b => b.Rolle == StueckRolle.Komponist).Select(b => b.Person.Name).FirstOrDefault(),
             Refs = s.Videos.Count + s.Beitraege.Count + s.Aliase.Count
         }).ToListAsync(ct);
 
@@ -242,7 +243,7 @@ public class CrawlRunner(
                 if (!gemeinsam && !einerLeer) continue;   // gleicher Titel, aber andere Komponist:in → KEIN Duplikat
                 var grund = gemeinsam ? "Gleicher Titel (normalisiert), gleiche Komponist:in."
                                       : "Gleicher Titel (normalisiert); Komponist:in fehlt bei einem Eintrag.";
-                if (await DublettenFundAnlegenAsync(lauf, "Stueck", q.Id, q.Titel, ziel.Id, ziel.Titel, grund, ct)) funde++;
+                if (await DublettenFundAnlegenAsync(lauf, "Stueck", q.Id, q.Titel, ziel.Id, ziel.Titel, grund, q.KompName, ziel.KompName, ct)) funde++;
                 paare++;
             }
         }
@@ -266,7 +267,31 @@ public class CrawlRunner(
                 {
                     if (funde >= MaxProLauf) break;
                     if (q.Verknuepft && ziel.Verknuepft) continue;   // zwei verknüpfte Konten nie automatisch vorschlagen
-                    if (await DublettenFundAnlegenAsync(lauf, "Person", q.Id, q.Name, ziel.Id, ziel.Name, "Gleicher Name (normalisiert).", ct)) funde++;
+                    if (await DublettenFundAnlegenAsync(lauf, "Person", q.Id, q.Name, ziel.Id, ziel.Name, "Gleicher Name (normalisiert).", null, null, ct)) funde++;
+                    paare++;
+                }
+            }
+        }
+
+        // ── Bands/Vereine: gleicher Normname ──
+        if (funde < MaxProLauf)
+        {
+            var bands = await db.Bands.Select(b => new
+            {
+                b.Id, b.Name, b.CreateTime,
+                Refs = b.Videos.Count + b.Mitgliedschaften.Count + b.Aliase.Count
+            }).ToListAsync(ct);
+
+            foreach (var g in bands.GroupBy(b => NormDedup(b.Name)).Where(x => x.Key.Length > 1 && x.Count() > 1))
+            {
+                if (funde >= MaxProLauf) break;
+                var mitglieder = g.ToList();
+                if (mitglieder.Count > 8) { logger.LogInformation("Dublette Band: Gruppe '{Key}' übersprungen ({N}).", g.Key, mitglieder.Count); continue; }
+                var ziel = mitglieder.OrderByDescending(m => m.Refs).ThenBy(m => m.CreateTime).First();
+                foreach (var q in mitglieder.Where(m => m.Id != ziel.Id))
+                {
+                    if (funde >= MaxProLauf) break;
+                    if (await DublettenFundAnlegenAsync(lauf, "Band", q.Id, q.Name, ziel.Id, ziel.Name, "Gleicher Name (normalisiert).", null, null, ct)) funde++;
                     paare++;
                 }
             }
@@ -280,14 +305,14 @@ public class CrawlRunner(
 
     /// <summary>Legt einen Dublette-Fund an, wenn das (sortierte) Paar noch nicht entschieden ist. true = neuer Fund.</summary>
     private async Task<bool> DublettenFundAnlegenAsync(CrawlLauf lauf, string entitaet, Guid quelleId, string quelleName,
-        Guid zielId, string zielName, string grund, CancellationToken ct)
+        Guid zielId, string zielName, string grund, string? quelleZusatz, string? zielZusatz, CancellationToken ct)
     {
         var a = quelleId.CompareTo(zielId) < 0 ? quelleId : zielId;
         var b = quelleId.CompareTo(zielId) < 0 ? zielId : quelleId;
         var key = $"dublette:{entitaet.ToLowerInvariant()}:{a}:{b}";
         var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(x => x.ExternKey == key, ct);
         if (bestehend is { Status: not CrawlFundStatus.Offen }) return false;   // schon entschieden
-        var json = CrawlDaten.Serialisiere(new DublettenDaten(entitaet, quelleId, quelleName, zielId, zielName, grund));
+        var json = CrawlDaten.Serialisiere(new DublettenDaten(entitaet, quelleId, quelleName, zielId, zielName, grund, quelleZusatz, zielZusatz));
         if (bestehend != null) { bestehend.DatenJson = json; bestehend.DublettHinweis = grund; bestehend.AbgerufenAm = DateTime.UtcNow; return false; }
         db.CrawlFunde.Add(new CrawlFund
         {

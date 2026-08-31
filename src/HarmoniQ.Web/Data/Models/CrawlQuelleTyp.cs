@@ -40,7 +40,8 @@ public enum CrawlQuelleTyp
     StueckBeschreibung = 7,
 
     /// <summary>Aggregat-Quelle „Dubletten-Vorschläge" (§4.10, Handler in CrawlRunner): findet über Normalisierung
-    /// mutmassliche Dublett-Paare bei <b>Stücken und Personen</b> (z. B. „Part II"/„Part 2", mit/ohne Akzent) und
-    /// schlägt sie als <see cref="CrawlFund"/> zum Bestätigen vor (Merge erst beim Übernehmen). Keine Start-URL.</summary>
+    /// mutmassliche Dublett-Paare bei <b>Stücken, Personen und Bands</b> (z. B. „Part II"/„Part 2", mit/ohne Akzent)
+    /// und schlägt sie als <see cref="CrawlFund"/> zum Bestätigen vor (Richtung im Review tauschbar; Merge erst
+    /// beim Übernehmen). Keine Start-URL.</summary>
     DublettenVorschlag = 8
 }

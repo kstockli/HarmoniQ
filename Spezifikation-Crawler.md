@@ -579,8 +579,12 @@ Literatur, nicht Arrangements von Popsongs).
 „… Part 2", mit/ohne Akzent, Tippfehler) und Personen/Komponist:innen (Namensvarianten). Das **Finden** ist
 teuer, das **Bestätigen** billig – also schlägt der Crawler **Merge-Kandidaten** vor, ein Mensch bestätigt.
 
-- **Entitäten:** `Stueck` und `Person` (inkl. Komponist:innen). Nutzt die bestehenden Merge-Services
-  (`StueckMergeService`, `PersonMergeService`) beim Übernehmen.
+- **Entitäten:** `Stueck`, `Person` (inkl. Komponist:innen) und `Band`. Nutzt beim Übernehmen die bestehenden
+  Merge-Services (`StueckMergeService`, `PersonMergeService`, `BandMergeService`).
+- **Richtung im Review tauschbar:** Der Vorschlag wählt den reicheren Datensatz als Ziel (bleibt erhalten),
+  aber im Funde-Review kann die Richtung per „Richtung tauschen" gedreht werden (welcher Titel/Name gewinnt) –
+  wirkt aufs editierbare JSON, beim Übernehmen gilt genau diese Richtung. Bei Stücken wird die/der Komponist:in
+  je Seite angezeigt.
 - **Kandidaten-Heuristik:** Normalisierter Schlüssel (lowercase, Akzente/Satzzeichen entfernt, „Part/Teil"
   + römische/arabische Zahlen vereinheitlichen, Mehrfach-Leerzeichen). Match nur bei **hoher Ähnlichkeit**
   (z. B. gleicher Normalschlüssel oder geringe Levenshtein-Distanz); bei Stücken zusätzlich **gleiche:r
