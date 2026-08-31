@@ -796,3 +796,51 @@ Muster (§7); kein Programm/keine Stücke (nur bei kaskadierendem Zweitlauf auf 
   (z. B. „Mnemosyne Phrases" → Torstein Aagaard-Nilsen). Aufgabestück-Komponist kommt weiter direkt aus dem PDF.
 - **SBBW-Video-Lizenz/Einbettung** – Infomaniak-VOD-iframes sind öffentlich einbettbar; Provenienz (Quell-URL)
   wird wie bei YouTube geführt. Falls der Anbieter Einbettung sperrt, bleibt der Link als Verweis.
+
+## 11. Anhang: Architektur & Erweiterungspunkte (Entwickler)
+
+*Kartierung der Crawler-Pipeline, damit ein neuer Typ ohne Neu-Scannen eingehängt werden kann.*
+
+### Pipeline
+```
+CrawlerAdmin.razor (Quelle anlegen + Lauf starten)
+ → CrawlLaufQueue.Einreihen(laufId)     [Singleton, In-Memory Channel]
+ → CrawlHostedService                    [BackgroundService, sequenziell]
+ → CrawlRunner.AusfuehrenAsync(laufId)   [Dispatch: if/else-Kette über CrawlQuelleTyp]
+     → Handler (z. B. KonzertVorschauAsync) → legt CrawlFund an (Status = Offen, mit ExternKey)
+ → CrawlFundeAdmin.razor (Review, Rendering je CrawlFundTyp)
+ → CrawlUebernahmeService.UebernehmenAsync [Dispatch: switch über CrawlFundTyp]
+```
+DI: `Program.cs` (Queue Singleton, Runner Scoped, HostedService; `IExtraktion` → Mistral/Stub).
+
+### Schlüssel-Dateien
+- **Enums:** `Data/Models/CrawlQuelleTyp.cs`, `CrawlFundTyp.cs`. Neue Werte **hinten** anfügen (int-Spalten,
+  keine Migration nötig). **Kein** zentrales Label-Dict → UI-Labels stehen inline als `MudSelectItem`.
+- **Fund-Modell:** `CrawlFund.cs` (`Typ`, `Status`, `DatenJson` = Payload, `ExternKey` = Dedup-Schlüssel,
+  `DublettHinweis`, `LaufId?`). Status: `Offen/Uebernommen/Verworfen`. Payload-Records + `CrawlDaten.Serialisiere/
+  Deserialisiere` in `Services/Crawler/CrawlFundDaten.cs`.
+- **Runner:** `Services/Crawler/CrawlRunner.cs` — Dispatch als `if/else`-Kette in `AusfuehrenAsync`; Handler-Muster
+  `KonzertVorschauAsync` (inline) bzw. `BandVideosBatchAsync` (Delegation an eigenen Service). Funde mit stabilem
+  `ExternKey = "{quelle}:{id}"`; Dedup: `if (bestehend is { Status: not Offen }) continue;` → entschiedene Funde
+  werden nie erneut vorgeschlagen.
+- **Admin-Trigger:** `Components/Pages/Admin/CrawlerAdmin.razor` — `IstAggregat(typ)` steuert Marker-URL
+  (`AggregatUrl`), Default (`TypGewechselt`), URL-Validierung, Bestätigungsdialog (`LaufStarten`), Info-Alert.
+- **Review:** `Components/Pages/Admin/CrawlFundeAdmin.razor` — `BefuelleAnzeige` (`switch (Typ)` → Friendly-Felder);
+  ohne Spezial-Case fällt der Typ auf generische Darstellung zurück. Aktionen Übernehmen/Verwerfen/Wieder-öffnen.
+- **Übernahme:** `Services/Crawler/CrawlUebernahmeService.cs` — `switch (fund.Typ)` → private `XyUebernehmenAsync`
+  (find-or-create/idempotent; kein Status-Guard, darf erneut übernommen werden).
+- **Services:** `WikipediaService.AnreichernAsync(name)`; `IExtraktion` (aufgabenspezifische Methoden + Stub-
+  Fallback; generisch am nächsten: `ParaphrasiereAsync`); `StueckMergeService.MergeAsync(db, quelleId, zielId)` und
+  `PersonMergeService.MergeAsync(...)` (hängen Referenzen um, sichern Quell-Name als `StueckAlias`/`PersonAlias`,
+  löschen Quelle). Grounded-Web-Suche-Blaupause: `BandVideoCrawlService` (eigener DbContextFactory, `SuchBudget`).
+
+### Checkliste – neuer Aggregat-Crawler-Typ `Xyz` (+ Fund-Typ `XyzFund`)
+1. `CrawlQuelleTyp.cs` — `Xyz` hinten anfügen. 2. `CrawlFundTyp.cs` — `XyzFund` anfügen (falls neuer Fund-Typ).
+3. `CrawlFundDaten.cs` — Record `XyzFundDaten(...)`. 4. `CrawlerAdmin.razor` — Dropdown-Item, `IstAggregat`,
+`AggregatUrl`, ggf. `TypGewechselt`-Default + Info-Alert + Bestätigungstext. 5. `CrawlRunner.cs` — `else if`-Zweig
++ Handler (ExternKey + Dedup), ggf. Service in Ctor injizieren. 6. `CrawlFundeAdmin.razor` — Filter-Item + `case`
+in `BefuelleAnzeige` (+ optional Inline-Edit wie Video). 7. `CrawlUebernahmeService.cs` — `case` +
+`XyzUebernehmenAsync` (find-or-create; Aliase sichern). 8. Nur bei LLM-Nutzung: `IExtraktion`/`MistralExtraktion`
+erweitern. 9. `Program.cs` — nur bei neuem eigenständigem Service registrieren. 10. Migration nur bei neuen
+Feldern/Tabellen (reine Enum-Erweiterung braucht keine).
+Unverändert bleiben: `CrawlLauf.cs`, `CrawlLaufQueue.cs`, `CrawlHostedService.cs`, `CrawlFundStatus.cs`.
