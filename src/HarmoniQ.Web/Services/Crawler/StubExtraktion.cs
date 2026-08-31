@@ -52,6 +52,10 @@ public class StubExtraktion : IExtraktion
     public Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default) =>
         Task.FromResult<string?>(null);
 
+    // Ohne LLM keine Werk-Notiz.
+    public Task<StueckInfo> StueckInfoAsync(string titel, string? komponist, CancellationToken ct = default) =>
+        Task.FromResult(new StueckInfo(null, null));
+
     // Ohne LLM keine Moderation → freigeben (fail-open).
     public Task<BeitragPruefung> BeitragPruefenAsync(string text, CancellationToken ct = default) =>
         Task.FromResult(new BeitragPruefung(true, null));

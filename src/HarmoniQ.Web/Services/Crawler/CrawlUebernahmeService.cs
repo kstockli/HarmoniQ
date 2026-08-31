@@ -48,6 +48,12 @@ public static class CrawlUebernahmeService
             case CrawlFundTyp.Video:
                 await VideoUebernehmenAsync(db, fund, datenJson);
                 break;
+            case CrawlFundTyp.StueckBeschreibung:
+                await StueckBeschreibungUebernehmenAsync(db, datenJson);
+                break;
+            case CrawlFundTyp.Dublette:
+                await DublettenUebernehmenAsync(db, datenJson);
+                break;
             default:
                 throw new InvalidOperationException(
                     "Funde vom Typ „Sonstiges“ werden manuell bearbeitet, nicht automatisch übernommen.");
@@ -77,6 +83,32 @@ public static class CrawlUebernahmeService
         fund.Status = CrawlFundStatus.Offen;
         fund.EntschiedenAm = null;
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>§4.9: setzt Beschreibung/Jahr eines BESTEHENDEN Stücks – nur LEERE Felder (kuratierte Werte bleiben).</summary>
+    private static async Task StueckBeschreibungUebernehmenAsync(ApplicationDbContext db, string datenJson)
+    {
+        var d = CrawlDaten.Deserialisiere<StueckBeschreibungDaten>(datenJson)
+            ?? throw new InvalidOperationException("Stück-Beschreibung: ungültige Daten.");
+        var stueck = await db.Stuecke.FirstOrDefaultAsync(s => s.Id == d.StueckId)
+            ?? throw new InvalidOperationException("Stück nicht gefunden (evtl. gelöscht/zusammengeführt).");
+        if (string.IsNullOrWhiteSpace(stueck.Beschreibung) && !string.IsNullOrWhiteSpace(d.Beschreibung))
+            stueck.Beschreibung = d.Beschreibung!.Trim();
+        if (stueck.Jahr is null && d.Jahr is int j) stueck.Jahr = j;
+        // Speichern erfolgt im Rahmen von UebernehmenAsync.
+    }
+
+    /// <summary>§4.10: führt das Dublette-Paar zusammen (Quelle → Ziel) via Merge-Service (Referenzen umhängen,
+    /// Quell-Name/-Titel automatisch als Alias, Quelle löschen). Merge speichert selbst.</summary>
+    private static async Task DublettenUebernehmenAsync(ApplicationDbContext db, string datenJson)
+    {
+        var d = CrawlDaten.Deserialisiere<DublettenDaten>(datenJson)
+            ?? throw new InvalidOperationException("Dublette: ungültige Daten.");
+        if (d.QuelleId == d.ZielId) throw new InvalidOperationException("Dublette: Quelle = Ziel.");
+        var (ok, meldung) = d.Entitaet.Equals("Person", StringComparison.OrdinalIgnoreCase)
+            ? await PersonMergeService.MergeAsync(db, d.QuelleId, d.ZielId)
+            : await StueckMergeService.MergeAsync(db, d.QuelleId, d.ZielId);
+        if (!ok) throw new InvalidOperationException($"Zusammenführen fehlgeschlagen: {meldung}");
     }
 
     private static async Task KonzertUebernehmenAsync(ApplicationDbContext db, CrawlFund fund, string datenJson)

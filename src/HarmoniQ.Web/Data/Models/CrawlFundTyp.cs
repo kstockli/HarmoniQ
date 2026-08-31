@@ -27,6 +27,14 @@ public enum CrawlFundTyp
     /// Vorschlag (per LLM aus Titel+Beschreibung). Übernahme → <see cref="Video"/> (find-or-create Stück).</summary>
     Video = 6,
 
+    /// <summary>Stück-Beschreibung-Anreicherung (§4.9): kurze eigene Sachnotiz (+ Jahr) zu einem bestehenden
+    /// Stück. Übernahme setzt <c>Stueck.Beschreibung</c>/<c>Jahr</c> (nur leere Felder).</summary>
+    StueckBeschreibung = 7,
+
+    /// <summary>Dubletten-Vorschlag (§4.10): mutmassliches Duplikat-Paar (Stück oder Person). Übernahme führt
+    /// die Quelle ins Ziel zusammen (Merge, Quell-Name bleibt als Alias). Bewusst nur mit Review.</summary>
+    Dublette = 8,
+
     /// <summary>Sonstiger Fund (z. B. Webseiten-Vorschlag, noch nicht zugeordnet).</summary>
     Sonstiges = 99
 }

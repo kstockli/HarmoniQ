@@ -82,6 +82,10 @@ public class CrawlRunner(
                 await BandVideosBatchAsync(lauf, ct);
             else if (quelle.Typ == CrawlQuelleTyp.BandKonzertVorschau)
                 await KonzertVorschauAsync(lauf, quelle, ct);
+            else if (quelle.Typ == CrawlQuelleTyp.StueckBeschreibung)
+                await StueckBeschreibungAsync(lauf, ct);
+            else if (quelle.Typ == CrawlQuelleTyp.DublettenVorschlag)
+                await DublettenVorschlagAsync(lauf, ct);
             else if (quelle.Typ == CrawlQuelleTyp.BandDomain)
                 await BandDomainCrawlAsync(lauf, quelle, ct);
             // Eventfrog VOR dem generischen Veranstalter/KKL-Zweig (beide Typ „Veranstalter") – per URL unterscheiden.
@@ -157,6 +161,160 @@ public class CrawlRunner(
         lauf.SeitenBesucht = b.Bands;
         lauf.FundeAnzahl = b.Neu;
         lauf.Meldung = $"{b.Bands} Bands mit Kanal, {b.Geprueft} Videos geprüft, {b.Neu} neue Video-Funde.";
+    }
+
+    /// <summary>Aggregat „Stück-Beschreibungen anreichern" (§4.9): geht Stücke mit LEERER Beschreibung und
+    /// verknüpfter Komponist:in durch, lässt das LLM eine kurze eigene Sachnotiz (+ Jahr) schreiben – NUR wenn
+    /// sicher (sonst null) – und legt sie als Fund an (ExternKey „stueckbeschr:{id}"). LLM-Deckel je Lauf; erneute
+    /// Läufe decken weitere Stücke ab. Kein Auto-Speichern – Review/Bestätigen.</summary>
+    private async Task StueckBeschreibungAsync(CrawlLauf lauf, CancellationToken ct)
+    {
+        const int MaxLlmCalls = 60;
+        var kandidaten = await db.Stuecke
+            .Where(s => (s.Beschreibung == null || s.Beschreibung == "")
+                     && s.Beitraege.Any(b => b.Rolle == StueckRolle.Komponist))
+            .OrderByDescending(s => s.Videos.Count)          // bekanntere (mit Videos) zuerst
+            .Select(s => new
+            {
+                s.Id, s.Titel, s.Jahr,
+                Komponist = s.Beitraege.Where(b => b.Rolle == StueckRolle.Komponist)
+                    .Select(b => b.Person.Name).FirstOrDefault()
+            })
+            .Take(400).ToListAsync(ct);
+        logger.LogInformation("Stück-Beschreibung: {N} Kandidaten (leer + Komponist).", kandidaten.Count);
+
+        int geprueft = 0, funde = 0;
+        foreach (var s in kandidaten)
+        {
+            if (geprueft >= MaxLlmCalls) break;
+            ct.ThrowIfCancellationRequested();
+            var key = $"stueckbeschr:{s.Id}";
+            var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(x => x.ExternKey == key, ct);
+            if (bestehend is { Status: not CrawlFundStatus.Offen }) continue;   // schon entschieden
+            geprueft++;
+            var info = await extraktion.StueckInfoAsync(s.Titel, s.Komponist, ct);
+            if (string.IsNullOrWhiteSpace(info.Beschreibung) && info.Jahr is null) continue;   // nichts Sicheres
+            var json = CrawlDaten.Serialisiere(new StueckBeschreibungDaten(s.Id, s.Titel, info.Beschreibung, info.Jahr, s.Komponist));
+            if (bestehend != null) { bestehend.DatenJson = json; bestehend.AbgerufenAm = DateTime.UtcNow; }
+            else db.CrawlFunde.Add(new CrawlFund
+            {
+                LaufId = lauf.Id, Typ = CrawlFundTyp.StueckBeschreibung, ExternKey = key,
+                QuellUrl = $"stueck://{s.Id}", AbgerufenAm = DateTime.UtcNow,
+                DatenJson = json, Konfidenz = Konfidenz.Mittel, Status = CrawlFundStatus.Offen
+            });
+            funde++;
+            lauf.FundeAnzahl++;
+            await db.SaveChangesAsync(ct);   // pro Fund → Live-Log
+        }
+        lauf.Meldung = $"{geprueft} Stücke via LLM geprüft, {funde} Beschreibungs-Vorschläge.";
+        logger.LogInformation("Stück-Beschreibung fertig: {Geprueft} geprüft, {Funde} Vorschläge.", geprueft, funde);
+    }
+
+    /// <summary>Aggregat „Dubletten-Vorschläge" (§4.10): findet über Normalisierung (Akzente/Satzzeichen weg,
+    /// „II"→„2") mutmassliche Duplikat-Paare bei Stücken (gleicher Normtitel + Komponist-Überschneidung bzw.
+    /// fehlend) und Personen (gleicher Normname) und legt sie als Dublette-Fund zum Bestätigen an. Merge erst
+    /// beim Übernehmen. ExternKey „dublette:{typ}:{a}:{b}" (sortiertes Paar) → abgelehnte Paare kommen nicht
+    /// wieder. Bewusst KEIN Auto-Merge (False-Positive-Schutz: Part I ≠ Part II).</summary>
+    private async Task DublettenVorschlagAsync(CrawlLauf lauf, CancellationToken ct)
+    {
+        const int MaxProLauf = 200;
+        int funde = 0, paare = 0;
+
+        // ── Stücke: gleicher Normtitel + (gleiche Komponist:in ODER bei einem fehlend) ──
+        var stuecke = await db.Stuecke.Select(s => new
+        {
+            s.Id, s.Titel, s.CreateTime,
+            Komp = s.Beitraege.Where(b => b.Rolle == StueckRolle.Komponist).Select(b => b.PersonId).ToList(),
+            Refs = s.Videos.Count + s.Beitraege.Count + s.Aliase.Count
+        }).ToListAsync(ct);
+
+        foreach (var g in stuecke.GroupBy(s => NormDedup(s.Titel)).Where(x => x.Key.Length > 1 && x.Count() > 1))
+        {
+            if (funde >= MaxProLauf) break;
+            var mitglieder = g.ToList();
+            if (mitglieder.Count > 8) { logger.LogInformation("Dublette Stück: Gruppe '{Key}' übersprungen ({N}).", g.Key, mitglieder.Count); continue; }
+            var ziel = mitglieder.OrderByDescending(m => m.Refs).ThenBy(m => m.CreateTime).First();   // reichster bleibt
+            foreach (var q in mitglieder.Where(m => m.Id != ziel.Id))
+            {
+                if (funde >= MaxProLauf) break;
+                var gemeinsam = q.Komp.Intersect(ziel.Komp).Any();
+                var einerLeer = q.Komp.Count == 0 || ziel.Komp.Count == 0;
+                if (!gemeinsam && !einerLeer) continue;   // gleicher Titel, aber andere Komponist:in → KEIN Duplikat
+                var grund = gemeinsam ? "Gleicher Titel (normalisiert), gleiche Komponist:in."
+                                      : "Gleicher Titel (normalisiert); Komponist:in fehlt bei einem Eintrag.";
+                if (await DublettenFundAnlegenAsync(lauf, "Stueck", q.Id, q.Titel, ziel.Id, ziel.Titel, grund, ct)) funde++;
+                paare++;
+            }
+        }
+
+        // ── Personen: gleicher Normname (verknüpftes Konto bleibt erhalten) ──
+        if (funde < MaxProLauf)
+        {
+            var personen = await db.Personen.Select(p => new
+            {
+                p.Id, p.Name, p.CreateTime, Verknuepft = p.BenutzerId != null,
+                Refs = p.StueckBeitraege.Count + p.Instrumente.Count + p.Aliase.Count
+            }).ToListAsync(ct);
+
+            foreach (var g in personen.GroupBy(p => NormDedup(p.Name)).Where(x => x.Key.Length > 1 && x.Count() > 1))
+            {
+                if (funde >= MaxProLauf) break;
+                var mitglieder = g.ToList();
+                if (mitglieder.Count > 8) { logger.LogInformation("Dublette Person: Gruppe '{Key}' übersprungen ({N}).", g.Key, mitglieder.Count); continue; }
+                var ziel = mitglieder.OrderByDescending(m => m.Verknuepft).ThenByDescending(m => m.Refs).ThenBy(m => m.CreateTime).First();
+                foreach (var q in mitglieder.Where(m => m.Id != ziel.Id))
+                {
+                    if (funde >= MaxProLauf) break;
+                    if (q.Verknuepft && ziel.Verknuepft) continue;   // zwei verknüpfte Konten nie automatisch vorschlagen
+                    if (await DublettenFundAnlegenAsync(lauf, "Person", q.Id, q.Name, ziel.Id, ziel.Name, "Gleicher Name (normalisiert).", ct)) funde++;
+                    paare++;
+                }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        lauf.FundeAnzahl = funde;
+        lauf.Meldung = $"{paare} Kandidaten-Paare, {funde} Dubletten-Vorschläge.";
+        logger.LogInformation("Dubletten-Vorschläge fertig: {Paare} Paare, {Funde} Funde.", paare, funde);
+    }
+
+    /// <summary>Legt einen Dublette-Fund an, wenn das (sortierte) Paar noch nicht entschieden ist. true = neuer Fund.</summary>
+    private async Task<bool> DublettenFundAnlegenAsync(CrawlLauf lauf, string entitaet, Guid quelleId, string quelleName,
+        Guid zielId, string zielName, string grund, CancellationToken ct)
+    {
+        var a = quelleId.CompareTo(zielId) < 0 ? quelleId : zielId;
+        var b = quelleId.CompareTo(zielId) < 0 ? zielId : quelleId;
+        var key = $"dublette:{entitaet.ToLowerInvariant()}:{a}:{b}";
+        var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(x => x.ExternKey == key, ct);
+        if (bestehend is { Status: not CrawlFundStatus.Offen }) return false;   // schon entschieden
+        var json = CrawlDaten.Serialisiere(new DublettenDaten(entitaet, quelleId, quelleName, zielId, zielName, grund));
+        if (bestehend != null) { bestehend.DatenJson = json; bestehend.DublettHinweis = grund; bestehend.AbgerufenAm = DateTime.UtcNow; return false; }
+        db.CrawlFunde.Add(new CrawlFund
+        {
+            LaufId = lauf.Id, Typ = CrawlFundTyp.Dublette, ExternKey = key,
+            QuellUrl = $"dublette://{entitaet}", AbgerufenAm = DateTime.UtcNow,
+            DatenJson = json, DublettHinweis = grund, Konfidenz = Konfidenz.Mittel, Status = CrawlFundStatus.Offen
+        });
+        lauf.FundeAnzahl++;
+        return true;
+    }
+
+    // Normalisierung für Dubletten-Matching: lowercase, Akzente/Satzzeichen weg, mehrstellige römische Zahlen
+    // → arabisch („II"→„2", damit „Part II"="Part 2"; einstellige i/v/x bewusst NICHT, wegen Ambiguität wie „Malcolm X").
+    private static readonly Dictionary<string, string> RomZahl = new()
+    { ["ii"] = "2", ["iii"] = "3", ["iv"] = "4", ["vi"] = "6", ["vii"] = "7", ["viii"] = "8", ["ix"] = "9", ["xi"] = "11", ["xii"] = "12" };
+
+    private static string NormDedup(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return "";
+        var lower = s.Trim().ToLowerInvariant();
+        var ohneAkzent = new string(lower.Normalize(System.Text.NormalizationForm.FormD)
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .ToArray());
+        var bereinigt = System.Text.RegularExpressions.Regex.Replace(ohneAkzent, "[^a-z0-9]+", " ").Trim();
+        var tokens = bereinigt.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => RomZahl.TryGetValue(t, out var z) ? z : t);
+        return string.Join(' ', tokens);
     }
 
     /// <summary>Aggregat „Künftige Konzerte über alle Band-Webseiten" (§4.8): geht je Band Startseite +

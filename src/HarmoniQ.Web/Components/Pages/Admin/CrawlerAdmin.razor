@@ -43,6 +43,8 @@
                 <MudSelectItem Value="CrawlQuelleTyp.Veranstalter">Veranstalter (KKL Luzern)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.BandVideos">YouTube – alle Bands (Kanäle)</MudSelectItem>
                 <MudSelectItem Value="CrawlQuelleTyp.BandKonzertVorschau">Künftige Konzerte – alle Band-Webseiten</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.StueckBeschreibung">Stück-Beschreibungen anreichern</MudSelectItem>
+                <MudSelectItem Value="CrawlQuelleTyp.DublettenVorschlag">Dubletten-Vorschläge (Stücke/Personen)</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="5">
@@ -88,6 +90,17 @@
                     @(_neu.Typ == CrawlQuelleTyp.BandVideos
                         ? "Aggregat-Lauf über ALLE Bands mit hinterlegtem YouTube-Kanal: geht deren Uploads durch (nur Videos ≥ 2 Min), erkennt Stück/Komponist:in/Ort/Anlass und legt neue Treffer als Video-Funde an. Keine Start-URL/Ziel-Band nötig. Review im normalen „Funde-Review\" (Typ YouTube-Video)."
                         : "Aggregat-Lauf über ALLE Bands mit Webseite: sucht auf Startseite + Agenda/Kalender nach KÜNFTIGEN, echten Konzerten (Jahres-/Gala-/Kirchenkonzert usw.; keine Kilbi/Ständchen/Heim-Auftritte). Programm nicht erforderlich. Keine Start-URL/Ziel-Band nötig. Review unter „Funde\".")
+                    Manuell ausgelöst mit Bestätigung; läuft im Hintergrund.
+                </MudAlert>
+            </MudItem>
+        }
+        @if (_neu.Typ is CrawlQuelleTyp.StueckBeschreibung or CrawlQuelleTyp.DublettenVorschlag)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    @(_neu.Typ == CrawlQuelleTyp.StueckBeschreibung
+                        ? "Aggregat-Lauf: geht Stücke mit LEERER Beschreibung und verknüpfter Komponist:in durch und schlägt via LLM eine kurze, eigene Sachnotiz (+ Jahr) vor – nur wenn das Werk sicher bekannt ist (sonst nichts). LLM-Deckel je Lauf; erneute Läufe decken weitere Stücke ab. Review unter „Funde\"; nichts wird automatisch gespeichert."
+                        : "Aggregat-Lauf: schlägt mutmassliche DUBLETTEN (Stücke + Personen) über Normalisierung vor (z. B. „Part II\"/„Part 2\", mit/ohne Akzent). Zusammenführen passiert ERST beim Bestätigen im Review – KEIN Auto-Merge (\"Part I\" ≠ \"Part II\"). Keine Start-URL/Ziel-Band nötig.")
                     Manuell ausgelöst mit Bestätigung; läuft im Hintergrund.
                 </MudAlert>
             </MudItem>
@@ -295,12 +308,19 @@ else
             offenProLauf.GetValueOrDefault(l.Id), l.StartAm, l.Meldung)).ToList();
     }
 
-    /// <summary>Aggregat-Typen fächern über ALLE Bands auf (keine einzelne Start-URL/Ziel-Band).</summary>
+    /// <summary>Aggregat-Typen fächern über ALLE Bands/Stücke/Personen auf (keine einzelne Start-URL/Ziel-Band).</summary>
     private static bool IstAggregat(CrawlQuelleTyp t) =>
-        t is CrawlQuelleTyp.BandVideos or CrawlQuelleTyp.BandKonzertVorschau;
+        t is CrawlQuelleTyp.BandVideos or CrawlQuelleTyp.BandKonzertVorschau
+          or CrawlQuelleTyp.StueckBeschreibung or CrawlQuelleTyp.DublettenVorschlag;
 
-    private static string AggregatUrl(CrawlQuelleTyp t) => t == CrawlQuelleTyp.BandVideos
-        ? "alle-bands://youtube-kanaele" : "alle-bands://konzert-vorschau";
+    private static string AggregatUrl(CrawlQuelleTyp t) => t switch
+    {
+        CrawlQuelleTyp.BandVideos => "alle-bands://youtube-kanaele",
+        CrawlQuelleTyp.BandKonzertVorschau => "alle-bands://konzert-vorschau",
+        CrawlQuelleTyp.StueckBeschreibung => "alle-stuecke://beschreibung",
+        CrawlQuelleTyp.DublettenVorschlag => "alle://dubletten",
+        _ => "alle-bands://aggregat"
+    };
 
     /// <summary>Belegt bei Spezial-Quelltypen sinnvolle Defaults vor (nur wenn Feld noch leer).</summary>
     private void TypGewechselt()
@@ -395,9 +415,14 @@ else
         // Aggregat-Läufe (über alle Bands) sind aufwändig → Bestätigung einholen.
         if (IstAggregat(q.Typ))
         {
-            var text = q.Typ == CrawlQuelleTyp.BandVideos
-                ? "YouTube-Lauf über ALLE Bands mit hinterlegtem Kanal starten? Das prüft je Band die neuesten Uploads (verbraucht YouTube-Kontingent) und legt neue Video-Funde an."
-                : "Konzert-Vorschau-Lauf über ALLE Bands mit Webseite starten? Das lädt je Band Startseite + Agenda-Seiten und legt künftige Konzert-Funde an.";
+            var text = q.Typ switch
+            {
+                CrawlQuelleTyp.BandVideos => "YouTube-Lauf über ALLE Bands mit hinterlegtem Kanal starten? Das prüft je Band die neuesten Uploads (verbraucht YouTube-Kontingent) und legt neue Video-Funde an.",
+                CrawlQuelleTyp.BandKonzertVorschau => "Konzert-Vorschau-Lauf über ALLE Bands mit Webseite starten? Das lädt je Band Startseite + Agenda-Seiten und legt künftige Konzert-Funde an.",
+                CrawlQuelleTyp.StueckBeschreibung => "Stück-Beschreibungs-Lauf starten? Das prüft Stücke mit leerer Beschreibung (mit Komponist:in) via LLM und legt kurze Sachnotizen als Vorschläge an (LLM-Deckel je Lauf).",
+                CrawlQuelleTyp.DublettenVorschlag => "Dubletten-Lauf starten? Das durchsucht alle Stücke und Personen nach mutmasslichen Duplikaten und legt Bestätigungs-Vorschläge an (kein Auto-Merge).",
+                _ => "Aggregat-Lauf über alle Bands starten?"
+            };
             var p = new DialogParameters<ConfirmDialog>
             {
                 { x => x.Text, text },

@@ -65,6 +65,11 @@ public interface IExtraktion
     /// („… spielt das X"). Null, wenn nicht klar genannt (nicht raten). Ohne LLM (Stub): null.</summary>
     Task<string?> EventBandAsync(string titel, string? beschreibung, string? veranstalter, CancellationToken ct = default);
 
+    /// <summary>Schreibt eine KURZE, eigene deutsche Sachnotiz (+ Entstehungsjahr) zu einem Werk (§4.9) –
+    /// <b>nur wenn das konkrete Werk sicher bekannt ist</b>, sonst beides null (kein Raten, keine wörtliche
+    /// Übernahme von Verlags-/Programmnotizen). Ohne LLM (Stub): beides null.</summary>
+    Task<StueckInfo> StueckInfoAsync(string titel, string? komponist, CancellationToken ct = default);
+
     /// <summary>Prüft einen öffentlichen Beitrag (Bewertungs-Kommentar) gegen die Verhaltensregeln
     /// (sachlich; keine Schmähkritik/Beleidigung/Diskriminierung/rechtswidrigen Inhalte).
     /// Ok=true → sofort veröffentlichen; Ok=false → zur Freigabe. Ohne LLM (Stub) / bei Fehler: Ok=true.</summary>
@@ -73,6 +78,9 @@ public interface IExtraktion
 
 /// <summary>Ergebnis der KI-Moderation eines Beitrags.</summary>
 public record BeitragPruefung(bool Ok, string? Grund);
+
+/// <summary>Kurze, eigene Sachnotiz + Entstehungsjahr zu einem Werk (jeweils null, wenn nicht sicher bekannt).</summary>
+public record StueckInfo(string? Beschreibung, int? Jahr);
 
 /// <summary>Aus Videotitel/-beschreibung erkanntes Stück + Komponist:in + Aufführungs-Ort + Anlass
 /// (jeweils null, wenn nicht klar erkennbar).</summary>

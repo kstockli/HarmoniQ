@@ -35,6 +35,8 @@
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Band)">Verein/Band</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Webseite)">Webseiten-Vorschlag</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Video)">YouTube-Video</MudSelectItem>
+        <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.StueckBeschreibung)">Stück-Beschreibung</MudSelectItem>
+        <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Dublette)">Dublette</MudSelectItem>
         <MudSelectItem T="CrawlFundTyp?" Value="@(CrawlFundTyp.Sonstiges)">Sonstiges</MudSelectItem>
     </MudSelect>
     <MudTextField @bind-Value="_suche" Label="Suche (Name/Ort/URL …)" Variant="Variant.Outlined"
@@ -400,6 +402,31 @@ else
                             z.Add(w.Beschreibung!.Length > 200 ? w.Beschreibung![..200] + "…" : w.Beschreibung!);
                         z.Add(w.Url);
                         fe.FriendlyZeilen = z;
+                    }
+                    break;
+                case CrawlFundTyp.StueckBeschreibung:
+                    var sb = CrawlDaten.Deserialisiere<StueckBeschreibungDaten>(fe.Json);
+                    if (sb != null)
+                    {
+                        fe.FriendlyTitel = $"Beschreibung für: {sb.Titel}";
+                        var t = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(sb.Komponist)) t.Add($"Komponist:in: {sb.Komponist}");
+                        if (sb.Jahr is { } j) t.Add(j.ToString());
+                        fe.FriendlySub = string.Join(" · ", t);
+                        if (!string.IsNullOrWhiteSpace(sb.Beschreibung)) fe.FriendlyZeilen = [sb.Beschreibung!];
+                    }
+                    break;
+                case CrawlFundTyp.Dublette:
+                    var du = CrawlDaten.Deserialisiere<DublettenDaten>(fe.Json);
+                    if (du != null)
+                    {
+                        fe.FriendlyTitel = $"Dublette ({du.Entitaet}): {du.QuelleName} → {du.ZielName}";
+                        fe.FriendlySub = du.Grund;
+                        fe.FriendlyZeilen =
+                        [
+                            $"Bleibt erhalten (Ziel): {du.ZielName}",
+                            $"Wird eingegliedert (Quelle, wird Alias): {du.QuelleName}"
+                        ];
                     }
                     break;
             }

@@ -32,5 +32,15 @@ public enum CrawlQuelleTyp
     /// mit Webseite auf, sucht auf Startseite + Agenda/Kalender nach <b>künftigen, echten</b> Konzerten
     /// (Typ-Filter: Jahres-/Gala-/Kirchenkonzert etc.; keine Kilbi/Ständchen/Heim-Auftritte) und legt sie als
     /// Konzert-<see cref="CrawlFund"/> an. Keine Start-URL/Ziel-Band.</summary>
-    BandKonzertVorschau = 6
+    BandKonzertVorschau = 6,
+
+    /// <summary>Aggregat-Quelle „Stück-Beschreibungen anreichern" (§4.9, Handler in CrawlRunner): geht Stücke mit
+    /// leerer Beschreibung und einer verknüpften Komponist:in durch und schlägt via LLM eine <b>kurze, eigene</b>
+    /// Sachnotiz (+ Jahr) als <see cref="CrawlFund"/> vor. Kein Auto-Speichern – Review. Keine Start-URL/Ziel-Band.</summary>
+    StueckBeschreibung = 7,
+
+    /// <summary>Aggregat-Quelle „Dubletten-Vorschläge" (§4.10, Handler in CrawlRunner): findet über Normalisierung
+    /// mutmassliche Dublett-Paare bei <b>Stücken und Personen</b> (z. B. „Part II"/„Part 2", mit/ohne Akzent) und
+    /// schlägt sie als <see cref="CrawlFund"/> zum Bestätigen vor (Merge erst beim Übernehmen). Keine Start-URL.</summary>
+    DublettenVorschlag = 8
 }

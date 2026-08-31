@@ -164,3 +164,29 @@ public record WebseiteFundDaten(
     string? Titel = null,
     string? Beschreibung = null,
     string? Kategorie = null);
+
+/// <summary>
+/// Stück-Beschreibung-Fund (Typ <see cref="CrawlFundTyp.StueckBeschreibung"/>, §4.9): eine kurze, eigene
+/// Sachnotiz (+ Jahr) zu einem <b>bestehenden</b> Stück (nicht find-or-create – <see cref="StueckId"/> ist fix).
+/// Übernahme setzt nur leere Felder <c>Stueck.Beschreibung</c>/<c>Jahr</c>.
+/// </summary>
+public record StueckBeschreibungDaten(
+    Guid StueckId,
+    string Titel,
+    string? Beschreibung = null,
+    int? Jahr = null,
+    string? Komponist = null);
+
+/// <summary>
+/// Dubletten-Vorschlag (Typ <see cref="CrawlFundTyp.Dublette"/>, §4.10): ein mutmassliches Duplikat-Paar.
+/// <see cref="Entitaet"/> = "Stueck" oder "Person". Übernahme führt <see cref="QuelleId"/> in
+/// <see cref="ZielId"/> zusammen (Merge; Quell-Name/-Titel bleibt automatisch als Alias). <see cref="ZielId"/>
+/// ist bewusst der <b>reichere</b> Datensatz (bleibt erhalten), <see cref="QuelleId"/> der zu mergende.
+/// </summary>
+public record DublettenDaten(
+    string Entitaet,
+    Guid QuelleId,
+    string QuelleName,
+    Guid ZielId,
+    string ZielName,
+    string Grund);

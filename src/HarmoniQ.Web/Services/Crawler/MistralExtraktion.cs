@@ -630,6 +630,47 @@ public class MistralExtraktion(HttpClient http, IOptions<CrawlerOptions> opt, IL
         catch (Exception ex) { logger.LogWarning(ex, "Paraphrase fehlgeschlagen."); return null; }
     }
 
+    public async Task<StueckInfo> StueckInfoAsync(string titel, string? komponist, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(titel)) return new StueckInfo(null, null);
+        var sys = "Du schreibst eine KURZE, sachliche deutsche Programmnotiz zu einem Werk der Blas-/Orchestermusik. " +
+            "Antworte AUSSCHLIESSLICH mit JSON: {\"beschreibung\":\"|null\",\"jahr\":null}.\n" +
+            "Regeln (streng, KEIN Raten):\n" +
+            "- Schreibe NUR, wenn du GENAU DIESES Werk DIESER Komponist:in sicher kennst. Im Zweifel: beschreibung=null, jahr=null.\n" +
+            "- beschreibung: 2-3 EIGENE deutsche Sätze (Charakter, worauf es basiert, Besonderheit). KEINE wörtliche " +
+            "Übernahme von Verlags-/Programmnotizen (Urheberrecht). Sachlich, ohne Werbe-Floskeln, ohne Anführungszeichen.\n" +
+            "- jahr: Entstehungs-/Erscheinungsjahr als Zahl, nur wenn sicher; sonst null.\n" +
+            "- Erfinde NICHTS. Lieber null als falsch.";
+        var user = string.IsNullOrWhiteSpace(komponist) ? $"Werk: \"{titel}\"" : $"Werk: \"{titel}\"\nKomponist:in: {komponist}";
+        var body = new
+        {
+            model = string.IsNullOrWhiteSpace(_llm.Model) ? "mistral-large-latest" : _llm.Model,
+            temperature = 0.2,
+            response_format = new { type = "json_object" },
+            messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } }
+        };
+        try
+        {
+            using var resp = await PostMitRetryAsync(body, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Stück-Info: Mistral HTTP {Code} für {Titel} → leer.", (int)resp.StatusCode, titel);
+                return new StueckInfo(null, null);
+            }
+            var chat = await resp.Content.ReadFromJsonAsync<ChatResponse>(MistralJson, ct);
+            var json = chat?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(json)) return new StueckInfo(null, null);
+            var dto = JsonSerializer.Deserialize<StueckInfoDto>(json, MistralJson);
+            var beschr = Plausibel(dto?.Beschreibung, 20, 1200);
+            int? jahr = dto?.Jahr is int j && j >= 1500 && j <= DateTime.UtcNow.Year + 1 ? j : null;
+            return new StueckInfo(beschr, jahr);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { logger.LogWarning(ex, "Stück-Info fehlgeschlagen für {Titel}", titel); return new StueckInfo(null, null); }
+    }
+
+    private record StueckInfoDto(string? Beschreibung, int? Jahr);
+
     public async Task<VideoAnalyse> VideoAusSucheAsync(string videoTitel, string? bandName, string suchText, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(suchText)) return new VideoAnalyse(null, null);
