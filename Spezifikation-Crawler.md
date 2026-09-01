@@ -559,6 +559,10 @@ Literatur, nicht Arrangements von Popsongs).
 
 - **Auswahl:** Stücke mit leerer `Beschreibung` **und** einer verknüpften Komponist:in mit `PersonRolle.Komponist`
   (Fokus auf Kunstwerke). Manuell im Crawler-Admin anstoßbar (kein Zeitplan), inkrementell.
+- **Nicht endlos wiederholen:** Jedes bereits versuchte Stück (ExternKey `stueckbeschr:{StückId}`) wird
+  übersprungen – auch die, bei denen das LLM **kein sicheres Wissen** hatte. Solche „ohne Wissen"-Fälle werden als
+  **verworfener Merker-Fund** abgelegt (aus dem offenen Review ausgeblendet, bei Bedarf wieder öffnen), damit jeder
+  Lauf zu **neuen** Stücken vorrückt statt die nicht-findbaren erneut anzufragen. LLM-Deckel je Lauf (aktuell 60).
 - **Quellen:** Wikipedia (`WikipediaService`, bereits vorhanden) und – wo nötig – eine grounded Web-Suche
   (analog `BandVideoCrawlService.AnreichernAsync`). Als Faktenbasis dienen z. B. Wind Repertory Project,
   Komponisten-/Verlagsseiten.

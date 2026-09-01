@@ -170,44 +170,67 @@ public class CrawlRunner(
     private async Task StueckBeschreibungAsync(CrawlLauf lauf, CancellationToken ct)
     {
         const int MaxLlmCalls = 60;
+
+        // Bereits VERSUCHTE Stücke (irgendein Fund existiert – Vorschlag, übernommen ODER als „nichts gefunden"
+        // verworfen) NICHT erneut anfragen. So rückt jeder Lauf zu neuen Stücken vor, statt die nicht-findbaren
+        // Werke endlos zu wiederholen. (ExternKey „stueckbeschr:{StückId}".)
+        var versucht = (await db.CrawlFunde
+                .Where(f => f.ExternKey != null && f.ExternKey.StartsWith("stueckbeschr:"))
+                .Select(f => f.ExternKey!).ToListAsync(ct))
+            .Select(k => k["stueckbeschr:".Length..]).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var kandidaten = await db.Stuecke
             .Where(s => (s.Beschreibung == null || s.Beschreibung == "")
                      && s.Beitraege.Any(b => b.Rolle == StueckRolle.Komponist))
             .OrderByDescending(s => s.Videos.Count)          // bekanntere (mit Videos) zuerst
             .Select(s => new
             {
-                s.Id, s.Titel, s.Jahr,
+                s.Id, s.Titel,
                 Komponist = s.Beitraege.Where(b => b.Rolle == StueckRolle.Komponist)
                     .Select(b => b.Person.Name).FirstOrDefault()
             })
-            .Take(400).ToListAsync(ct);
-        logger.LogInformation("Stück-Beschreibung: {N} Kandidaten (leer + Komponist).", kandidaten.Count);
+            .ToListAsync(ct);
+        logger.LogInformation("Stück-Beschreibung: {N} Kandidaten (leer + Komponist), {V} bereits versucht.", kandidaten.Count, versucht.Count);
 
-        int geprueft = 0, funde = 0;
+        int geprueft = 0, funde = 0, ohneWissen = 0;
         foreach (var s in kandidaten)
         {
             if (geprueft >= MaxLlmCalls) break;
             ct.ThrowIfCancellationRequested();
-            var key = $"stueckbeschr:{s.Id}";
-            var bestehend = await db.CrawlFunde.FirstOrDefaultAsync(x => x.ExternKey == key, ct);
-            if (bestehend is { Status: not CrawlFundStatus.Offen }) continue;   // schon entschieden
+            if (versucht.Contains(s.Id.ToString())) continue;   // schon versucht → nicht erneut
             geprueft++;
+            var key = $"stueckbeschr:{s.Id}";
             var info = await extraktion.StueckInfoAsync(s.Titel, s.Komponist, ct);
-            if (string.IsNullOrWhiteSpace(info.Beschreibung) && info.Jahr is null) continue;   // nichts Sicheres
-            var json = CrawlDaten.Serialisiere(new StueckBeschreibungDaten(s.Id, s.Titel, info.Beschreibung, info.Jahr, s.Komponist));
-            if (bestehend != null) { bestehend.DatenJson = json; bestehend.AbgerufenAm = DateTime.UtcNow; }
-            else db.CrawlFunde.Add(new CrawlFund
+            if (string.IsNullOrWhiteSpace(info.Beschreibung) && info.Jahr is null)
             {
-                LaufId = lauf.Id, Typ = CrawlFundTyp.StueckBeschreibung, ExternKey = key,
-                QuellUrl = $"stueck://{s.Id}", AbgerufenAm = DateTime.UtcNow,
-                DatenJson = json, Konfidenz = Konfidenz.Mittel, Status = CrawlFundStatus.Offen
-            });
-            funde++;
-            lauf.FundeAnzahl++;
-            await db.SaveChangesAsync(ct);   // pro Fund → Live-Log
+                // „kein sicheres Wissen" als ENTSCHIEDENEN (verworfenen) Merker ablegen → wird künftig übersprungen.
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    LaufId = lauf.Id, Typ = CrawlFundTyp.StueckBeschreibung, ExternKey = key,
+                    QuellUrl = $"stueck://{s.Id}", AbgerufenAm = DateTime.UtcNow,
+                    DatenJson = CrawlDaten.Serialisiere(new StueckBeschreibungDaten(s.Id, s.Titel, null, null, s.Komponist)),
+                    DublettHinweis = "LLM: kein sicheres Wissen zu diesem Werk – automatisch übersprungen (bei Bedarf wieder öffnen).",
+                    Konfidenz = Konfidenz.Tief, Status = CrawlFundStatus.Verworfen, EntschiedenAm = DateTime.UtcNow
+                });
+                ohneWissen++;
+            }
+            else
+            {
+                db.CrawlFunde.Add(new CrawlFund
+                {
+                    LaufId = lauf.Id, Typ = CrawlFundTyp.StueckBeschreibung, ExternKey = key,
+                    QuellUrl = $"stueck://{s.Id}", AbgerufenAm = DateTime.UtcNow,
+                    DatenJson = CrawlDaten.Serialisiere(new StueckBeschreibungDaten(s.Id, s.Titel, info.Beschreibung, info.Jahr, s.Komponist)),
+                    Konfidenz = Konfidenz.Mittel, Status = CrawlFundStatus.Offen
+                });
+                funde++;
+                lauf.FundeAnzahl++;
+            }
+            versucht.Add(s.Id.ToString());
+            await db.SaveChangesAsync(ct);   // pro Stück → Live-Log
         }
-        lauf.Meldung = $"{geprueft} Stücke via LLM geprüft, {funde} Beschreibungs-Vorschläge.";
-        logger.LogInformation("Stück-Beschreibung fertig: {Geprueft} geprüft, {Funde} Vorschläge.", geprueft, funde);
+        lauf.Meldung = $"{geprueft} Stücke via LLM geprüft, {funde} Vorschläge, {ohneWissen} ohne sicheres Wissen (künftig übersprungen).";
+        logger.LogInformation("Stück-Beschreibung fertig: {Geprueft} geprüft, {Funde} Vorschläge, {Ohne} übersprungen.", geprueft, funde, ohneWissen);
     }
 
     /// <summary>Aggregat „Dubletten-Vorschläge" (§4.10): findet über Normalisierung (Akzente/Satzzeichen weg,
